@@ -24,11 +24,9 @@ function ProtectedRoute({ children }) {
     );
   }
 
-  // For demo purposes, allow access without authentication
-  // In production, uncomment the redirect below
-  // if (!isAuthenticated) {
-  //   return <Navigate to="/login" replace />;
-  // }
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
 
   return children;
 }
