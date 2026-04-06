@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate, Link } from 'react-router-dom';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { Baby, Mail, Lock, Eye, EyeOff, ArrowRight, Loader2, User, Phone, Building2 } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2, User, Phone, Building2, Shield, Clock, Users } from 'lucide-react';
 import { auth, db } from '../firebase/config';
 import { useAuth } from '../contexts';
 
@@ -27,10 +27,10 @@ export default function Register() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-brand-50 via-white to-accent-50">
+      <div className="min-h-screen flex items-center justify-center bg-surface-900">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="w-8 h-8 text-brand-500 animate-spin" />
-          <p className="text-surface-500">Loading...</p>
+          <p className="text-surface-400">Loading...</p>
         </div>
       </div>
     );
@@ -162,70 +162,79 @@ export default function Register() {
     }
   };
 
+  const benefits = [
+    { icon: Shield, title: 'Secure & Compliant', desc: 'Enterprise-grade security for your data' },
+    { icon: Clock, title: 'Save Time', desc: 'Automate daily administrative tasks' },
+    { icon: Users, title: 'Parent Connect', desc: 'Keep families engaged and informed' },
+  ];
+
   return (
-    <div className="min-h-screen flex bg-gradient-to-br from-brand-50 via-white to-accent-50">
-      {/* Left Side - Branding */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
-        <div className="absolute inset-0 gradient-brand opacity-90" />
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmZmZmYiIGZpbGwtb3BhY2l0eT0iMC4xIj48cGF0aCBkPSJNMzYgMzRjMC0yLjIxLTEuNzktNC00LTRzLTQgMS43OS00IDQgMS43OSA0IDQgNCA0LTEuNzkgNC00eiIvPjwvZz48L2c+PC9zdmc+')] opacity-20" />
+    <div className="min-h-screen flex">
+      {/* Left Side - Dark themed branding */}
+      <div className="hidden lg:flex lg:w-1/2 bg-surface-900 relative overflow-hidden">
+        {/* Background pattern */}
+        <div className="absolute inset-0 opacity-5">
+          <div className="absolute inset-0" style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+          }} />
+        </div>
         
-        <div className="relative z-10 flex flex-col justify-center px-12 xl:px-20 text-white">
-          <div className="flex items-center gap-4 mb-8">
-            <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
-              <Baby className="w-8 h-8 text-white" />
+        {/* Gradient overlay */}
+        <div className="absolute top-0 right-0 w-96 h-96 bg-brand-500/20 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-accent-500/20 rounded-full blur-3xl" />
+        
+        <div className="relative z-10 flex flex-col justify-center px-12 xl:px-20 w-full">
+          {/* Logo */}
+          <div className="flex items-center gap-4 mb-12">
+            <div className="w-14 h-14 rounded-2xl gradient-brand flex items-center justify-center shadow-brand">
+              <span className="text-white font-bold text-xl">KO</span>
             </div>
-            <h1 className="text-4xl font-bold">KidsHub</h1>
+            <div>
+              <h1 className="text-2xl font-bold text-white">KidsHub</h1>
+              <p className="text-surface-400 text-sm">Owner Portal</p>
+            </div>
           </div>
           
-          <h2 className="text-3xl xl:text-4xl font-bold mb-4 leading-tight">
-            Start Managing Your<br />Daycare Today
+          <h2 className="text-4xl xl:text-5xl font-bold text-white mb-4 leading-tight">
+            Start Managing<br />
+            <span className="text-gradient">Your Center Today</span>
           </h2>
-          <p className="text-lg text-white/80 mb-8 max-w-md">
-            Join thousands of daycare owners who trust KidsHub to manage their 
-            centers efficiently and keep parents connected.
+          <p className="text-lg text-surface-400 mb-12 max-w-md">
+            Join hundreds of daycare owners who trust KidsHub to streamline their operations.
           </p>
 
+          {/* Benefits */}
           <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                </svg>
+            {benefits.map((benefit, index) => (
+              <div key={index} className="flex items-start gap-4 p-4 rounded-xl bg-surface-800/50 border border-surface-700/50">
+                <div className="w-10 h-10 rounded-xl bg-brand-500/20 flex items-center justify-center flex-shrink-0">
+                  <benefit.icon className="w-5 h-5 text-brand-400" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-white">{benefit.title}</h3>
+                  <p className="text-surface-500 text-sm">{benefit.desc}</p>
+                </div>
               </div>
-              <span className="text-white/90">Free 14-day trial</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <span className="text-white/90">No credit card required</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <span className="text-white/90">Setup in minutes</span>
-            </div>
+            ))}
           </div>
         </div>
       </div>
 
       {/* Right Side - Register Form */}
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-8">
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-8 bg-surface-50">
         <div className="w-full max-w-md">
           {/* Mobile Logo */}
           <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
             <div className="w-12 h-12 rounded-xl gradient-brand flex items-center justify-center shadow-brand">
-              <Baby className="w-6 h-6 text-white" />
+              <span className="text-white font-bold">KO</span>
             </div>
-            <span className="text-2xl font-bold text-gradient">KidsHub</span>
+            <div>
+              <span className="text-xl font-bold text-surface-900">KidsHub</span>
+              <span className="text-sm text-surface-500 block">Owner Portal</span>
+            </div>
           </div>
 
-          <div className="bg-white rounded-3xl shadow-soft-xl p-8 sm:p-10">
+          <div className="bg-white rounded-3xl shadow-soft-xl p-8 sm:p-10 border border-surface-100">
             <div className="text-center mb-8">
               <h2 className="text-2xl font-bold text-surface-900">Create your account</h2>
               <p className="text-surface-500 mt-2">
@@ -235,9 +244,13 @@ export default function Register() {
 
             {/* Progress Steps */}
             <div className="flex items-center justify-center gap-2 mb-8">
-              <div className={`w-3 h-3 rounded-full transition-colors ${step >= 1 ? 'bg-brand-500' : 'bg-surface-200'}`} />
-              <div className={`w-12 h-1 rounded-full transition-colors ${step >= 2 ? 'bg-brand-500' : 'bg-surface-200'}`} />
-              <div className={`w-3 h-3 rounded-full transition-colors ${step >= 2 ? 'bg-brand-500' : 'bg-surface-200'}`} />
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${step >= 1 ? 'bg-brand-500 text-white' : 'bg-surface-200 text-surface-500'}`}>
+                1
+              </div>
+              <div className={`w-16 h-1 rounded-full transition-colors ${step >= 2 ? 'bg-brand-500' : 'bg-surface-200'}`} />
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${step >= 2 ? 'bg-brand-500 text-white' : 'bg-surface-200 text-surface-500'}`}>
+                2
+              </div>
             </div>
 
             <form onSubmit={step === 2 ? handleRegister : (e) => { e.preventDefault(); handleNextStep(); }}>
@@ -465,15 +478,15 @@ export default function Register() {
             <div className="mt-8 pt-6 border-t border-surface-100 text-center">
               <p className="text-sm text-surface-500">
                 Already have an account?{' '}
-                <a href="/login" className="font-medium text-brand-600 hover:text-brand-700">
+                <Link to="/login" className="font-medium text-brand-600 hover:text-brand-700">
                   Sign in
-                </a>
+                </Link>
               </p>
             </div>
           </div>
 
           <p className="text-center text-sm text-surface-400 mt-6">
-            &copy; {new Date().getFullYear()} KidsHub. All rights reserved.
+            © {new Date().getFullYear()} KidsHub Owner Portal
           </p>
         </div>
       </div>
