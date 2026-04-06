@@ -1,0 +1,67 @@
+import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from './contexts';
+import { ProtectedRoute } from './components/ProtectedRoute';
+
+// Pages
+import Login from './pages/Login';
+import Register from './pages/Register';
+import Dashboard from './pages/Dashboard';
+import Children from './pages/Children';
+import ChildProfile from './pages/ChildProfile';
+import Classrooms from './pages/Classrooms';
+import Staff from './pages/Staff';
+import Messages from './pages/Messages';
+import Schedule from './pages/Schedule';
+import CheckIn from './pages/CheckIn';
+import Activities from './pages/Activities';
+import Settings from './pages/Settings';
+
+function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          {/* Public Routes */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          
+          {/* Protected Routes */}
+          <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+          
+          {/* Children Routes */}
+          <Route path="/children" element={<ProtectedRoute><Children /></ProtectedRoute>} />
+          <Route path="/children/:id" element={<ProtectedRoute><ChildProfile /></ProtectedRoute>} />
+          
+          {/* Classrooms Routes */}
+          <Route path="/classrooms" element={<ProtectedRoute><Classrooms /></ProtectedRoute>} />
+          <Route path="/classrooms/:id" element={<ProtectedRoute><Classrooms /></ProtectedRoute>} />
+          
+          {/* Staff Route */}
+          <Route path="/staff" element={<ProtectedRoute><Staff /></ProtectedRoute>} />
+          
+          {/* Messages Route */}
+          <Route path="/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
+          
+          {/* Schedule Route */}
+          <Route path="/schedule" element={<ProtectedRoute><Schedule /></ProtectedRoute>} />
+          
+          {/* Check In/Out Route */}
+          <Route path="/check-in" element={<ProtectedRoute><CheckIn /></ProtectedRoute>} />
+          
+          {/* Activities Routes */}
+          <Route path="/activities" element={<ProtectedRoute><Activities /></ProtectedRoute>} />
+          <Route path="/activities/new" element={<ProtectedRoute><Activities /></ProtectedRoute>} />
+          
+          {/* Settings Route */}
+          <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+          
+          {/* Catch all - redirect to dashboard */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
+  );
+}
+
+export default App;
