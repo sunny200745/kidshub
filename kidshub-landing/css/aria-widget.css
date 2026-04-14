@@ -263,6 +263,7 @@
   stroke: #fff;
   stroke-width: 2;
   fill: none;
+  transform: rotate(-45deg);
 }
 #aria-send:hover { transform: scale(1.05); box-shadow: 0 6px 20px rgba(139,92,246,0.45); }
 #aria-send:disabled { opacity: 0.5; cursor: default; transform: none; box-shadow: none; }
