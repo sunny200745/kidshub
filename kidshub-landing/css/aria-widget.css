@@ -1,0 +1,263 @@
+/* ============================================================
+   KidsHub — Aria AI Widget Styles
+   ============================================================ */
+
+:root {
+  --aria-pink:    #FF2D9B;
+  --aria-purple:  #8B5CF6;
+  --aria-gradient: linear-gradient(135deg, #FF2D9B 0%, #8B5CF6 100%);
+  --aria-bg:      #0D0D14;
+  --aria-card:    #14141F;
+  --aria-border:  rgba(255,255,255,0.08);
+}
+
+/* ── TOGGLE BUTTON ── */
+#aria-toggle {
+  position: fixed;
+  bottom: 28px; right: 28px;
+  z-index: 9998;
+  width: 60px; height: 60px;
+  border-radius: 50%;
+  background: var(--aria-gradient);
+  border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 6px 28px rgba(255,45,155,0.45);
+  transition: transform 0.3s, box-shadow 0.3s;
+}
+#aria-toggle:hover {
+  transform: scale(1.08) translateY(-2px);
+  box-shadow: 0 10px 36px rgba(255,45,155,0.55);
+}
+#aria-toggle svg {
+  width: 28px; height: 28px;
+  transition: transform 0.3s, opacity 0.3s;
+}
+#aria-toggle .aria-icon-chat { position: absolute; }
+#aria-toggle .aria-icon-close { position: absolute; opacity: 0; transform: rotate(-90deg); }
+#aria-toggle.open .aria-icon-chat { opacity: 0; transform: rotate(90deg); }
+#aria-toggle.open .aria-icon-close { opacity: 1; transform: rotate(0deg); }
+
+/* Pulse ring */
+#aria-toggle::before {
+  content: '';
+  position: absolute;
+  inset: -4px; border-radius: 50%;
+  background: var(--aria-gradient);
+  opacity: 0.25;
+  animation: aria-pulse 2.5s ease-in-out infinite;
+}
+@keyframes aria-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.25; }
+  50% { transform: scale(1.25); opacity: 0; }
+}
+
+/* ── WIDGET WINDOW ── */
+#aria-widget {
+  position: fixed;
+  bottom: 102px; right: 28px;
+  z-index: 9997;
+  width: 380px;
+  max-height: 580px;
+  background: var(--aria-bg);
+  border: 1px solid var(--aria-border);
+  border-radius: 22px;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.6), 0 0 40px rgba(255,45,155,0.1);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+
+  /* Hidden state */
+  opacity: 0;
+  transform: translateY(20px) scale(0.95);
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  transform-origin: bottom right;
+}
+#aria-widget.open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: all;
+}
+
+/* ── WIDGET HEADER ── */
+.aria-header {
+  background: linear-gradient(135deg, #1a0a2e 0%, #0d0d14 100%);
+  border-bottom: 1px solid var(--aria-border);
+  padding: 16px 18px;
+  display: flex; align-items: center; justify-content: space-between;
+  flex-shrink: 0;
+}
+.aria-header-left { display: flex; align-items: center; gap: 12px; }
+.aria-avatar {
+  width: 40px; height: 40px; border-radius: 12px;
+  background: var(--aria-gradient);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  box-shadow: 0 4px 16px rgba(255,45,155,0.3);
+  position: relative;
+}
+.aria-status-dot {
+  position: absolute; bottom: -2px; right: -2px;
+  width: 11px; height: 11px; border-radius: 50%;
+  background: #22D35B;
+  border: 2px solid var(--aria-bg);
+}
+.aria-name { font-size: 15px; font-weight: 700; color: #fff; }
+.aria-subtitle { font-size: 11.5px; color: rgba(255,255,255,0.45); }
+.aria-header-actions { display: flex; gap: 6px; }
+.aria-action-btn {
+  width: 32px; height: 32px; border-radius: 9px;
+  background: rgba(255,255,255,0.06);
+  border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  color: rgba(255,255,255,0.5); font-size: 14px;
+  transition: background 0.2s, color 0.2s;
+}
+.aria-action-btn:hover { background: rgba(255,45,155,0.15); color: #FF2D9B; }
+
+/* ── MESSAGES AREA ── */
+.aria-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 16px;
+  display: flex; flex-direction: column; gap: 14px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.1) transparent;
+}
+.aria-messages::-webkit-scrollbar { width: 4px; }
+.aria-messages::-webkit-scrollbar-track { background: transparent; }
+.aria-messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+/* Message bubbles */
+.aria-msg {
+  display: flex; gap: 9px; align-items: flex-end;
+}
+.aria-msg.user { flex-direction: row-reverse; }
+.aria-msg-avatar {
+  width: 28px; height: 28px; border-radius: 9px;
+  background: var(--aria-gradient);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; flex-shrink: 0;
+}
+.aria-bubble {
+  max-width: 78%;
+  padding: 11px 14px;
+  border-radius: 16px;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+.aria-msg.bot .aria-bubble {
+  background: #1A1A2E;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-bottom-left-radius: 4px;
+  color: rgba(255,255,255,0.85);
+}
+.aria-msg.user .aria-bubble {
+  background: var(--aria-gradient);
+  border-bottom-right-radius: 4px;
+  color: #fff;
+}
+.aria-msg-time { font-size: 10px; color: rgba(255,255,255,0.25); margin-top: 4px; }
+
+/* Quick replies */
+.aria-quick-replies {
+  display: flex; flex-wrap: wrap; gap: 7px;
+  margin-top: 4px;
+}
+.aria-qr {
+  background: rgba(255,45,155,0.1);
+  border: 1px solid rgba(255,45,155,0.25);
+  border-radius: var(--r-pill, 999px);
+  padding: 6px 13px;
+  font-size: 12.5px; font-weight: 600; color: #FF6BBF;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.aria-qr:hover { background: rgba(255,45,155,0.2); color: #fff; border-color: #FF2D9B; }
+
+/* Typing indicator */
+.aria-typing { display: none; }
+.aria-typing.show { display: flex; }
+.typing-dots {
+  display: flex; gap: 4px; padding: 12px 14px;
+  background: #1A1A2E;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 16px; border-bottom-left-radius: 4px;
+}
+.typing-dots span {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: rgba(255,45,155,0.6);
+  animation: typing-bounce 1.2s ease-in-out infinite;
+}
+.typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes typing-bounce {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+  40% { transform: translateY(-6px); opacity: 1; }
+}
+
+/* ── QUICK PROMPTS ── */
+.aria-prompts {
+  padding: 0 16px 12px;
+  display: flex; flex-direction: column; gap: 7px;
+}
+.aria-prompt-btn {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--aria-border);
+  border-radius: 11px;
+  padding: 10px 14px;
+  font-size: 13px; color: rgba(255,255,255,0.65);
+  cursor: pointer; text-align: left;
+  transition: all 0.2s;
+  display: flex; align-items: center; gap: 9px;
+}
+.aria-prompt-btn:hover { background: rgba(255,45,155,0.1); border-color: rgba(255,45,155,0.3); color: #fff; }
+.aria-prompt-icon { font-size: 16px; }
+
+/* ── INPUT AREA ── */
+.aria-input-area {
+  border-top: 1px solid var(--aria-border);
+  padding: 12px 14px;
+  display: flex; align-items: flex-end; gap: 10px;
+  background: rgba(255,255,255,0.02);
+  flex-shrink: 0;
+}
+#aria-input {
+  flex: 1;
+  background: #1A1A2E;
+  border: 1px solid var(--aria-border);
+  border-radius: 12px;
+  padding: 10px 14px;
+  color: #fff; font-family: 'DM Sans', sans-serif; font-size: 13.5px;
+  resize: none; outline: none;
+  max-height: 100px;
+  line-height: 1.5;
+  transition: border-color 0.2s;
+}
+#aria-input:focus { border-color: rgba(255,45,155,0.4); }
+#aria-input::placeholder { color: rgba(255,255,255,0.25); }
+#aria-send {
+  width: 40px; height: 40px; border-radius: 11px;
+  background: var(--aria-gradient);
+  border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 16px;
+  flex-shrink: 0;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 3px 12px rgba(255,45,155,0.3);
+}
+#aria-send:hover { transform: scale(1.08); box-shadow: 0 5px 18px rgba(255,45,155,0.5); }
+#aria-send:disabled { opacity: 0.4; cursor: default; transform: none; }
+
+/* ── FOOTER NOTE ── */
+.aria-footer-note {
+  text-align: center;
+  padding: 6px 0 10px;
+  font-size: 10px; color: rgba(255,255,255,0.2);
+}
+
+/* ── MOBILE RESPONSIVE ── */
+@media (max-width: 480px) {
+  #aria-widget { width: calc(100vw - 24px); right: 12px; bottom: 90px; border-radius: 18px; }
+  #aria-toggle { right: 20px; bottom: 20px; }
+}
