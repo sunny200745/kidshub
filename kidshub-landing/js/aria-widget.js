@@ -98,7 +98,7 @@ Rules for responses:
             </div>
           </div>
           <div class="aria-header-actions">
-            <button class="aria-action-btn" id="aria-clear" title="Clear chat" aria-label="Clear conversation">
+            <button class="aria-action-btn" id="aria-clear" title="Close chat" aria-label="Close chat">
               <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
               </svg>
@@ -166,7 +166,7 @@ Rules for responses:
 
     inputEl.addEventListener("input", autoResize);
 
-    document.getElementById("aria-clear").addEventListener("click", clearChat);
+    document.getElementById("aria-clear").addEventListener("click", closeWidget);
 
     // Quick prompts
     promptsEl.addEventListener("click", (e) => {
