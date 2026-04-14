@@ -10,39 +10,42 @@ export default async function handler(req, res) {
     return res.status(200).json({ success: true });
   }
 
-  const { model, system, messages, max_tokens = 400 } = req.body;
+  const { system, messages, max_tokens = 1024 } = req.body;
 
   // Validate required fields
   if (!messages || !Array.isArray(messages)) {
     return res.status(400).json({ error: 'Messages array is required' });
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.OPENROUTER_API_KEY;
   
   if (!apiKey) {
-    console.error('ANTHROPIC_API_KEY is not configured');
+    console.error('OPENROUTER_API_KEY is not configured');
     return res.status(500).json({ error: 'API key not configured' });
   }
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
+        'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': 'https://getkidshub.com',
+        'X-Title': 'Aria - KidsHub Assistant',
       },
       body: JSON.stringify({
-        model: model || 'claude-haiku-4-5-20251001',
+        model: 'anthropic/claude-3-haiku',
         max_tokens: max_tokens,
-        system: system || 'You are a helpful assistant.',
-        messages: messages
-      })
+        messages: [
+          { role: 'system', content: system || 'You are a helpful assistant.' },
+          ...messages,
+        ],
+      }),
     });
 
     if (!response.ok) {
       const errorData = await response.text();
-      console.error('Anthropic API error:', response.status, errorData);
+      console.error('OpenRouter API error:', response.status, errorData);
       return res.status(response.status).json({ 
         error: 'API request failed',
         details: errorData 
