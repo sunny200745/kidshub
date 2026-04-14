@@ -1,4 +1,4 @@
-export default async function handler(req, res) {
+module.exports = async (req, res) => {
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -31,7 +31,7 @@ export default async function handler(req, res) {
   
   if (!apiKey) {
     console.error('OPENROUTER_API_KEY is not configured');
-    return res.status(500).json({ error: 'API key not configured. Please add OPENROUTER_API_KEY to Vercel environment variables.' });
+    return res.status(500).json({ error: 'API key not configured' });
   }
 
   try {
@@ -69,4 +69,4 @@ export default async function handler(req, res) {
     console.error('Chat API error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
-}
+};
