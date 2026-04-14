@@ -5,47 +5,54 @@
 // ============================================================
 
 (function () {
-  'use strict';
+  "use strict";
 
   // ── CONFIG ─────────────────────────────────────────────────
   const ARIA_CONFIG = {
-    apiEndpoint: '/api/chat',          // Vercel serverless function
-    model: 'claude-haiku-4-5-20251001', // Fast & cost-effective
+    apiEndpoint: "/api/chat", // Vercel serverless function
+    model: "claude-haiku-4-5-20251001", // Fast & cost-effective
     greetingDelay: 800,
     typingDelay: { min: 800, max: 1800 },
 
-    systemPrompt: `You are Aria, the AI assistant for KidsHub — a premium daycare management platform built for Canadian childcare providers.
+    systemPrompt: `You are Aria — the friendly, expert AI assistant for KidsHub, a leading Canadian daycare management software.
 
-Your role is to:
-1. Help daycare owners, directors, and educators understand KidsHub's features
-2. Qualify leads and guide prospects toward booking a demo call
-3. Answer questions about the platform (attendance, daily logs, parent app, billing, PIPEDA compliance, offline mode)
-4. Capture contact details when prospects show intent
+Your mission:
+- Welcome and educate daycare owners, directors, and educators
+- Clearly explain what KidsHub does, why it matters, and how it solves real childcare admin problems
+- Answer questions about features (attendance, billing & payments, parent app, daily reports, compliance, offline mode)
+- Qualify prospects naturally and encourage them to book a demo or get in touch with sales
+- Capture lead details when there's clear buying intent
 
-Tone: Warm, professional, knowledgeable about childcare. Never robotic. Use simple language.
+Tone:
+- Warm, helpful, human-like, professional, and concise
+- Avoid robotic/salesy language; focus on real value and clarity
 
-Key differentiators to highlight:
-- Flat-rate pricing (no per-child fees that grow with enrolment)
-- PIPEDA-compliant, Canadian data residency
-- Built for both Android & iOS with offline mode
-- 90-day parent login sessions (no constant re-login)
-- Two portals: Owner/Manager + Parent App
-- Custom-built — pricing tailored per centre size/needs
+Core product strengths to emphasize:
+- Canadian-designed with PIPEDA-compliant data residency in Canada
+- Flat-rate pricing with no per-child fees that grow as you scale
+- Works on Android & iOS with offline mode support
+- Long parent login sessions (90 days) for convenience
+- Two distinct portals: Admin + Parent app
+- Custom pricing tailored to center size and feature needs
 
-When someone is interested in pricing: explain that KidsHub is custom-quoted per centre (size, features, support level) and encourage them to book a 20-minute discovery call.
+When a prospect expresses interest in pricing:
+- Explain that KidsHub offers custom pricing based on centre size and needs
+- Invite them to book a 20-minute discovery call
 
-When you capture a lead (name + email or phone), output EXACTLY this pattern at the end of your message (invisible to user):
+When you collect lead info (name, email, phone, centre), output exactly this pattern (hidden from the user at the end of your reply):
 LEAD_CAPTURE::{"name":"<name>","email":"<email>","phone":"<phone>","centre":"<centre>","message":"<summary>"}
 
-Keep responses concise — 2-3 sentences max unless explaining a feature in detail. Always end with a gentle next step or question.`
+Rules for responses:
+- Keep replies short and helpful (2–3 sentences, more only for detailed feature explanations)
+- Always end with a friendly step forward (suggest booking a demo, asking a follow-up question, or giving a resource)`,
   };
 
   // ── QUICK PROMPTS (shown in widget before conversation starts) ──
   const QUICK_PROMPTS = [
-    { icon: '📋', text: 'What features does KidsHub have?' },
-    { icon: '💰', text: 'How does pricing work?' },
-    { icon: '🍁', text: 'Is it PIPEDA compliant?' },
-    { icon: '📱', text: 'Book a demo call' },
+    { icon: "📋", text: "What features does KidsHub have?" },
+    { icon: "💰", text: "How does pricing work?" },
+    { icon: "🍁", text: "Is it PIPEDA compliant?" },
+    { icon: "📱", text: "Book a demo call" },
   ];
 
   // ── STATE ──────────────────────────────────────────────────
@@ -106,11 +113,13 @@ Keep responses concise — 2-3 sentences max unless explaining a feature in deta
         </div>
 
         <div class="aria-prompts" id="aria-prompts">
-          ${QUICK_PROMPTS.map(p => `
+          ${QUICK_PROMPTS.map(
+            (p) => `
             <button class="aria-prompt-btn" data-prompt="${escapeAttr(p.text)}">
               <span class="aria-prompt-icon">${p.icon}</span>
               ${escapeHtml(p.text)}
-            </button>`).join('')}
+            </button>`,
+          ).join("")}
         </div>
 
         <div class="aria-input-area">
@@ -124,59 +133,63 @@ Keep responses concise — 2-3 sentences max unless explaining a feature in deta
         <div class="aria-footer-note">Powered by Claude AI · KidsHub by Nuvaro</div>
       </div>`;
 
-    document.body.insertAdjacentHTML('beforeend', toggleHTML + widgetHTML);
+    document.body.insertAdjacentHTML("beforeend", toggleHTML + widgetHTML);
   }
 
   // ── CACHE DOM ──────────────────────────────────────────────
   function cacheDom() {
-    toggleBtn   = document.getElementById('aria-toggle');
-    widget      = document.getElementById('aria-widget');
-    messagesArea= document.getElementById('aria-messages');
-    inputEl     = document.getElementById('aria-input');
-    sendBtn     = document.getElementById('aria-send');
-    typingEl    = document.getElementById('aria-typing');
-    promptsEl   = document.getElementById('aria-prompts');
+    toggleBtn = document.getElementById("aria-toggle");
+    widget = document.getElementById("aria-widget");
+    messagesArea = document.getElementById("aria-messages");
+    inputEl = document.getElementById("aria-input");
+    sendBtn = document.getElementById("aria-send");
+    typingEl = document.getElementById("aria-typing");
+    promptsEl = document.getElementById("aria-prompts");
   }
 
   // ── BIND EVENTS ────────────────────────────────────────────
   function bindEvents() {
-    toggleBtn.addEventListener('click', toggleWidget);
+    toggleBtn.addEventListener("click", toggleWidget);
 
-    sendBtn.addEventListener('click', handleSend);
+    sendBtn.addEventListener("click", handleSend);
 
-    inputEl.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && !e.shiftKey) {
+    inputEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         handleSend();
       }
     });
 
-    inputEl.addEventListener('input', autoResize);
+    inputEl.addEventListener("input", autoResize);
 
-    document.getElementById('aria-clear').addEventListener('click', clearChat);
+    document.getElementById("aria-clear").addEventListener("click", clearChat);
 
     // Quick prompts
-    promptsEl.addEventListener('click', e => {
-      const btn = e.target.closest('.aria-prompt-btn');
+    promptsEl.addEventListener("click", (e) => {
+      const btn = e.target.closest(".aria-prompt-btn");
       if (btn) {
         const prompt = btn.dataset.prompt;
         inputEl.value = prompt;
-        promptsEl.style.display = 'none';
+        promptsEl.style.display = "none";
         promptsShown = false;
         handleSend();
       }
     });
 
     // Close on outside click
-    document.addEventListener('click', e => {
-      if (isOpen && !widget.contains(e.target) && !toggleBtn.contains(e.target)) {
+    document.addEventListener("click", (e) => {
+      if (
+        isOpen &&
+        !widget.contains(e.target) &&
+        !toggleBtn.contains(e.target)
+      ) {
         closeWidget();
       }
     });
 
     // Accessibility: close on Escape
-    document.addEventListener('keydown', e => {
-      if (e.key === 'Escape' && isOpen) closeWidget();
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && isOpen) closeWidget();
     });
   }
 
@@ -186,22 +199,23 @@ Keep responses concise — 2-3 sentences max unless explaining a feature in deta
   }
   function openWidget() {
     isOpen = true;
-    widget.classList.add('open');
-    toggleBtn.classList.add('open');
-    toggleBtn.setAttribute('aria-expanded', 'true');
+    widget.classList.add("open");
+    toggleBtn.classList.add("open");
+    toggleBtn.setAttribute("aria-expanded", "true");
     setTimeout(() => inputEl.focus(), 300);
   }
   function closeWidget() {
     isOpen = false;
-    widget.classList.remove('open');
-    toggleBtn.classList.remove('open');
-    toggleBtn.setAttribute('aria-expanded', 'false');
+    widget.classList.remove("open");
+    toggleBtn.classList.remove("open");
+    toggleBtn.setAttribute("aria-expanded", "false");
   }
 
   // ── GREETING ───────────────────────────────────────────────
   function showGreeting() {
-    appendMessage('bot',
-      "Hi! I'm Aria 👋 I'm here to help you learn about KidsHub — the daycare management platform built for Canadian childcare providers. What would you like to know?"
+    appendMessage(
+      "bot",
+      "Hi! I'm Aria 👋 I'm here to help you learn about KidsHub — the daycare management platform built for Canadian childcare providers. What would you like to know?",
     );
   }
 
@@ -212,15 +226,15 @@ Keep responses concise — 2-3 sentences max unless explaining a feature in deta
 
     // Hide prompts once user starts chatting
     if (promptsShown) {
-      promptsEl.style.display = 'none';
+      promptsEl.style.display = "none";
       promptsShown = false;
     }
 
-    inputEl.value = '';
+    inputEl.value = "";
     autoResize.call(inputEl);
 
-    appendMessage('user', text);
-    conversationHistory.push({ role: 'user', content: text });
+    appendMessage("user", text);
+    conversationHistory.push({ role: "user", content: text });
 
     setLoading(true);
     showTyping();
@@ -231,9 +245,9 @@ Keep responses concise — 2-3 sentences max unless explaining a feature in deta
       setLoading(false);
 
       // Strip lead capture pattern before displaying
-      const cleanReply = reply.replace(/LEAD_CAPTURE::\{.*?\}/gs, '').trim();
-      appendMessage('bot', cleanReply);
-      conversationHistory.push({ role: 'assistant', content: reply });
+      const cleanReply = reply.replace(/LEAD_CAPTURE::\{.*?\}/gs, "").trim();
+      appendMessage("bot", cleanReply);
+      conversationHistory.push({ role: "assistant", content: reply });
 
       // Handle lead capture if present
       const leadMatch = reply.match(/LEAD_CAPTURE::(\{.*?\})/s);
@@ -243,26 +257,28 @@ Keep responses concise — 2-3 sentences max unless explaining a feature in deta
           sendLeadNotification(leadData);
         } catch (_) {}
       }
-
     } catch (err) {
       hideTyping();
       setLoading(false);
-      appendMessage('bot', "Sorry, I'm having a brief connection issue. Please try again or email us at hello@getkidshub.com 😊");
-      console.error('Aria error:', err);
+      appendMessage(
+        "bot",
+        "Sorry, I'm having a brief connection issue. Please try again or email us at hello@getkidshub.com 😊",
+      );
+      console.error("Aria error:", err);
     }
   }
 
   // ── API CALL ───────────────────────────────────────────────
   async function callApi(history) {
     const res = await fetch(ARIA_CONFIG.apiEndpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         model: ARIA_CONFIG.model,
         system: ARIA_CONFIG.systemPrompt,
         messages: history,
-        max_tokens: 400
-      })
+        max_tokens: 400,
+      }),
     });
 
     if (!res.ok) throw new Error(`API ${res.status}`);
@@ -271,29 +287,31 @@ Keep responses concise — 2-3 sentences max unless explaining a feature in deta
     // Support both direct Anthropic format and OpenRouter passthrough
     if (data.content && data.content[0]) return data.content[0].text;
     if (data.choices && data.choices[0]) return data.choices[0].message.content;
-    throw new Error('Unexpected response format');
+    throw new Error("Unexpected response format");
   }
 
   // ── LEAD NOTIFICATION ──────────────────────────────────────
   async function sendLeadNotification(data) {
     try {
       await fetch(ARIA_CONFIG.apiEndpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ __lead: true, ...data })
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ __lead: true, ...data }),
       });
     } catch (_) {}
   }
 
   // ── APPEND MESSAGE ─────────────────────────────────────────
   function appendMessage(role, text) {
-    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const div = document.createElement('div');
+    const time = new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const div = document.createElement("div");
     div.className = `aria-msg ${role}`;
 
-    const avatar = role === 'bot'
-      ? '<div class="aria-msg-avatar">🌸</div>'
-      : '';
+    const avatar =
+      role === "bot" ? '<div class="aria-msg-avatar">🌸</div>' : "";
 
     div.innerHTML = `
       ${avatar}
@@ -309,14 +327,19 @@ Keep responses concise — 2-3 sentences max unless explaining a feature in deta
   // ── FORMAT ─────────────────────────────────────────────────
   function formatMessage(text) {
     return escapeHtml(text)
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.*?)\*/g, '<em>$1</em>')
-      .replace(/\n/g, '<br>');
+      .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+      .replace(/\*(.*?)\*/g, "<em>$1</em>")
+      .replace(/\n/g, "<br>");
   }
 
   // ── TYPING ─────────────────────────────────────────────────
-  function showTyping() { typingEl.classList.add('show'); scrollToBottom(); }
-  function hideTyping() { typingEl.classList.remove('show'); }
+  function showTyping() {
+    typingEl.classList.add("show");
+    scrollToBottom();
+  }
+  function hideTyping() {
+    typingEl.classList.remove("show");
+  }
 
   // ── LOADING ────────────────────────────────────────────────
   function setLoading(state) {
@@ -328,36 +351,41 @@ Keep responses concise — 2-3 sentences max unless explaining a feature in deta
   // ── CLEAR ──────────────────────────────────────────────────
   function clearChat() {
     conversationHistory = [];
-    Array.from(messagesArea.children).forEach(child => {
+    Array.from(messagesArea.children).forEach((child) => {
       if (child !== typingEl) child.remove();
     });
-    promptsEl.style.display = 'flex';
+    promptsEl.style.display = "flex";
     promptsShown = true;
     setTimeout(showGreeting, 400);
   }
 
   // ── HELPERS ────────────────────────────────────────────────
   function scrollToBottom() {
-    requestAnimationFrame(() => { messagesArea.scrollTop = messagesArea.scrollHeight; });
+    requestAnimationFrame(() => {
+      messagesArea.scrollTop = messagesArea.scrollHeight;
+    });
   }
 
   function autoResize() {
-    this.style.height = 'auto';
-    this.style.height = Math.min(this.scrollHeight, 100) + 'px';
+    this.style.height = "auto";
+    this.style.height = Math.min(this.scrollHeight, 100) + "px";
   }
 
   function escapeHtml(str) {
     return String(str)
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
   }
-  function escapeAttr(str) { return String(str).replace(/"/g, '&quot;'); }
+  function escapeAttr(str) {
+    return String(str).replace(/"/g, "&quot;");
+  }
 
   // ── BOOT ───────────────────────────────────────────────────
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
   } else {
     init();
   }
-
 })();
