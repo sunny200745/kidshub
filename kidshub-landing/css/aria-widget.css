@@ -249,17 +249,23 @@
 }
 #aria-input::placeholder { color: var(--aria-text-muted); }
 #aria-send {
-  width: 40px; height: 40px; border-radius: 11px;
+  width: 42px; height: 42px; border-radius: 12px;
   background: var(--aria-gradient);
   border: none; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  color: #fff; font-size: 16px;
+  color: #fff; 
   flex-shrink: 0;
-  transition: transform 0.2s, box-shadow 0.2s;
-  box-shadow: 0 3px 12px rgba(255,45,155,0.3);
+  transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
+  box-shadow: 0 4px 16px rgba(139,92,246,0.35);
 }
-#aria-send:hover { transform: scale(1.08); box-shadow: 0 5px 18px rgba(255,45,155,0.4); }
-#aria-send:disabled { opacity: 0.4; cursor: default; transform: none; }
+#aria-send svg {
+  width: 20px; height: 20px;
+  stroke: #fff;
+  stroke-width: 2;
+  fill: none;
+}
+#aria-send:hover { transform: scale(1.05); box-shadow: 0 6px 20px rgba(139,92,246,0.45); }
+#aria-send:disabled { opacity: 0.5; cursor: default; transform: none; box-shadow: none; }
 
 /* ── FOOTER NOTE ── */
 .aria-footer-note {
