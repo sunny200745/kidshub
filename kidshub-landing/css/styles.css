@@ -518,12 +518,12 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-head); line-height: 1.15; }
   display: flex; align-items: center; justify-content: center;
   font-size: 22px; margin-bottom: 18px;
 }
-.ic-pink   { background: var(--pink-light); border: 1px solid var(--border-pink); }
-.ic-purple { background: var(--purple-light); border: 1px solid var(--border-purple); }
-.ic-teal   { background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.25); }
-.ic-amber  { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.25); }
-.ic-blue   { background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.25); }
-.ic-rose   { background: rgba(244,63,94,0.1);  border: 1px solid rgba(244,63,94,0.25); }
+.ic-pink   { background: var(--pink-light); border: 1px solid var(--border-pink); color: var(--pink); }
+.ic-purple { background: var(--purple-light); border: 1px solid var(--border-purple); color: var(--purple); }
+.ic-teal   { background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.25); color: #10B981; }
+.ic-amber  { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.25); color: #F59E0B; }
+.ic-blue   { background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.25); color: #3B82F6; }
+.ic-rose   { background: rgba(244,63,94,0.1);  border: 1px solid rgba(244,63,94,0.25); color: #F43F5E; }
 .feat-card h3 { font-size: 17px; font-weight: 800; color: var(--text-primary); margin-bottom: 10px; }
 .feat-card p { font-size: 14px; color: var(--text-secondary); line-height: 1.65; }
 
@@ -585,6 +585,14 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-head); line-height: 1.15; }
 .persona-card:hover { transform: translateY(-4px); border-color: var(--border-pink); box-shadow: var(--shadow-pink); }
 .persona-card:hover::after { opacity: 1; }
 .persona-emoji { font-size: 42px; margin-bottom: 16px; display: block; }
+.persona-icon {
+  width: 56px; height: 56px; border-radius: 16px;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 20px;
+}
+.p-owner .persona-icon { background: var(--pink-light); color: var(--pink); }
+.p-staff .persona-icon { background: var(--purple-light); color: var(--purple); }
+.p-parent .persona-icon { background: rgba(16,185,129,0.1); color: #10B981; }
 .persona-card h3 { font-size: 19px; font-weight: 900; color: var(--text-primary); margin-bottom: 12px; }
 .persona-card p { font-size: 14px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 20px; }
 .persona-list { display: flex; flex-direction: column; gap: 9px; }
