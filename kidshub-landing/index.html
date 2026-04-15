@@ -500,11 +500,69 @@
           </div>
         </div>
 
-        <!-- Right: Calendly Widget -->
+        <!-- Right: Form -->
         <div class="demo-form-wrap reveal reveal-d2">
-          <div class="form-title">Schedule your discovery call</div>
-          <div class="form-sub">Pick a time that works for you — we'll handle the rest.</div>
-          <div class="calendly-inline-widget" data-url="https://calendly.com/nuvarocorp/kidshub-discovery-call?hide_gdpr_banner=1&primary_color=ff2d9b" style="min-width:320px;height:630px;"></div>
+          <div class="form-title">Request a demo</div>
+          <div class="form-sub">We'll get back to you within one business day.</div>
+
+          <form id="demo-form" action="https://formsubmit.co/contact@nuvaro.ca" method="POST" novalidate>
+            <input type="hidden" name="_subject" value="New KidsHub Demo Request">
+            <input type="hidden" name="_captcha" value="false">
+            <input type="hidden" name="_template" value="table">
+            <div class="form-fields">
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="form-name">Your name *</label>
+                  <input type="text" id="form-name" name="name" placeholder="Jane Smith" required />
+                </div>
+                <div class="form-group">
+                  <label for="form-email">Email address *</label>
+                  <input type="email" id="form-email" name="email" placeholder="jane@sunshinecare.ca" required />
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="form-centre">Centre name *</label>
+                  <input type="text" id="form-centre" name="centre" placeholder="Sunshine Daycare" required />
+                </div>
+                <div class="form-group">
+                  <label for="form-phone">Phone *</label>
+                  <input type="tel" id="form-phone" name="phone" placeholder="+1 (604) 555-0100" required />
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="form-size">How many children do you care for?</label>
+                <select id="form-size" name="size">
+                  <option value="" disabled selected>Select range</option>
+                  <option value="1-15">1–15 children</option>
+                  <option value="16-30">16–30 children</option>
+                  <option value="31-60">31–60 children</option>
+                  <option value="60+">60+ children</option>
+                  <option value="multi">Multiple locations</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="form-message">Anything you'd like us to know?</label>
+                <textarea id="form-message" name="message" placeholder="Current software pain points, specific features you're looking for, go-live timeline…"></textarea>
+              </div>
+              <button type="submit" class="btn btn-gradient">
+                Book My Discovery Call →
+              </button>
+            </div><!-- /form-fields -->
+
+            <div class="form-success">
+              <div class="success-icon" aria-hidden="true">🎉</div>
+              <h4>Request sent!</h4>
+              <p>Thanks! Our team will reach out within one business day to schedule your call. Check your inbox — and feel free to email us at <a href="mailto:contact@nuvaro.ca" style="color:var(--pink)">contact@nuvaro.ca</a> if you have questions in the meantime.</p>
+            </div>
+          </form>
+
+          <div class="calendly-divider">
+            <span>or schedule directly</span>
+          </div>
+          <a href="https://calendly.com/nuvarocorp/kidshub-discovery-call" target="_blank" rel="noopener" class="btn btn-outline" style="width:100%;text-align:center;">
+            Open Calendly →
+          </a>
         </div>
 
       </div>
