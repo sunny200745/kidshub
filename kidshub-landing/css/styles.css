@@ -89,23 +89,28 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-head); line-height: 1.15; }
 .text-center { text-align: center; }
 
 .section-tag {
-  display: inline-flex; align-items: center; gap: 8px;
-  font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
-  text-transform: uppercase; color: var(--pink);
-  margin-bottom: 12px;
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; 
+  color: var(--pink);
+  background: linear-gradient(135deg, rgba(255,45,155,0.08) 0%, rgba(139,92,246,0.08) 100%);
+  padding: 8px 16px;
+  border-radius: 100px;
+  margin-bottom: 14px;
 }
 .section-tag::before {
   content: '';
   display: inline-block;
-  width: 18px; height: 3px;
+  width: 6px; height: 6px;
   background: var(--gradient);
-  border-radius: 2px;
+  border-radius: 50%;
 }
 .section-title {
   font-size: 28px;
   font-weight: 900;
   color: var(--text-primary);
   margin-bottom: 14px;
+  line-height: 1.25;
 }
 .section-sub {
   font-size: 16px;
@@ -270,9 +275,9 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-head); line-height: 1.15; }
    HERO — Mobile First
    ====================================================== */
 #hero {
-  min-height: 100vh;
+  min-height: auto;
   display: flex; align-items: center;
-  padding-top: 80px;
+  padding-top: 70px;
   position: relative; overflow: hidden;
   background: var(--bg-hero);
 }
@@ -288,24 +293,24 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-head); line-height: 1.15; }
 }
 .hero-inner {
   display: flex; flex-direction: column;
-  gap: 40px; align-items: center;
+  gap: 32px; align-items: center;
   position: relative; z-index: 1;
-  padding: 40px 0;
+  padding: 24px 0 40px;
   text-align: center;
 }
 .hero-content {
   display: flex; flex-direction: column; align-items: center;
 }
 .hero-badge {
-  display: inline-flex; align-items: center; gap: 8px;
+  display: inline-flex; align-items: center; gap: 6px;
   background: var(--pink-light);
   border: 1px solid var(--border-pink);
   border-radius: var(--r-pill);
-  font-size: 12px; font-weight: 600; color: var(--pink);
-  padding: 6px 14px; margin-bottom: 20px;
+  font-size: 11px; font-weight: 600; color: var(--pink);
+  padding: 5px 12px; margin-bottom: 14px;
 }
 .badge-dot {
-  width: 7px; height: 7px; border-radius: 50%;
+  width: 6px; height: 6px; border-radius: 50%;
   background: var(--pink);
   animation: pulse-dot 2s ease-in-out infinite;
 }
@@ -495,68 +500,84 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-head); line-height: 1.15; }
 #features { background: var(--bg-base); }
 .features-grid {
   display: grid; grid-template-columns: 1fr;
-  gap: 16px; margin-top: 40px;
+  gap: 16px; margin-top: 36px;
 }
 .feat-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
+  background: #FFFFFF;
+  border: 1px solid #E8E8ED;
+  border-radius: var(--r-xl);
   padding: 28px 24px;
-  transition: transform 0.25s, border-color 0.25s, box-shadow 0.25s;
-  position: relative; overflow: hidden;
+  transition: transform 0.3s, box-shadow 0.3s, border-color 0.3s;
+  position: relative;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
 }
-.feat-card::before {
-  content: '';
-  position: absolute; top: 0; left: 0; right: 0; height: 3px;
-  background: var(--gradient);
-  opacity: 0; transition: opacity 0.25s;
+.feat-card:hover { 
+  transform: translateY(-3px); 
+  border-color: var(--pink);
+  box-shadow: 0 8px 24px rgba(255,45,155,0.12);
 }
-.feat-card:hover { transform: translateY(-4px); border-color: var(--border-pink); box-shadow: var(--shadow-pink); }
-.feat-card:hover::before { opacity: 1; }
 .feat-icon-wrap {
-  width: 50px; height: 50px; border-radius: 14px;
+  width: 52px; height: 52px; border-radius: 14px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 22px; margin-bottom: 18px;
+  margin-bottom: 18px;
+  position: relative;
 }
-.ic-pink   { background: var(--pink-light); border: 1px solid var(--border-pink); color: var(--pink); }
-.ic-purple { background: var(--purple-light); border: 1px solid var(--border-purple); color: var(--purple); }
-.ic-teal   { background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.25); color: #10B981; }
-.ic-amber  { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.25); color: #F59E0B; }
-.ic-blue   { background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.25); color: #3B82F6; }
-.ic-rose   { background: rgba(244,63,94,0.1);  border: 1px solid rgba(244,63,94,0.25); color: #F43F5E; }
-.feat-card h3 { font-size: 17px; font-weight: 800; color: var(--text-primary); margin-bottom: 10px; }
-.feat-card p { font-size: 14px; color: var(--text-secondary); line-height: 1.65; }
+.feat-icon-wrap svg { width: 24px; height: 24px; }
+.ic-pink   { background: #FFF0F5; color: var(--pink); }
+.ic-purple { background: #F3F0FF; color: var(--purple); }
+.ic-teal   { background: #ECFDF5; color: #059669; }
+.ic-amber  { background: #FFFBEB; color: #D97706; }
+.ic-blue   { background: #EFF6FF; color: #2563EB; }
+.ic-rose   { background: #FFF1F2; color: #E11D48; }
+.feat-card h3 { font-size: 17px; font-weight: 800; color: #111827; margin-bottom: 10px; }
+.feat-card p { font-size: 14px; color: #4B5563; line-height: 1.65; }
 
 /* ======================================================
    HOW IT WORKS — Mobile First
    ====================================================== */
-#how { background: var(--bg-card2); }
+#how { background: #F8FAFC; }
 .steps-grid {
   display: grid; grid-template-columns: 1fr;
-  gap: 20px; margin-top: 40px; position: relative;
+  gap: 16px; margin-top: 36px; position: relative;
 }
 .steps-grid::before {
   display: none;
 }
 .step-card {
-  background: var(--bg-base);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  padding: 28px 24px;
+  background: #FFFFFF;
+  border: 1px solid #E8E8ED;
+  border-radius: var(--r-xl);
+  padding: 28px 24px 24px;
   text-align: center;
-  transition: transform 0.25s, border-color 0.25s, box-shadow 0.25s;
+  transition: transform 0.3s, box-shadow 0.3s, border-color 0.3s;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  position: relative;
 }
-.step-card:hover { transform: translateY(-4px); border-color: var(--border-purple); box-shadow: var(--shadow-purple); }
+.step-card:hover { 
+  transform: translateY(-3px); 
+  border-color: var(--purple);
+  box-shadow: 0 8px 24px rgba(139,92,246,0.12);
+}
 .step-num {
   width: 48px; height: 48px; border-radius: 50%;
   background: var(--gradient);
-  font-family: var(--font-head); font-weight: 900; font-size: 18px; color: #fff;
+  font-family: var(--font-head); font-weight: 900; font-size: 20px; color: #fff;
   display: flex; align-items: center; justify-content: center;
-  margin: 0 auto 18px;
-  box-shadow: var(--shadow-pink);
+  margin: 0 auto 16px;
+  box-shadow: 0 6px 16px rgba(255,45,155,0.25);
+  position: relative;
 }
-.step-card h3 { font-size: 16px; font-weight: 800; color: var(--text-primary); margin-bottom: 10px; }
-.step-card p { font-size: 14px; color: var(--text-secondary); line-height: 1.6; }
+.step-num::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: var(--gradient);
+  opacity: 0.15;
+  z-index: -1;
+}
+.step-card h3 { font-size: 17px; font-weight: 800; color: #111827; margin-bottom: 10px; }
+.step-card p { font-size: 14px; color: #4B5563; line-height: 1.65; }
 
 /* ======================================================
    FOR WHO — Mobile First
@@ -727,6 +748,17 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-head); line-height: 1.15; }
 .form-success h4 { font-size: 18px; font-weight: 800; color: var(--text-primary); margin-bottom: 8px; }
 .form-success p { font-size: 14px; color: var(--text-secondary); }
 
+/* Form validation errors */
+.form-group .input-error {
+  border-color: #EF4444 !important;
+  box-shadow: 0 0 0 3px rgba(239,68,68,0.1) !important;
+}
+.form-group .error-message {
+  font-size: 12px;
+  color: #EF4444;
+  margin-top: 4px;
+}
+
 /* ======================================================
    CTA BANNER — Mobile First
    ====================================================== */
@@ -819,17 +851,17 @@ footer {
   
   .section-title { font-size: 32px; }
   
-  .hero-inner { padding: 50px 0; }
-  #hero h1 { font-size: 40px; }
+  .hero-inner { padding: 32px 0 48px; }
+  #hero h1 { font-size: 38px; }
   
   .hero-actions { flex-direction: row; justify-content: center; }
   .hero-actions .btn { width: auto; }
   
   .hero-trust { flex-direction: row; }
   
-  .features-grid { grid-template-columns: repeat(2, 1fr); gap: 20px; }
+  .features-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
   
-  .steps-grid { grid-template-columns: repeat(2, 1fr); }
+  .steps-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
   
   .form-row { grid-template-columns: 1fr 1fr; }
   
@@ -849,8 +881,8 @@ footer {
 @media (min-width: 900px) {
   .section { padding: 100px 0; }
   
-  .section-title { font-size: clamp(32px, 3.5vw, 44px); }
-  .section-sub { font-size: 17px; }
+  .section-title { font-size: clamp(32px, 3vw, 40px); }
+  .section-sub { font-size: 17px; max-width: 620px; }
   
   /* Nav Desktop */
   .nav-inner { height: 70px; }
@@ -862,8 +894,8 @@ footer {
   /* Hero Desktop */
   .hero-inner {
     display: grid; grid-template-columns: 1fr 1fr;
-    gap: 64px; text-align: left;
-    padding: 60px 0;
+    gap: 48px; text-align: left;
+    padding: 40px 0 60px;
   }
   .hero-content { align-items: flex-start; }
   #hero h1 { font-size: clamp(42px, 4.5vw, 56px); }
@@ -875,13 +907,16 @@ footer {
   .float-stat { display: flex; }
   
   /* Steps desktop connector line */
-  .steps-grid { grid-template-columns: repeat(4, 1fr); }
+  .steps-grid { grid-template-columns: repeat(4, 1fr); gap: 20px; }
   .steps-grid::before {
     content: '';
     display: block;
-    position: absolute; top: 40px; left: calc(12.5% + 20px); right: calc(12.5% + 20px);
-    height: 2px; background: var(--gradient-soft); opacity: 0.6;
+    position: absolute; top: 44px; left: calc(12.5% + 24px); right: calc(12.5% + 24px);
+    height: 2px; 
+    background: linear-gradient(90deg, var(--pink), var(--purple));
+    opacity: 0.25;
     pointer-events: none;
+    border-radius: 2px;
   }
   
   .persona-grid { grid-template-columns: repeat(3, 1fr); }
@@ -901,7 +936,7 @@ footer {
    RESPONSIVE — Large Desktop (min-width: 1024px)
    ====================================================== */
 @media (min-width: 1024px) {
-  .features-grid { grid-template-columns: repeat(3, 1fr); }
+  .features-grid { grid-template-columns: repeat(3, 1fr); gap: 20px; }
   
   #hero h1 { font-size: clamp(46px, 4.5vw, 60px); }
   

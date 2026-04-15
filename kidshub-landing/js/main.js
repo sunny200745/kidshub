@@ -60,32 +60,107 @@ document.addEventListener('DOMContentLoaded', () => {
   // ── DEMO FORM ──────────────────────────────────────────────
   const form = document.getElementById('demo-form');
   if (form) {
+    // Validation helper
+    const validateEmail = (email) => {
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    };
+
+    const showError = (input, message) => {
+      input.classList.add('input-error');
+      let errorEl = input.parentElement.querySelector('.error-message');
+      if (!errorEl) {
+        errorEl = document.createElement('span');
+        errorEl.className = 'error-message';
+        input.parentElement.appendChild(errorEl);
+      }
+      errorEl.textContent = message;
+    };
+
+    const clearError = (input) => {
+      input.classList.remove('input-error');
+      const errorEl = input.parentElement.querySelector('.error-message');
+      if (errorEl) errorEl.remove();
+    };
+
+    // Clear errors on input
+    form.querySelectorAll('input, select, textarea').forEach(input => {
+      input.addEventListener('input', () => clearError(input));
+      input.addEventListener('change', () => clearError(input));
+    });
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      
+      // Clear all previous errors
+      form.querySelectorAll('.input-error').forEach(el => el.classList.remove('input-error'));
+      form.querySelectorAll('.error-message').forEach(el => el.remove());
+
+      // Validate required fields
+      const name = form.querySelector('#form-name');
+      const email = form.querySelector('#form-email');
+      const centre = form.querySelector('#form-centre');
+      const phone = form.querySelector('#form-phone');
+      
+      let isValid = true;
+
+      if (!name.value.trim()) {
+        showError(name, 'Please enter your name');
+        isValid = false;
+      }
+
+      if (!email.value.trim()) {
+        showError(email, 'Please enter your email');
+        isValid = false;
+      } else if (!validateEmail(email.value.trim())) {
+        showError(email, 'Please enter a valid email address');
+        isValid = false;
+      }
+
+      if (!centre.value.trim()) {
+        showError(centre, 'Please enter your centre name');
+        isValid = false;
+      }
+
+      if (!phone.value.trim()) {
+        showError(phone, 'Please enter your phone number');
+        isValid = false;
+      }
+
+      if (!isValid) {
+        // Focus on first invalid field
+        const firstError = form.querySelector('.input-error');
+        if (firstError) firstError.focus();
+        return;
+      }
+
       const btn = form.querySelector('button[type="submit"]');
       const originalText = btn.innerHTML;
       btn.disabled = true;
       btn.innerHTML = '<span class="btn-spinner"></span> Sending...';
 
-      const data = {
-        name:     form.name.value,
-        email:    form.email.value,
-        centre:   form.centre.value,
-        phone:    form.phone.value,
-        size:     form.size.value,
-        message:  form.message.value,
-      };
+      const formData = new FormData(form);
 
-      // Simulate send (replace with Resend/EmailJS/Formspree endpoint)
-      await new Promise(r => setTimeout(r, 1200));
+      try {
+        const response = await fetch(form.action, {
+          method: 'POST',
+          body: formData,
+          headers: { 'Accept': 'application/json' }
+        });
 
-      const formFields = form.querySelector('.form-fields');
-      const successMsg = form.querySelector('.form-success');
-      if (formFields) formFields.style.display = 'none';
-      if (successMsg) successMsg.classList.add('show');
-
-      // Optional: integrate EmailJS or Resend here
-      // emailjs.send('service_id', 'template_id', data);
+        if (response.ok) {
+          const formFields = form.querySelector('.form-fields');
+          const successMsg = form.querySelector('.form-success');
+          if (formFields) formFields.style.display = 'none';
+          if (successMsg) successMsg.classList.add('show');
+        } else {
+          throw new Error('Form submission failed');
+        }
+      } catch (error) {
+        console.error('Form error:', error);
+        alert('Something went wrong. Please try again or email us directly at contact@nuvaro.ca');
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+      }
     });
   }
 
