@@ -91,7 +91,7 @@ export default async function handler(req, res) {
 // ── SEND LEAD EMAIL VIA RESEND ─────────────────────────────────
 async function sendLeadEmail(data) {
   const resendKey = process.env.RESEND_API_KEY;
-  const toEmail   = process.env.LEAD_EMAIL || 'hello@getkidshub.com';
+  const toEmail   = process.env.LEAD_EMAIL || 'contact@nuvaro.ca';
 
   if (!resendKey) {
     console.warn('RESEND_API_KEY not set, skipping lead email');
@@ -119,7 +119,7 @@ async function sendLeadEmail(data) {
         'Authorization': `Bearer ${resendKey}`,
       },
       body: JSON.stringify({
-        from:    'Aria <aria@getkidshub.com>',
+        from:    'Aria <aria@nuvaro.ca>',
         to:      [toEmail],
         subject: `🌸 New KidsHub lead: ${data.name || 'Unknown'} — ${data.centre || 'unknown centre'}`,
         html,
