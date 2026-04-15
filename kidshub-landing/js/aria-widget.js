@@ -266,7 +266,7 @@ Rules for responses:
       setLoading(false);
       appendMessage(
         "bot",
-        "Sorry, I'm having a brief connection issue. Please try again or email us at hello@getkidshub.com 😊",
+        "Sorry, I'm having a brief connection issue. Please try again or email us at contact@nuvaro.ca 😊",
       );
       console.error("Aria error:", err);
     }
