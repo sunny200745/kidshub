@@ -1,0 +1,20 @@
+{
+  "folders": [
+    { "name": "daycares (root)", "path": "." },
+    { "name": "kidshub (parent + teacher app)", "path": "kidshub" },
+    { "name": "kidshub-owner (dashboard)", "path": "kidshub-owner" },
+    { "name": "kidshub-landing (marketing)", "path": "kidshub-landing" }
+  ],
+  "settings": {
+    "files.exclude": {
+      "**/node_modules": true,
+      "**/.DS_Store": true
+    },
+    "search.exclude": {
+      "**/node_modules": true,
+      "**/dist": true,
+      "**/build": true,
+      "**/.expo": true
+    }
+  }
+}

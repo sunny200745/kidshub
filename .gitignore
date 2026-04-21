@@ -35,3 +35,26 @@ coverage/
 # Misc
 *.local
 .cache/
+
+# Expo / React Native (Phase 3: kidshub)
+.expo/
+.expo-shared/
+web-build/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+# iOS / Android build artifacts
+ios/Pods/
+ios/build/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+
+# Monorepo tooling
+.turbo/
+

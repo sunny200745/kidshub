@@ -1,0 +1,121 @@
+# KidsHub Monorepo Restructure Plan
+
+Tracking doc for the restructure of the `daycares/` monorepo into three clearly-scoped apps.
+
+## Decisions locked in
+
+- **Mobile + web stack for `kidshub`:** Expo (React Native) + React Native Web — one codebase, native iOS/Android + web.
+- **Repo strategy:** Single monorepo at `daycares/`.
+- **Order of work:** `kidshub-landing` → `kidshub-dashboard` → `kidshub`.
+
+## Open decisions (to confirm before Phase 0 kickoff)
+
+- [ ] Monorepo root: flatten `kidshub-app/*` up into `daycares/` (Option B, current default) **or** rename `kidshub-app/` → `kidshub-monorepo/` (Option A).
+- [ ] Workspace tool: `pnpm workspaces + Turborepo` (default) **or** plain `npm workspaces`.
+- [ ] Styling on mobile: `NativeWind` (default, keeps Tailwind muscle memory) **or** `Tamagui`.
+- [ ] Firebase on mobile: Firebase JS SDK (default, one code path) **or** `@react-native-firebase/*` (native perf, web needs a separate path).
+- [ ] Keep `kidshub-legacy/` snapshot during port, or rely purely on git history.
+
+---
+
+## Target state
+
+```
+daycares/
+├── kidshub/                 # unified parent + teacher, web + mobile (role-based, Expo + RN Web)
+├── kidshub-dashboard/       # owner-only, web-only (renamed from kidshub-owner, React + Vite)
+└── kidshub-landing/         # marketing site, web-only (static HTML/CSS/JS + Vercel /api)
+```
+
+---
+
+## Phase 0 — Monorepo scaffolding
+
+- [ ] **p0-1** Flatten monorepo — move `kidshub-app/*` up into `daycares/` (preserve `.git` history).
+- [ ] **p0-2** Add root `package.json` with npm/pnpm workspaces for the 3 apps.
+- [ ] **p0-3** Add root `.gitignore`, `.editorconfig`, `README.md`, `.vscode` workspace file.
+- [ ] **p0-4** Commit clean baseline before any app-level changes.
+
+---
+
+## Phase 1 — `kidshub-landing` (start here)
+
+**Goal:** Public marketing site, web-only, clearly scoped.
+
+- [ ] **p1-1** Audit `index.html` to confirm it's marketing-only (no app logic).
+- [ ] **p1-2** Flesh out `package.json` (name, scripts `dev`/`build`/`deploy`).
+- [ ] **p1-3** Add `vercel.json` pinning static site + `/api` routes.
+- [ ] **p1-4** Update CTAs to point at `kidshub` app and `kidshub-dashboard`.
+- [ ] **p1-5** Write `README.md` (purpose, deploy target, local dev).
+- [ ] **p1-6** Deploy to Vercel and smoke-test `/api/chat` + `/api/test`.
+
+---
+
+## Phase 2 — `kidshub-dashboard` (rename from `kidshub-owner`)
+
+**Goal:** Owner-only web app, web-only, stays React + Vite.
+
+- [ ] **p2-1** Rename folder `kidshub-owner` → `kidshub-dashboard`.
+- [ ] **p2-2** Update `package.json` name + global find/replace of `kidshub-owner` references.
+- [ ] **p2-3** Audit pages — mark teacher-relevant pages (`Activities`, `CheckIn`, `Messages`, `Schedule`, `ChildProfile`) for extraction to `kidshub`.
+- [ ] **p2-4** Strengthen `ProtectedRoute` to owner-only + friendly redirect for non-owners.
+- [ ] **p2-5** Update `.env.example`, rotate any committed secrets.
+- [ ] **p2-6** Write `README.md` (owner portal purpose, deploy, local dev).
+- [ ] **p2-7** Reconfigure Vercel project name + domain, deploy, smoke-test owner flow.
+
+---
+
+## Phase 3 — `kidshub` (biggest lift: unify parent + teacher, Expo + RN Web)
+
+**Goal:** Single Expo app serving parents and teachers with role-based routing, shipping to iOS, Android, and Web.
+
+### 3a. Bootstrap
+
+- [ ] **p3-1** Back up existing `kidshub/` → `kidshub-legacy/` for reference.
+- [ ] **p3-2** Bootstrap fresh Expo app (TypeScript + Expo Router template).
+- [ ] **p3-3** Enable React Native Web + verify `expo start --web` works.
+- [ ] **p3-4** Configure `app.json` for web + iOS/Android bundle IDs.
+
+### 3b. Foundations
+
+- [ ] **p3-5** Port Firebase config (decide: JS SDK cross-platform vs `@react-native-firebase`).
+- [ ] **p3-6** Port auth/user/theme contexts to Expo.
+- [ ] **p3-7** Port hooks, swapping `react-router-dom` for `expo-router` equivalents.
+- [ ] **p3-8** Replace Tailwind with NativeWind (or Tamagui) for cross-platform styling.
+
+### 3c. Routing + UI
+
+- [ ] **p3-9** Set up Expo Router role-based groups — `(auth)`, `(parent)`, `(teacher)`.
+- [ ] **p3-10** Port parent pages (`Home`, `Schedule`, `Activity`, `Messages`, `Photos`, `Profile`) to `(parent)` group.
+- [ ] **p3-11** Port teacher-relevant pages from `kidshub-dashboard` into `(teacher)` group.
+- [ ] **p3-12** Port shared components (`layout`, `ui`, `icons`) — swap `<div>` for `<View>`/`<Pressable>`, `lucide` → `lucide-react-native`.
+
+### 3d. Auth + data
+
+- [ ] **p3-13** Implement role-aware login + route guards (parents can't access teacher routes, vice versa).
+- [ ] **p3-14** Add teacher invite flow (owner invites in dashboard → Firestore user doc gets `role` + `daycareId`).
+- [ ] **p3-15** Update Firestore security rules for role-scoped queries (`classroomId` for teachers, `childId` for parents).
+
+### 3e. Build + deploy
+
+- [ ] **p3-16** Configure EAS Build (`eas.json`) for iOS + Android.
+- [ ] **p3-17** Configure web deploy for RN-Web output (Vercel or Expo hosting).
+- [ ] **p3-18** Smoke-test on iOS simulator, Android emulator, and web.
+- [ ] **p3-19** Delete `kidshub-legacy/` once parity is confirmed.
+
+---
+
+## Phase 4 — Cross-cutting cleanup
+
+- [ ] **p4-1** Update root `README.md` with final 3-app layout + run commands.
+- [ ] **p4-2** Consolidate Firebase config to env-driven single source of truth.
+- [ ] **p4-3** Add GitHub Actions CI running `build` per workspace on PRs.
+- [ ] **p4-4** Set up 3 Vercel projects + domain plan (`kidshub.com`, `app.kidshub.com`, `dashboard.kidshub.com`).
+
+---
+
+## Progress log
+
+_Append dated notes as phases complete._
+
+- _YYYY-MM-DD_ — …

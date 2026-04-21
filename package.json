@@ -1,0 +1,23 @@
+{
+  "name": "daycares",
+  "private": true,
+  "version": "0.0.0",
+  "description": "KidsHub monorepo — unified parent+teacher app (kidshub), owner dashboard (kidshub-dashboard), and marketing site (kidshub-landing).",
+  "workspaces": [
+    "kidshub",
+    "kidshub-owner",
+    "kidshub-landing"
+  ],
+  "scripts": {
+    "dev:kidshub": "npm run dev --workspace kidshub",
+    "dev:owner": "npm run dev --workspace kidshub-owner",
+    "dev:landing": "npm run dev --workspace kidshub-landing",
+    "build:kidshub": "npm run build --workspace kidshub",
+    "build:owner": "npm run build --workspace kidshub-owner",
+    "build:landing": "npm run build --workspace kidshub-landing",
+    "build:all": "npm run build --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=18.18.0"
+  }
+}
