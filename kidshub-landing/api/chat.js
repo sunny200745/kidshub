@@ -5,6 +5,12 @@
 //   OPENROUTER_API_KEY  → OpenRouter API key (used for Claude via their passthrough)
 //   RESEND_API_KEY      → Resend API key (optional, lead emails skipped if missing)
 //   LEAD_EMAIL          → destination for lead notifications (defaults to contact@nuvaro.ca)
+//
+// Defense layers (abuse mitigation — this endpoint is public):
+//   1. Origin/Referer allowlist check (rejects curl/bots without spoofed headers).
+//   2. Request shape + size caps (prevents "send a 100K-token prompt" attacks).
+//   3. OpenRouter per-key spend cap — the real safety net, set on the dashboard.
+//   4. (not yet) Per-IP rate limiting via Upstash Redis.
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -20,25 +26,101 @@ const ALLOWED_ORIGINS = [
   'https://www.getkidshub.com',
 ];
 
+// Size caps. Tuned generously for real Aria traffic (system prompt is ~430
+// tokens / ~1700 chars; user messages are short) while making large-payload
+// abuse uneconomical for attackers.
+const MAX_MESSAGES = 20;
+const MAX_MESSAGE_CHARS = 2000;
+const MAX_SYSTEM_CHARS = 4000;
+const MAX_TOKENS_CEILING = 500;
+const MAX_LEAD_FIELD_CHARS = 500;
+
+// ── Origin / allowlist helpers ──────────────────────────────────────────────
+
+function matchesAllowlist(url) {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    if (ALLOWED_ORIGINS.includes(parsed.origin)) return true;
+    if (parsed.protocol === 'https:' && parsed.hostname.endsWith('.vercel.app')) return true;
+    if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') return true;
+  } catch (_) {
+    // Malformed URL — reject.
+  }
+  return false;
+}
+
+// Whether the inbound request looks like it came from an allowed browser
+// origin. Same-origin browsers always send at least one of Origin/Referer on
+// POSTs with Content-Type: application/json (ours is CORS-preflighted). A
+// motivated attacker can spoof these headers, which is why this is only
+// layer 1 — rate limiting + spend cap are the real safety nets.
+function isAllowedSource(req) {
+  return matchesAllowlist(req.headers.origin) || matchesAllowlist(req.headers.referer);
+}
+
 function applyCors(req, res) {
   const origin = req.headers.origin || '';
-  let allowed = ALLOWED_ORIGINS.includes(origin);
-
-  if (!allowed && origin) {
-    try {
-      const { hostname, protocol } = new URL(origin);
-      if (protocol === 'https:' && hostname.endsWith('.vercel.app')) allowed = true;
-      if (hostname === 'localhost' || hostname === '127.0.0.1') allowed = true;
-    } catch (_) {
-      // Malformed Origin header — fall through to default.
-    }
-  }
-
+  const allowed = matchesAllowlist(origin);
   res.setHeader('Access-Control-Allow-Origin', allowed ? origin : ALLOWED_ORIGINS[0]);
   res.setHeader('Vary', 'Origin');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
+
+// ── Request validation ──────────────────────────────────────────────────────
+
+function validateChatBody(body) {
+  const { system, messages, max_tokens } = body;
+
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return { ok: false, error: 'messages must be a non-empty array' };
+  }
+  if (messages.length > MAX_MESSAGES) {
+    return { ok: false, error: `too many messages (max ${MAX_MESSAGES})` };
+  }
+  for (const m of messages) {
+    if (!m || typeof m !== 'object') {
+      return { ok: false, error: 'invalid message' };
+    }
+    if (m.role !== 'user' && m.role !== 'assistant' && m.role !== 'system') {
+      return { ok: false, error: 'invalid message role' };
+    }
+    if (typeof m.content !== 'string') {
+      return { ok: false, error: 'message content must be a string' };
+    }
+    if (m.content.length > MAX_MESSAGE_CHARS) {
+      return { ok: false, error: `message too long (max ${MAX_MESSAGE_CHARS} chars)` };
+    }
+  }
+  if (system != null) {
+    if (typeof system !== 'string') {
+      return { ok: false, error: 'system must be a string' };
+    }
+    if (system.length > MAX_SYSTEM_CHARS) {
+      return { ok: false, error: `system prompt too long (max ${MAX_SYSTEM_CHARS} chars)` };
+    }
+  }
+  if (max_tokens != null && (typeof max_tokens !== 'number' || max_tokens < 1)) {
+    return { ok: false, error: 'max_tokens must be a positive number' };
+  }
+  return { ok: true };
+}
+
+function validateLeadBody(body) {
+  const fields = ['name', 'email', 'phone', 'centre', 'message', 'source'];
+  for (const f of fields) {
+    const v = body[f];
+    if (v == null) continue;
+    if (typeof v !== 'string') return { ok: false, error: `${f} must be a string` };
+    if (v.length > MAX_LEAD_FIELD_CHARS) {
+      return { ok: false, error: `${f} too long (max ${MAX_LEAD_FIELD_CHARS} chars)` };
+    }
+  }
+  return { ok: true };
+}
+
+// ── Handler ─────────────────────────────────────────────────────────────────
 
 module.exports = async (req, res) => {
   applyCors(req, res);
@@ -51,20 +133,28 @@ module.exports = async (req, res) => {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // Layer 1: reject anything not coming from an allowed browser origin.
+  if (!isAllowedSource(req)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
   const body = req.body || {};
 
   // Lead capture route — Aria widget POSTs { __lead: true, name, email, ... }
   // when it detects LEAD_CAPTURE:: pattern in its own reply.
   if (body.__lead === true) {
+    const v = validateLeadBody(body);
+    if (!v.ok) return res.status(400).json({ error: v.error });
     await sendLeadEmail({ ...body, source: body.source || 'aria-chat' });
     return res.status(200).json({ ok: true });
   }
 
-  const { system, messages, max_tokens = 1024 } = body;
+  // Layer 2: validate + cap the chat payload before spending any OpenRouter credit.
+  const v = validateChatBody(body);
+  if (!v.ok) return res.status(400).json({ error: v.error });
 
-  if (!messages || !Array.isArray(messages)) {
-    return res.status(400).json({ error: 'Messages array is required' });
-  }
+  const { system, messages } = body;
+  const cappedMaxTokens = Math.min(body.max_tokens || 1024, MAX_TOKENS_CEILING);
 
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
@@ -86,7 +176,7 @@ module.exports = async (req, res) => {
       },
       body: JSON.stringify({
         model: DEFAULT_MODEL,
-        max_tokens,
+        max_tokens: cappedMaxTokens,
         messages: [
           { role: 'system', content: system || 'You are a helpful assistant.' },
           ...messages,
@@ -105,8 +195,6 @@ module.exports = async (req, res) => {
 
     const data = await response.json();
 
-    // Log which model in the chain actually served the reply — helpful to
-    // spot when the primary is consistently being skipped.
     if (data && data.model) {
       console.log('Aria served by:', data.model);
     }
@@ -134,6 +222,8 @@ module.exports = async (req, res) => {
     return res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+// ── Resend lead email ───────────────────────────────────────────────────────
 
 async function sendLeadEmail(data) {
   const resendKey = process.env.RESEND_API_KEY;
