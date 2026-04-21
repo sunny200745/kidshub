@@ -185,15 +185,18 @@ Or push to `main` — Vercel deploys automatically on every push, creates previe
 - Target: `dashboard.getkidshub.com` (custom domain, Phase 2 cleanup)
 - Previews: `*.vercel.app`
 
-### Post-rename checklist (p2-7)
+### First-deploy checklist (p2-7)
 
-The folder was renamed from `kidshub-owner` to `kidshub-dashboard`. The Vercel project itself still uses the old name until these steps are done:
+1. ✅ Vercel project renamed to `kidshub-dashboard`.
+2. ☐ Vercel → Settings → Git → confirm **Root Directory** is `kidshub-dashboard`.
+3. ☐ Vercel → Settings → Environment Variables → add all 7 `VITE_FIREBASE_*` vars (Production + Preview + Development). Use the "Paste .env file contents" shortcut.
+4. ☐ Trigger a deploy (push to `main`, or `npx vercel --prod` from this folder).
+5. ☐ Smoke-test the assigned `*.vercel.app` URL: register, log in, click through every page, verify no Firestore permission errors in DevTools.
+6. ☐ Vercel → Settings → Domains → add `dashboard.getkidshub.com`.
+7. ☐ DNS at your registrar: add `CNAME dashboard → cname.vercel-dns.com.` (note the trailing dot).
+8. ☐ Wait for DNS propagation (usually 5–30 min, sometimes longer), then re-test on the custom domain.
 
-1. Vercel → Project → Settings → General → rename project to `kidshub-dashboard`.
-2. Vercel → Project → Settings → Git → confirm **Root Directory** is `kidshub-dashboard`.
-3. Vercel → Project → Settings → Domains → add `dashboard.getkidshub.com`.
-4. DNS: add `CNAME dashboard → cname.vercel-dns.com.` in the registrar.
-5. Smoke-test: register a new owner, confirm role check, seed DB, click through each page.
+The included [`vercel.json`](./vercel.json) handles SPA routing (rewrites all paths to `index.html` so direct loads of `/children`, `/staff`, etc. don't 404) and applies the same security headers as the landing site (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`).
 
 ## Security notes
 
