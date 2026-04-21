@@ -106,7 +106,7 @@ daycares/
   - [ ] **p2-5a** _(user, dashboard)_ Lock down the Google Cloud Console API key with HTTP-referrer restrictions (`getkidshub.com/*`, `www.getkidshub.com/*`, `*.vercel.app/*`, `localhost:*/*`).
   - [ ] **p2-5b** _(user, dashboard)_ Audit Firestore Security Rules — paste them to the assistant for review. Must be scoped per-user/owner, not `allow ... if true` or `if request.auth != null`.
   - [ ] **p2-5c** _(optional)_ Rotate the Firebase web API key and update `VITE_FIREBASE_API_KEY` in Vercel env vars for all three apps. Don't bother rewriting git history (destructive, doesn't scrub GitHub caches).
-- [ ] **p2-6** Write `README.md` (owner portal purpose, deploy, local dev).
+- [x] **p2-6** Write `README.md` (owner portal purpose, deploy, local dev). Covers tech stack, access-control model (role gating + defense-in-depth caveat), full folder layout, local dev + seed flow, Firestore data model (including the `users.role` vs `staff.role` trap), env vars with the Firebase-keys-aren't-secrets nuance, deploy steps, and a p2-7 Vercel post-rename checklist for the user to execute.
 - [ ] **p2-7** Reconfigure Vercel project name + domain, deploy, smoke-test owner flow.
 
 ---
