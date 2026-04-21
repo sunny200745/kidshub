@@ -44,7 +44,7 @@ daycares/
 
 ---
 
-## Phase 1 — `kidshub-landing`
+## Phase 1 — `kidshub-landing` ✅
 
 **Goal:** Public marketing site, web-only, clearly scoped.
 
@@ -53,7 +53,15 @@ daycares/
 - [x] **p1-3** Add `vercel.json` pinning static site + `/api` routes + security headers.
 - [x] **p1-4** ~~Update CTAs to point at `kidshub` app and `kidshub-dashboard`.~~ _No-op — landing page is intentionally lead-capture-only; no sign-in links. Confirmed 2026-04-21._
 - [x] **p1-5** Write `README.md` (purpose, deploy target, local dev).
-- [ ] **p1-6** Deploy to Vercel and smoke-test `/api/chat` + `/api/test` _(user-driven via Vercel dashboard)_.
+- [x] **p1-6** Deploy to Vercel and smoke-test `/api/chat` + `/api/test`. Live on `getkidshub.com`, Claude 3 Haiku via OpenRouter responding in ~3s.
+
+### Bonus scope — Aria hardening (added in Phase 1, not originally planned)
+
+- [x] **p1-7** Fix Aria 400 — removed invalid Anthropic-direct model ID from client, pinned model server-side in `api/chat.js`.
+- [x] **p1-8** Cost + isolation — dedicated OpenRouter account for KidsHub, $10 per-key spend cap, pinned to `anthropic/claude-3-haiku` (~$2.50 / 1000 conversations).
+- [x] **p1-9** Layer 1 defense — Origin/Referer allowlist check in `/api/chat`, rejects curl/bot traffic without spoofed headers (403).
+- [x] **p1-10** Layer 2 defense — request body validation: max 20 messages, 2000 chars/message, 4000 chars/system prompt, 500 chars/lead field, hard `max_tokens` ceiling of 500. Runs pre-upstream so bogus requests cost zero credit.
+- [ ] **p1-11** Layer 3 defense — per-IP rate limiting via Upstash Redis. Optional polish; $10 spend cap already limits blast radius.
 
 ---
 
@@ -125,4 +133,5 @@ daycares/
 _Append dated notes as phases complete._
 
 - **2026-04-21** — Phase 0 complete. Flattened `kidshub-app/*` into `daycares/`, added root `package.json` (npm workspaces), `.editorconfig`, `daycares.code-workspace`, extended `.gitignore` for Expo/RN. Removed stale per-app `package-lock.json` files and nested `node_modules/`; root `npm install` produced a single hoisted tree (261 MB, down from 542 MB) with one canonical `package-lock.json`. Commits: `21ad22f` (scaffolding), `2f16764` (lockfile consolidation).
-- **2026-04-21** — Phase 1 (code) complete. Audited `kidshub-landing` and confirmed marketing-only (no Firebase, auth, or leaked secrets). Added `dev`/`dev:vercel`/`build`/`deploy` scripts so `npm run dev:landing` works from the monorepo root. Merged Resend lead-email flow from an orphaned `js/chat.js` into the live `api/chat.js`, added CORS origin allowlist, generated a brand favicon at `assets/favicon.svg`. Added `vercel.json` with security headers and cache policy. Rewrote `kidshub-landing/README.md` for monorepo context and current env-var names. p1-4 (sign-in CTAs) confirmed as a no-op per product decision. Commits: `fb30a3a` (landing scripts), `ad7e014` (Aria harden + dead-code removal), pending (vercel.json + README). p1-6 (Vercel deploy + smoke test) handed off to user via Vercel dashboard. Next: Phase 2 — `kidshub-dashboard`.
+- **2026-04-21** — Phase 1 (code) complete. Audited `kidshub-landing` and confirmed marketing-only (no Firebase, auth, or leaked secrets). Added `dev`/`dev:vercel`/`build`/`deploy` scripts so `npm run dev:landing` works from the monorepo root. Merged Resend lead-email flow from an orphaned `js/chat.js` into the live `api/chat.js`, added CORS origin allowlist, generated a brand favicon at `assets/favicon.svg`. Added `vercel.json` with security headers and cache policy. Rewrote `kidshub-landing/README.md` for monorepo context and current env-var names. p1-4 (sign-in CTAs) confirmed as a no-op per product decision. Commits: `fb30a3a` (landing scripts), `ad7e014` (Aria harden + dead-code removal), pending (vercel.json + README). p1-6 (Vercel deploy + smoke test) handed off to user via Vercel dashboard.
+- **2026-04-21 (evening)** — Phase 1 fully ✅. Aria was returning 400s on prod (the widget was sending `claude-haiku-4-5-20251001`, an Anthropic-direct model ID invalid on OpenRouter); the old handler had hidden this by hardcoding the model. Pinned model server-side (`ceef18b`). Chased a subsequent free-tier 429 through Llama 3.3 70B and a fallback chain (`ef27f26`, `3d3efb3`), ultimately choosing paid `anthropic/claude-3-haiku` for uptime (`829ecd9`) — ~$0.0025 per conversation is negligible for a lead widget. Created dedicated OpenRouter account for KidsHub, rotated key into Vercel env vars, set $10 per-key spend cap. Hardened `/api/chat` against abuse: Origin/Referer rejection (Layer 1) + request shape + size caps + `max_tokens` ceiling (Layer 2) — all running pre-upstream so bogus requests cost zero. Commit `7ec406d`. Verified with 6 live curl tests: legit traffic → 200, no Origin → 403, evil Origin → 403, oversized message → 400, too many messages → 400, `max_tokens: 5000` capped to 500. Upstash rate limiting (Layer 3) parked as optional polish. Next: Phase 2 — `kidshub-dashboard` rename.

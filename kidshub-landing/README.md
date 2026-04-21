@@ -7,7 +7,7 @@ Web-only, lead-capture focused. Intentionally has **no** login or app links — 
 This is one of three workspaces in the [`daycares/`](../README.md) monorepo:
 
 - `kidshub-landing/` ← **you are here** (marketing)
-- `kidshub-dashboard/` (owner portal, being renamed from `kidshub-owner`)
+- `kidshub-dashboard/` (owner portal)
 - `kidshub/` (parent + teacher app, Expo + React Native Web)
 
 ## Tech

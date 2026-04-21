@@ -7,7 +7,7 @@ Monorepo for the KidsHub daycare platform. Three sibling workspaces, one npm wor
 | Folder | Purpose | Stack | Platforms |
 | --- | --- | --- | --- |
 | [`kidshub/`](./kidshub) | Unified app for parents and teachers (role-based) | React + Vite _(Phase 3: migrating to Expo + React Native Web)_ | Web _(mobile coming)_ |
-| [`kidshub-owner/`](./kidshub-owner) | Daycare owner dashboard _(renaming to `kidshub-dashboard` in Phase 2)_ | React + Vite | Web only |
+| [`kidshub-dashboard/`](./kidshub-dashboard) | Daycare owner dashboard | React + Vite | Web only |
 | [`kidshub-landing/`](./kidshub-landing) | Public marketing site | Static HTML/CSS/JS + Vercel `/api` routes | Web only |
 
 ## Getting started
@@ -15,19 +15,19 @@ Monorepo for the KidsHub daycare platform. Three sibling workspaces, one npm wor
 ```bash
 npm install          # installs all workspaces
 
-npm run dev:kidshub  # run parent+teacher app (http://localhost:5174)
-npm run dev:owner    # run owner dashboard (http://localhost:5173)
-npm run dev:landing  # run marketing site
+npm run dev:kidshub    # run parent+teacher app (http://localhost:5174)
+npm run dev:dashboard  # run owner dashboard (http://localhost:5173)
+npm run dev:landing    # run marketing site
 ```
 
-Or run per-workspace: `npm run dev --workspace kidshub-owner`.
+Or run per-workspace: `npm run dev --workspace kidshub-dashboard`.
 
 ## Repo layout
 
 ```
 daycares/
 ├── kidshub/            # parent + teacher (web + mobile, role-based)
-├── kidshub-owner/      # owner dashboard (web only)  →  kidshub-dashboard
+├── kidshub-dashboard/  # owner dashboard (web only)
 ├── kidshub-landing/    # marketing site (web only)
 ├── package.json        # npm workspaces root
 ├── RESTRUCTURE_PLAN.md # live tracking doc for the in-progress refactor
