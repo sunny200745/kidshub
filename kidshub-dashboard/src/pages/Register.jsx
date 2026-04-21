@@ -5,6 +5,7 @@ import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2, User, Phone, Building2, Shield, Clock, Users } from 'lucide-react';
 import { auth, db } from '../firebase/config';
 import { useAuth } from '../contexts';
+import { ROLES } from '../constants/roles';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -119,7 +120,7 @@ export default function Register() {
         email: formData.email,
         phone: formData.phone || null,
         centerName: formData.centerName,
-        role: 'owner',
+        role: ROLES.OWNER,
         status: 'active',
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
