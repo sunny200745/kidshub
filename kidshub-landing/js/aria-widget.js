@@ -8,9 +8,11 @@
   "use strict";
 
   // ── CONFIG ─────────────────────────────────────────────────
+  // Note: the LLM model is pinned server-side in api/chat.js. Changing
+  // the model here has no effect — edit DEFAULT_MODEL in api/chat.js
+  // instead.
   const ARIA_CONFIG = {
     apiEndpoint: "/api/chat", // Vercel serverless function
-    model: "claude-haiku-4-5-20251001", // Fast & cost-effective
     greetingDelay: 800,
     typingDelay: { min: 800, max: 1800 },
 
@@ -278,7 +280,6 @@ Rules for responses:
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: ARIA_CONFIG.model,
         system: ARIA_CONFIG.systemPrompt,
         messages: history,
         max_tokens: 400,

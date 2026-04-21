@@ -55,7 +55,7 @@ module.exports = async (req, res) => {
     return res.status(200).json({ ok: true });
   }
 
-  const { system, messages, max_tokens = 1024, model } = body;
+  const { system, messages, max_tokens = 1024 } = body;
 
   if (!messages || !Array.isArray(messages)) {
     return res.status(400).json({ error: 'Messages array is required' });
@@ -68,6 +68,9 @@ module.exports = async (req, res) => {
   }
 
   try {
+    // Model is intentionally pinned server-side. Clients may send an Anthropic-
+    // direct model ID (e.g. "claude-haiku-4-5-20251001") which is invalid on
+    // OpenRouter; honoring the client's model caused 400s from upstream.
     const response = await fetch(OPENROUTER_URL, {
       method: 'POST',
       headers: {
@@ -77,7 +80,7 @@ module.exports = async (req, res) => {
         'X-Title': 'Aria - KidsHub Assistant',
       },
       body: JSON.stringify({
-        model: model || DEFAULT_MODEL,
+        model: DEFAULT_MODEL,
         max_tokens,
         messages: [
           { role: 'system', content: system || 'You are a helpful assistant.' },
