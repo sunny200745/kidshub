@@ -44,16 +44,16 @@ daycares/
 
 ---
 
-## Phase 1 — `kidshub-landing` (start here)
+## Phase 1 — `kidshub-landing`
 
 **Goal:** Public marketing site, web-only, clearly scoped.
 
-- [ ] **p1-1** Audit `index.html` to confirm it's marketing-only (no app logic).
-- [ ] **p1-2** Flesh out `package.json` (name, scripts `dev`/`build`/`deploy`).
-- [ ] **p1-3** Add `vercel.json` pinning static site + `/api` routes.
-- [ ] **p1-4** Update CTAs to point at `kidshub` app and `kidshub-dashboard`.
-- [ ] **p1-5** Write `README.md` (purpose, deploy target, local dev).
-- [ ] **p1-6** Deploy to Vercel and smoke-test `/api/chat` + `/api/test`.
+- [x] **p1-1** Audit `index.html` to confirm it's marketing-only (no app logic). Also cleaned up the orphaned `js/chat.js` serverless handler (merged Resend lead-email flow into `api/chat.js`), added CORS origin allowlist, generated placeholder `assets/favicon.svg`.
+- [x] **p1-2** Flesh out `package.json` (name, scripts `dev`/`build`/`deploy`).
+- [x] **p1-3** Add `vercel.json` pinning static site + `/api` routes + security headers.
+- [x] **p1-4** ~~Update CTAs to point at `kidshub` app and `kidshub-dashboard`.~~ _No-op — landing page is intentionally lead-capture-only; no sign-in links. Confirmed 2026-04-21._
+- [x] **p1-5** Write `README.md` (purpose, deploy target, local dev).
+- [ ] **p1-6** Deploy to Vercel and smoke-test `/api/chat` + `/api/test` _(user-driven via Vercel dashboard)_.
 
 ---
 
@@ -124,4 +124,5 @@ daycares/
 
 _Append dated notes as phases complete._
 
-- **2026-04-21** — Phase 0 complete. Flattened `kidshub-app/*` into `daycares/`, added root `package.json` (npm workspaces), `.editorconfig`, `daycares.code-workspace`, extended `.gitignore` for Expo/RN. Removed stale per-app `package-lock.json` files and nested `node_modules/`; root `npm install` produced a single hoisted tree (261 MB, down from 542 MB) with one canonical `package-lock.json`. Commits: `21ad22f` (scaffolding), pending (lockfile consolidation). Next: Phase 1 — `kidshub-landing`.
+- **2026-04-21** — Phase 0 complete. Flattened `kidshub-app/*` into `daycares/`, added root `package.json` (npm workspaces), `.editorconfig`, `daycares.code-workspace`, extended `.gitignore` for Expo/RN. Removed stale per-app `package-lock.json` files and nested `node_modules/`; root `npm install` produced a single hoisted tree (261 MB, down from 542 MB) with one canonical `package-lock.json`. Commits: `21ad22f` (scaffolding), `2f16764` (lockfile consolidation).
+- **2026-04-21** — Phase 1 (code) complete. Audited `kidshub-landing` and confirmed marketing-only (no Firebase, auth, or leaked secrets). Added `dev`/`dev:vercel`/`build`/`deploy` scripts so `npm run dev:landing` works from the monorepo root. Merged Resend lead-email flow from an orphaned `js/chat.js` into the live `api/chat.js`, added CORS origin allowlist, generated a brand favicon at `assets/favicon.svg`. Added `vercel.json` with security headers and cache policy. Rewrote `kidshub-landing/README.md` for monorepo context and current env-var names. p1-4 (sign-in CTAs) confirmed as a no-op per product decision. Commits: `fb30a3a` (landing scripts), `ad7e014` (Aria harden + dead-code removal), pending (vercel.json + README). p1-6 (Vercel deploy + smoke test) handed off to user via Vercel dashboard. Next: Phase 2 — `kidshub-dashboard`.
