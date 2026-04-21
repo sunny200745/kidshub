@@ -7,12 +7,19 @@
 //   LEAD_EMAIL          → destination for lead notifications (defaults to contact@nuvaro.ca)
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-// Free OpenRouter model. Rate-limited (~20 req/min) but costs $0.
-// Alternatives if this one underperforms on LEAD_CAPTURE extraction:
-//   - openai/gpt-oss-120b:free          (higher quality, slower)
-//   - qwen/qwen3-next-80b-a3b-instruct:free  (fast MoE)
-//   - google/gemma-3-27b-it:free
-const DEFAULT_MODEL = 'meta-llama/llama-3.3-70b-instruct:free';
+
+// Free-tier fallback chain. OpenRouter's `route: "fallback"` feature will
+// automatically try each model in order if the previous one is rate-limited
+// or down — which is common on free endpoints since multiple users share
+// upstream provider quotas (Venice, Chutes, etc.).
+//
+// Ordered by: instruction-following quality → speed → availability.
+const FREE_MODEL_CHAIN = [
+  'meta-llama/llama-3.3-70b-instruct:free',
+  'openai/gpt-oss-120b:free',
+  'qwen/qwen3-next-80b-a3b-instruct:free',
+  'google/gemma-3-27b-it:free',
+];
 const DEFAULT_LEAD_EMAIL = 'contact@nuvaro.ca';
 
 const ALLOWED_ORIGINS = [
@@ -73,9 +80,10 @@ module.exports = async (req, res) => {
   }
 
   try {
-    // Model is intentionally pinned server-side. Clients may send an Anthropic-
-    // direct model ID (e.g. "claude-haiku-4-5-20251001") which is invalid on
-    // OpenRouter; honoring the client's model caused 400s from upstream.
+    // Model is pinned server-side (ignores client field — clients historically
+    // sent Anthropic-direct IDs that are invalid on OpenRouter). We send a
+    // `models` array + `route: "fallback"` so OpenRouter auto-hops to the next
+    // free model on 429/5xx from the primary upstream provider.
     const response = await fetch(OPENROUTER_URL, {
       method: 'POST',
       headers: {
@@ -85,7 +93,8 @@ module.exports = async (req, res) => {
         'X-Title': 'Aria - KidsHub Assistant',
       },
       body: JSON.stringify({
-        model: DEFAULT_MODEL,
+        models: FREE_MODEL_CHAIN,
+        route: 'fallback',
         max_tokens,
         messages: [
           { role: 'system', content: system || 'You are a helpful assistant.' },
@@ -104,6 +113,12 @@ module.exports = async (req, res) => {
     }
 
     const data = await response.json();
+
+    // Log which model in the chain actually served the reply — helpful to
+    // spot when the primary is consistently being skipped.
+    if (data && data.model) {
+      console.log('Aria served by:', data.model);
+    }
 
     // Auto-detect LEAD_CAPTURE pattern in assistant reply and fire off an email.
     // The widget also fires an explicit __lead POST, but this belt-and-braces
