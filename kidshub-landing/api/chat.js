@@ -8,18 +8,11 @@
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
-// Free-tier fallback chain. OpenRouter's `route: "fallback"` feature will
-// automatically try each model in order if the previous one is rate-limited
-// or down — which is common on free endpoints since multiple users share
-// upstream provider quotas (Venice, Chutes, etc.).
-//
-// Ordered by: instruction-following quality → speed → availability.
-const FREE_MODEL_CHAIN = [
-  'meta-llama/llama-3.3-70b-instruct:free',
-  'openai/gpt-oss-120b:free',
-  'qwen/qwen3-next-80b-a3b-instruct:free',
-  'google/gemma-3-27b-it:free',
-];
+// Paid model — pinned server-side. Claude 3 Haiku is cheap enough for a
+// lead-capture widget (~$0.0025 per full conversation, i.e. ~$2.50 per
+// 1000 conversations) and gives us stable uptime vs free-tier 429s.
+// Requires OpenRouter account to have credit balance.
+const DEFAULT_MODEL = 'anthropic/claude-3-haiku';
 const DEFAULT_LEAD_EMAIL = 'contact@nuvaro.ca';
 
 const ALLOWED_ORIGINS = [
@@ -80,10 +73,9 @@ module.exports = async (req, res) => {
   }
 
   try {
-    // Model is pinned server-side (ignores client field — clients historically
-    // sent Anthropic-direct IDs that are invalid on OpenRouter). We send a
-    // `models` array + `route: "fallback"` so OpenRouter auto-hops to the next
-    // free model on 429/5xx from the primary upstream provider.
+    // Model is pinned server-side (ignores client `model` field — clients
+    // historically sent Anthropic-direct IDs like "claude-haiku-4-5-20251001"
+    // which are invalid on OpenRouter).
     const response = await fetch(OPENROUTER_URL, {
       method: 'POST',
       headers: {
@@ -93,8 +85,7 @@ module.exports = async (req, res) => {
         'X-Title': 'Aria - KidsHub Assistant',
       },
       body: JSON.stringify({
-        models: FREE_MODEL_CHAIN,
-        route: 'fallback',
+        model: DEFAULT_MODEL,
         max_tokens,
         messages: [
           { role: 'system', content: system || 'You are a helpful assistant.' },
