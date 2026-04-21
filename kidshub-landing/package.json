@@ -2,7 +2,14 @@
   "name": "kidshub-landing",
   "version": "1.0.0",
   "private": true,
+  "description": "KidsHub marketing site — static HTML/CSS/JS with Vercel serverless /api routes.",
   "engines": {
     "node": ">=18"
+  },
+  "scripts": {
+    "dev": "npx --yes serve . -l 3000",
+    "dev:vercel": "vercel dev --listen 3000",
+    "build": "echo 'kidshub-landing is a static site; no build step needed.' && exit 0",
+    "deploy": "vercel --prod"
   }
 }
