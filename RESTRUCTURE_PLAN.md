@@ -8,13 +8,18 @@ Tracking doc for the restructure of the `daycares/` monorepo into three clearly-
 - **Repo strategy:** Single monorepo at `daycares/`.
 - **Order of work:** `kidshub-landing` → `kidshub-dashboard` → `kidshub`.
 
-## Open decisions (to confirm before Phase 0 kickoff)
+## Decisions resolved
 
-- [ ] Monorepo root: flatten `kidshub-app/*` up into `daycares/` (Option B, current default) **or** rename `kidshub-app/` → `kidshub-monorepo/` (Option A).
-- [ ] Workspace tool: `pnpm workspaces + Turborepo` (default) **or** plain `npm workspaces`.
+- [x] Monorepo root: **flattened** — `kidshub-app/*` moved up into `daycares/`.
+- [x] Workspace tool: **npm workspaces** (plain, no Turborepo for now).
+- [x] Lockfile strategy: **single root `package-lock.json`**; per-app lockfiles removed.
+
+## Open decisions (resolve before Phase 3)
+
 - [ ] Styling on mobile: `NativeWind` (default, keeps Tailwind muscle memory) **or** `Tamagui`.
 - [ ] Firebase on mobile: Firebase JS SDK (default, one code path) **or** `@react-native-firebase/*` (native perf, web needs a separate path).
 - [ ] Keep `kidshub-legacy/` snapshot during port, or rely purely on git history.
+- [ ] Expo monorepo strategy: stay on npm workspaces + Metro config (default) **or** migrate to pnpm for smoother RN ergonomics.
 
 ---
 
@@ -29,12 +34,13 @@ daycares/
 
 ---
 
-## Phase 0 — Monorepo scaffolding
+## Phase 0 — Monorepo scaffolding ✅
 
-- [ ] **p0-1** Flatten monorepo — move `kidshub-app/*` up into `daycares/` (preserve `.git` history).
-- [ ] **p0-2** Add root `package.json` with npm/pnpm workspaces for the 3 apps.
-- [ ] **p0-3** Add root `.gitignore`, `.editorconfig`, `README.md`, `.vscode` workspace file.
-- [ ] **p0-4** Commit clean baseline before any app-level changes.
+- [x] **p0-1** Flatten monorepo — move `kidshub-app/*` up into `daycares/` (preserve `.git` history).
+- [x] **p0-2** Add root `package.json` with npm workspaces for the 3 apps.
+- [x] **p0-3** Add root `.gitignore`, `.editorconfig`, `README.md`, `.vscode` workspace file.
+- [x] **p0-4** Commit clean baseline before any app-level changes.
+- [x] **p0-5** Consolidate to a single root `package-lock.json`, remove per-app lockfiles + `node_modules/`.
 
 ---
 
@@ -118,4 +124,4 @@ daycares/
 
 _Append dated notes as phases complete._
 
-- _YYYY-MM-DD_ — …
+- **2026-04-21** — Phase 0 complete. Flattened `kidshub-app/*` into `daycares/`, added root `package.json` (npm workspaces), `.editorconfig`, `daycares.code-workspace`, extended `.gitignore` for Expo/RN. Removed stale per-app `package-lock.json` files and nested `node_modules/`; root `npm install` produced a single hoisted tree (261 MB, down from 542 MB) with one canonical `package-lock.json`. Commits: `21ad22f` (scaffolding), pending (lockfile consolidation). Next: Phase 1 — `kidshub-landing`.
