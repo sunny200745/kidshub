@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="KidsHub">
+  <defs>
+    <linearGradient id="kh-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FF6B9D"/>
+      <stop offset="100%" stop-color="#FF2D9B"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#kh-grad)"/>
+  <path d="M20 16h7v14.5l11.5-14.5h8.5L35 31.5 47.5 48H39L28 33.5 27 34.8V48h-7z"
+        fill="#fff"/>
+</svg>
