@@ -7,7 +7,12 @@
 //   LEAD_EMAIL          → destination for lead notifications (defaults to contact@nuvaro.ca)
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const DEFAULT_MODEL = 'anthropic/claude-3-haiku';
+// Free OpenRouter model. Rate-limited (~20 req/min) but costs $0.
+// Alternatives if this one underperforms on LEAD_CAPTURE extraction:
+//   - openai/gpt-oss-120b:free          (higher quality, slower)
+//   - qwen/qwen3-next-80b-a3b-instruct:free  (fast MoE)
+//   - google/gemma-3-27b-it:free
+const DEFAULT_MODEL = 'meta-llama/llama-3.3-70b-instruct:free';
 const DEFAULT_LEAD_EMAIL = 'contact@nuvaro.ca';
 
 const ALLOWED_ORIGINS = [
