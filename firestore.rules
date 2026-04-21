@@ -1,0 +1,147 @@
+rules_version = '2';
+
+// =============================================================================
+// KidsHub Firestore Security Rules
+// =============================================================================
+//
+// Source of truth: this file. Keep rules in git, not just in the Firebase
+// Console, so changes are reviewable and auditable.
+//
+// To deploy:
+//   1. Open https://console.firebase.google.com/project/kidhub-7a207/firestore/rules
+//   2. Paste the contents of this file into the rules editor.
+//   3. Click "Publish". Changes take effect within ~60 seconds.
+//
+// (Future: Phase 4 will wire up `firebase deploy --only firestore:rules` via
+//  a proper `firebase.json` + firebase-tools in CI, so editing this file and
+//  pushing to main auto-deploys.)
+//
+// =============================================================================
+// Design notes for the CURRENT (pilot, Phase 2) data model
+// =============================================================================
+//
+// The app uses FLAT top-level collections — `children`, `staff`, `classrooms`,
+// `activities`, `messages`, `parents`, `announcements` — with no per-center
+// scoping field on each doc. This is a known limitation tracked in p3-15.
+//
+// Implication: we cannot enforce proper multi-tenancy (owner A can't read
+// owner B's data) without either (a) adding a `centerId` field to every doc
+// and referencing it in rules, or (b) migrating to nested subcollections like
+// `centers/{cid}/children/{childId}`.
+//
+// The Phase 3 kidshub rebuild is the right moment to do that refactor because
+// teacher/parent roles entering the system make tenant isolation non-optional.
+//
+// For Phase 2 (pilot scale, ~1-3 owners, all trusted), this ruleset:
+//   - Blocks ALL unauthenticated traffic (closes the current "world-readable"
+//     vulnerability).
+//   - Blocks non-owner authenticated users (teachers, parents — currently
+//     none, but future-proofs for Phase 3).
+//   - Allows any authenticated OWNER to read/write any doc in the flat
+//     business collections. NOT multi-tenant safe, but adequate for pilot.
+//   - Locks users/{uid} so each user can only read/write their OWN profile
+//     doc, and cannot change their own role (prevents self-promotion).
+//   - Locks centers/{ownerId} so only the matching owner can access it.
+//
+// Phase 3 (p3-15) will tighten this significantly — those rules will scope
+// reads/writes by classroomId for teachers, childId for parents, and
+// ownerId/centerId for owners.
+//
+// =============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -------------------------------------------------------------------------
+    // Helper functions
+    // -------------------------------------------------------------------------
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isSelf(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Returns true only if the requester has an existing users/{uid} doc
+    // whose role field equals 'owner'. Costs one extra document read per
+    // rule evaluation, which is fine at pilot scale.
+    function isOwner() {
+      return isAuthenticated()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'owner';
+    }
+
+    // Role-string validation — kept in sync with kidshub-dashboard/src/constants/roles.js
+    function isValidRole(role) {
+      return role in ['owner', 'teacher', 'parent'];
+    }
+
+    // -------------------------------------------------------------------------
+    // users/{uid} — profile docs, gate of the role model
+    // -------------------------------------------------------------------------
+    //
+    // Users can read and update ONLY their own doc. They can create it once
+    // during self-signup. They cannot change their role after creation
+    // (prevents a signed-in parent/teacher from self-promoting to owner).
+    //
+    // Phase 2 scope: only owners should exist in the system. Self-signup
+    // therefore must set role='owner'. Phase 3 will relax this when parents
+    // self-register and teachers are invited.
+    //
+    match /users/{userId} {
+      allow read: if isSelf(userId);
+
+      allow create: if isSelf(userId)
+        && request.resource.data.role == 'owner'
+        && isValidRole(request.resource.data.role);
+
+      allow update: if isSelf(userId)
+        && request.resource.data.role == resource.data.role  // role is immutable post-creation
+        && request.resource.data.uid == resource.data.uid;    // uid is immutable
+
+      allow delete: if false;  // never allow self-delete via client; owner can disable via admin flow
+    }
+
+    // -------------------------------------------------------------------------
+    // centers/{ownerId} — tenant doc, keyed by the owner's uid
+    // -------------------------------------------------------------------------
+    //
+    // Register.jsx writes this with the owner's uid as the document ID, so
+    // the matching owner is the ONLY user who should ever access it.
+    //
+    match /centers/{ownerId} {
+      allow read, write: if isSelf(ownerId) && isOwner();
+    }
+
+    // -------------------------------------------------------------------------
+    // Flat business collections
+    // -------------------------------------------------------------------------
+    //
+    // Pilot-scale rule: any authenticated owner can read/write.
+    // Known gap: doesn't isolate multiple owners from each other. Acceptable
+    // for pilot (~1-3 owners, all trusted). Phase 3 p3-15 will scope these
+    // per-center.
+    //
+    match /children/{childId}       { allow read, write: if isOwner(); }
+    match /classrooms/{classroomId} { allow read, write: if isOwner(); }
+    match /staff/{staffId}          { allow read, write: if isOwner(); }
+    match /activities/{activityId}  { allow read, write: if isOwner(); }
+    match /messages/{messageId}     { allow read, write: if isOwner(); }
+    match /parents/{parentId}       { allow read, write: if isOwner(); }
+    match /announcements/{annId}    { allow read, write: if isOwner(); }
+
+    // -------------------------------------------------------------------------
+    // Default deny
+    // -------------------------------------------------------------------------
+    //
+    // Anything not matched above is denied. This catches typos, new
+    // collections that haven't been explicitly allowed yet, and any
+    // experimental writes from admin scripts.
+    //
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
