@@ -94,7 +94,7 @@ export default function Settings() {
                   David Kim
                 </h2>
                 <p className="text-surface-500">Director</p>
-                <p className="text-sm text-surface-400">david.kim@kidshub-owner.com</p>
+                <p className="text-sm text-surface-400">david.kim@example.com</p>
               </div>
               <Button variant="secondary">Edit Profile</Button>
             </div>

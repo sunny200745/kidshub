@@ -69,8 +69,8 @@ daycares/
 
 **Goal:** Owner-only web app, web-only, stays React + Vite.
 
-- [ ] **p2-1** Rename folder `kidshub-owner` → `kidshub-dashboard`.
-- [ ] **p2-2** Update `package.json` name + global find/replace of `kidshub-owner` references.
+- [x] **p2-1** Rename folder `kidshub-owner` → `kidshub-dashboard`. `git mv` preserved history on all 58 tracked files; untracked `.env` moved intact. Root `package.json` workspaces + scripts (`dev:dashboard`/`build:dashboard`), `daycares.code-workspace`, and root `README.md` updated in the same commit. Commit: `4988fcc`.
+- [x] **p2-2** Update `package.json` name (`kidshub-owner` → `kidshub-dashboard`) + added product description. Replaced 13 fake-staff `@kidshub-owner.com` mock-email references with IANA-reserved `@example.com` (correct for mock data per RFC 2606). Lockfile rebuilt cleanly (0 `kidshub-owner` refs remain outside the plan doc's historical notes). Build verified green.
 - [ ] **p2-3** Audit pages — mark teacher-relevant pages (`Activities`, `CheckIn`, `Messages`, `Schedule`, `ChildProfile`) for extraction to `kidshub`.
 - [ ] **p2-4** Strengthen `ProtectedRoute` to owner-only + friendly redirect for non-owners.
 - [ ] **p2-5** Update `.env.example`, rotate any committed secrets.

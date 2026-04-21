@@ -1,8 +1,9 @@
 {
-  "name": "kidshub-owner",
+  "name": "kidshub-dashboard",
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "description": "KidsHub owner dashboard — daycare operator web portal (React + Vite).",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
