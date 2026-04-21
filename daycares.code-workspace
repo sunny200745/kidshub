@@ -1,9 +1,9 @@
 {
   "folders": [
     { "name": "daycares (root)", "path": "." },
-    { "name": "kidshub (parent + teacher app)", "path": "kidshub" },
     { "name": "kidshub-dashboard (owner portal)", "path": "kidshub-dashboard" },
-    { "name": "kidshub-landing (marketing)", "path": "kidshub-landing" }
+    { "name": "kidshub-landing (marketing)", "path": "kidshub-landing" },
+    { "name": "kidshub-legacy (frozen reference \u2014 Phase 3 source material)", "path": "kidshub-legacy" }
   ],
   "settings": {
     "files.exclude": {

@@ -14,12 +14,12 @@ Tracking doc for the restructure of the `daycares/` monorepo into three clearly-
 - [x] Workspace tool: **npm workspaces** (plain, no Turborepo for now).
 - [x] Lockfile strategy: **single root `package-lock.json`**; per-app lockfiles removed.
 
-## Open decisions (resolve before Phase 3)
+## Open decisions (resolved 2026-04-21 night, before Phase 3 kickoff)
 
-- [ ] Styling on mobile: `NativeWind` (default, keeps Tailwind muscle memory) **or** `Tamagui`.
-- [ ] Firebase on mobile: Firebase JS SDK (default, one code path) **or** `@react-native-firebase/*` (native perf, web needs a separate path).
-- [ ] Keep `kidshub-legacy/` snapshot during port, or rely purely on git history.
-- [ ] Expo monorepo strategy: stay on npm workspaces + Metro config (default) **or** migrate to pnpm for smoother RN ergonomics.
+- [x] **Styling on mobile: NativeWind.** Existing dashboard + legacy kidshub are heavily Tailwind, classes port ~1:1. Lower-risk than Tamagui; can migrate later if perf walls hit.
+- [x] **Firebase on mobile: Firebase JS SDK.** One code path across web + iOS + Android, simpler EAS builds. When push notifications become important, swap **just** the messaging layer to `@react-native-firebase/messaging` without disturbing the data layer.
+- [x] **Keep `kidshub-legacy/` snapshot.** `git mv` it instead of deleting — quick local reference during port, removed from workspaces so it doesn't pull deps. Deleted after Phase 3 parity confirmed (p3-19).
+- [x] **Expo monorepo: stay on npm workspaces + Metro config.** No pnpm migration. If Metro chokes on hoisting, fix with `metro.config.js` resolver tweaks rather than swapping the package manager.
 
 ---
 
@@ -117,7 +117,7 @@ daycares/
 
 ### 3a. Bootstrap
 
-- [ ] **p3-1** Back up existing `kidshub/` → `kidshub-legacy/` for reference.
+- [x] **p3-1** Backed up existing `kidshub/` → `kidshub-legacy/` via `git mv` (28 files, history preserved). Removed from npm workspaces (root `package.json`) — won't pull deps on `npm install`. Root scripts updated: `dev:kidshub` now exits with a helpful message pointing at the legacy run instructions; `build:kidshub` removed entirely. `daycares.code-workspace` updated to surface `kidshub-legacy` as a clearly-labeled "frozen reference" folder. Root `README.md` rewritten to reflect current 4-folder reality with status flags (✅/🚧/🧊). Lockfile rebuilt cleanly.
 - [ ] **p3-2** Bootstrap fresh Expo app (TypeScript + Expo Router template).
 - [ ] **p3-3** Enable React Native Web + verify `expo start --web` works.
 - [ ] **p3-4** Configure `app.json` for web + iOS/Android bundle IDs.

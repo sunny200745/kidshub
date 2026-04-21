@@ -4,15 +4,13 @@
   "version": "0.0.0",
   "description": "KidsHub monorepo — unified parent+teacher app (kidshub), owner dashboard (kidshub-dashboard), and marketing site (kidshub-landing).",
   "workspaces": [
-    "kidshub",
     "kidshub-dashboard",
     "kidshub-landing"
   ],
   "scripts": {
-    "dev:kidshub": "npm run dev --workspace kidshub",
+    "dev:kidshub": "echo 'kidshub Expo app is being bootstrapped (Phase 3). For now, run the legacy snapshot manually: cd kidshub-legacy && npm install && npm run dev' && exit 1",
     "dev:dashboard": "npm run dev --workspace kidshub-dashboard",
     "dev:landing": "npm run dev --workspace kidshub-landing",
-    "build:kidshub": "npm run build --workspace kidshub",
     "build:dashboard": "npm run build --workspace kidshub-dashboard",
     "build:landing": "npm run build --workspace kidshub-landing",
     "build:all": "npm run build --workspaces --if-present"
