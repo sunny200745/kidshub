@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Cancel in-progress runs on the same ref (saves CI minutes on fast re-pushes).
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Each workspace builds independently so a failure in one doesn't mask
+  # failures in another. Matrix with fail-fast=false so all three always report.
+  build:
+    name: build · ${{ matrix.workspace }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        workspace:
+          - kidshub
+          - kidshub-dashboard
+          - kidshub-landing
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install (root workspaces)
+        # --ignore-scripts skips expo/husky postinstall hooks during CI — saves
+        # ~30s per run and those hooks are irrelevant for a build verification.
+        run: npm ci --ignore-scripts
+
+      - name: Build ${{ matrix.workspace }}
+        run: npm run build --workspace ${{ matrix.workspace }}
+        env:
+          # Firebase web API key is public (HTTP-referrer-locked in GCP).
+          # We pass placeholder values so the build bundles don't fail on
+          # missing env vars at build-time static analysis. The CI build is
+          # a smoke check of the TypeScript / bundler pipeline, not a runtime
+          # test — real values live in Vercel project settings.
+          EXPO_PUBLIC_FIREBASE_API_KEY: ci-placeholder
+          EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: ci-placeholder
+          EXPO_PUBLIC_FIREBASE_PROJECT_ID: ci-placeholder
+          EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET: ci-placeholder
+          EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ci-placeholder
+          EXPO_PUBLIC_FIREBASE_APP_ID: ci-placeholder
+          EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID: ci-placeholder
+          VITE_FIREBASE_API_KEY: ci-placeholder
+          VITE_FIREBASE_AUTH_DOMAIN: ci-placeholder
+          VITE_FIREBASE_PROJECT_ID: ci-placeholder
+          VITE_FIREBASE_STORAGE_BUCKET: ci-placeholder
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ci-placeholder
+          VITE_FIREBASE_APP_ID: ci-placeholder
+          VITE_FIREBASE_MEASUREMENT_ID: ci-placeholder
+
+  # Lint kidshub separately — only this workspace has a lint script today.
+  # When dashboard/landing get ESLint, add them as additional matrix entries
+  # or a separate job.
+  lint:
+    name: lint · kidshub
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run lint --workspace kidshub

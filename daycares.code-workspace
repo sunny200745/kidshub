@@ -3,8 +3,7 @@
     { "name": "daycares (root)", "path": "." },
     { "name": "kidshub (parent + teacher \u2014 Expo + RN Web)", "path": "kidshub" },
     { "name": "kidshub-dashboard (owner portal)", "path": "kidshub-dashboard" },
-    { "name": "kidshub-landing (marketing)", "path": "kidshub-landing" },
-    { "name": "kidshub-legacy (frozen reference \u2014 Phase 3 source material)", "path": "kidshub-legacy" }
+    { "name": "kidshub-landing (marketing)", "path": "kidshub-landing" }
   ],
   "settings": {
     "files.exclude": {
