@@ -127,7 +127,14 @@ daycares/
 
 ### 3b. Foundations
 
-- [ ] **p3-5** Port Firebase config (decide: JS SDK cross-platform vs `@react-native-firebase`).
+- [x] **p3-5** Wired Firebase JS SDK + EXPO_PUBLIC env vars.
+  - `kidshub/firebase/config.ts` — initializeApp guarded by getApps().length===0 (hot-reload safe), exports `auth`, `db`, `storage`, default app. Uses `process.env.EXPO_PUBLIC_FIREBASE_*` (Expo's convention for client-exposed vars; same kidhub-7a207 project as kidshub-dashboard / kidshub-landing — Phase 4 p4-2 will lift to a shared workspace package).
+  - `kidshub/.env` — copied from `kidshub-dashboard/.env` with VITE_FIREBASE_* → EXPO_PUBLIC_FIREBASE_* via sed.
+  - `kidshub/.env.example` — committed checked-in template with the same EXPO_PUBLIC_* keys + comments explaining Expo conventions and why the Firebase web key isn't a secret (referrer-locked in GCP).
+  - `kidshub/constants/roles.ts` — TypeScript port of `kidshub-dashboard/src/constants/roles.js`. Same `ROLES` enum, but `KIDSHUB_ALLOWED_ROLES = [PARENT, TEACHER]` (owners belong on dashboard). Phase 4 p4-2 lifts the duplicate.
+  - **Auth persistence note**: `getAuth(app)` works fine on web (IndexedDB) and renders/builds clean on native, but on iOS/Android it'll warn "no persistence" and default to in-memory (logout on app restart). Proper RN persistence (`initializeAuth` + `getReactNativePersistence` + AsyncStorage) deferred to **p3-16** (mobile build config) since we're testing on web first.
+  - **babel-preset-expo cleanup along the way**: when installing `nativewind`, npm pulled in babel-preset-expo@55 which Expo SDK 54 flagged as incompatible. Tried explicit pin in `kidshub/package.json` → npm wrote v55 anyway because some transitive forced it. Resolved with a root-level `overrides: { "babel-preset-expo": "~54.0.10" }` in the monorepo `package.json`, removed the (now-redundant) explicit dep from `kidshub/package.json`, and confirmed via `npm ls babel-preset-expo --all` that the only resolved copy is `expo@54.0.33 → babel-preset-expo@54.0.10 overridden`. Warning gone from `expo start` output.
+  - Smoke test: home screen shows two NativeWind cards — pink "NativeWind smoke test" and green "Firebase project: kidhub-7a207". `curl localhost:5178/` returns the project ID + brand colors in the bundled HTML, confirming env loading + Firebase init work end-to-end.
 - [ ] **p3-6** Port auth/user/theme contexts to Expo.
 - [ ] **p3-7** Port hooks, swapping `react-router-dom` for `expo-router` equivalents.
 - [x] **p3-8** Installed NativeWind v4 + Tailwind 3.4. Six-file setup per the official Expo guide:

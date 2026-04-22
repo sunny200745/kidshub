@@ -6,6 +6,7 @@ import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Link } from 'expo-router';
+import app from '@/firebase/config';
 
 export default function HomeScreen() {
   return (
@@ -17,10 +18,18 @@ export default function HomeScreen() {
           style={styles.reactLogo}
         />
       }>
-      {/* p3-8 NativeWind smoke test — removed in p3-9 when this screen is replaced */}
+      {/* p3-8 / p3-5 smoke tests — removed in p3-9 when this screen is replaced */}
       <View className="bg-brand-500 p-4 rounded-xl my-2">
         <Text className="text-white font-bold text-base">
           NativeWind smoke test — if this card is pink with bold white text, p3-8 is wired correctly.
+        </Text>
+      </View>
+      <View className="bg-success-500 p-4 rounded-xl my-2">
+        <Text className="text-white font-bold text-base">
+          Firebase project: {app.options.projectId ?? '(not loaded — check .env)'}
+        </Text>
+        <Text className="text-white text-xs opacity-90 mt-1">
+          If this shows kidhub-7a207, EXPO_PUBLIC_FIREBASE_* env vars loaded correctly (p3-5 ✓).
         </Text>
       </View>
       <ThemedView style={styles.titleContainer}>
