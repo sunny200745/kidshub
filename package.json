@@ -14,7 +14,7 @@
     "dev:kidshub:android": "npm run android --workspace kidshub",
     "dev:dashboard": "npm run dev --workspace kidshub-dashboard",
     "dev:landing": "npm run dev --workspace kidshub-landing",
-    "build:kidshub": "npm exec --workspace kidshub -- expo export -p web",
+    "build:kidshub": "npm run build --workspace kidshub",
     "build:dashboard": "npm run build --workspace kidshub-dashboard",
     "build:landing": "npm run build --workspace kidshub-landing",
     "build:all": "npm run build --workspaces --if-present"

@@ -39,7 +39,7 @@ import { Button, Input, Modal, ModalFooter, Select } from '../ui';
  * dashboard's Vercel project (or wherever it's deployed).
  */
 const KIDSHUB_BASE_URL = (
-  import.meta.env.VITE_KIDSHUB_APP_URL || 'http://localhost:5191'
+  import.meta.env.VITE_KIDSHUB_APP_URL || 'http://localhost:5180'
 ).replace(/\/$/, '');
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

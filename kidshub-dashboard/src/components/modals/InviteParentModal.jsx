@@ -31,7 +31,7 @@ import { Button, Input, Modal, ModalFooter } from '../ui';
  * keep in sync if you add more deploy targets.
  */
 const KIDSHUB_BASE_URL = (
-  import.meta.env.VITE_KIDSHUB_APP_URL || 'http://localhost:5191'
+  import.meta.env.VITE_KIDSHUB_APP_URL || 'http://localhost:5180'
 ).replace(/\/$/, '');
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

@@ -35,7 +35,7 @@ import { invitesApi, staffApi } from '../firebase/api';
 import { useStaffData, useClassroomsData } from '../hooks';
 
 const KIDSHUB_BASE_URL = (
-  import.meta.env.VITE_KIDSHUB_APP_URL || 'http://localhost:5191'
+  import.meta.env.VITE_KIDSHUB_APP_URL || 'http://localhost:5180'
 ).replace(/\/$/, '');
 
 /**

@@ -305,42 +305,51 @@ export default function Dashboard() {
               </div>
             </CardHeader>
             <CardBody className="space-y-2 sm:space-y-3 px-4 sm:px-5">
-              {classrooms?.map((classroom) => (
-                <Link
-                  key={classroom.id}
-                  to={`/classrooms/${classroom.id}`}
-                  className="flex items-center justify-between py-2 hover:bg-surface-50 -mx-2 px-2 rounded-lg transition-colors"
-                >
-                  <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                    <div
-                      className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: classroom.color }}
-                    />
-                    <div className="min-w-0">
-                      <p className="font-medium text-surface-900 text-sm truncate">
-                        {classroom.name}
-                      </p>
-                      <p className="text-xs text-surface-500">
-                        {classroom.ageGroup}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right flex-shrink-0 ml-2">
-                    <p className="text-sm font-medium text-surface-900">
-                      {classroom.currentCount}/{classroom.capacity}
-                    </p>
-                    <div className="w-12 sm:w-16 h-1.5 bg-surface-100 rounded-full overflow-hidden mt-1">
+              {classrooms?.map((classroom) => {
+                // Count children live from the children list — classroom.currentCount
+                // is a denormalized counter that isn't kept in sync on add/delete.
+                const childCount = (children || []).filter(
+                  (c) => c.classroom === classroom.id || c.classroomId === classroom.id
+                ).length;
+                const capacity = classroom.capacity || 0;
+                const pct = capacity > 0 ? (childCount / capacity) * 100 : 0;
+                return (
+                  <Link
+                    key={classroom.id}
+                    to={`/classrooms/${classroom.id}`}
+                    className="flex items-center justify-between py-2 hover:bg-surface-50 -mx-2 px-2 rounded-lg transition-colors"
+                  >
+                    <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                       <div
-                        className="h-full rounded-full transition-all"
-                        style={{
-                          width: `${(classroom.currentCount / classroom.capacity) * 100}%`,
-                          backgroundColor: classroom.color,
-                        }}
+                        className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: classroom.color }}
                       />
+                      <div className="min-w-0">
+                        <p className="font-medium text-surface-900 text-sm truncate">
+                          {classroom.name}
+                        </p>
+                        <p className="text-xs text-surface-500">
+                          {classroom.ageGroup}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                </Link>
-              ))}
+                    <div className="text-right flex-shrink-0 ml-2">
+                      <p className="text-sm font-medium text-surface-900">
+                        {childCount}/{capacity}
+                      </p>
+                      <div className="w-12 sm:w-16 h-1.5 bg-surface-100 rounded-full overflow-hidden mt-1">
+                        <div
+                          className="h-full rounded-full transition-all"
+                          style={{
+                            width: `${pct}%`,
+                            backgroundColor: classroom.color,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
             </CardBody>
           </Card>
         </div>

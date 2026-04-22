@@ -54,10 +54,20 @@ function classroomDeleteBlockedReason({ classroom, children, staff }) {
 }
 
 function ClassroomCard({ classroom, children, staff, onEdit, onDelete }) {
-  const childrenInClass = children?.filter(c => c.classroom === classroom.id) || [];
-  const staffInClass = staff?.filter(s => s.classroom === classroom.id) || [];
-  const checkedInCount = childrenInClass.filter(c => c.status === 'checked-in').length;
-  const occupancyPercent = (classroom.currentCount / classroom.capacity) * 100;
+  // Derive counts from the live children/staff arrays. We used to read
+  // `classroom.currentCount` but nothing keeps that counter in sync on
+  // create/update/delete — the card would keep showing 0/N forever even
+  // after assigning kids. Always compute from source.
+  const childrenInClass = (children || []).filter(
+    (c) => c.classroom === classroom.id || c.classroomId === classroom.id
+  );
+  const staffInClass = (staff || []).filter(
+    (s) => s.classroom === classroom.id || s.classroomId === classroom.id
+  );
+  const childCount = childrenInClass.length;
+  const checkedInCount = childrenInClass.filter((c) => c.status === 'checked-in').length;
+  const capacity = classroom.capacity || 0;
+  const occupancyPercent = capacity > 0 ? (childCount / capacity) * 100 : 0;
 
   // Prevent Link navigation when clicking action buttons.
   const stopLinkNav = (e, handler) => {
@@ -80,7 +90,7 @@ function ClassroomCard({ classroom, children, staff, onEdit, onDelete }) {
               <div className="flex items-center gap-2">
                 <Badge
                   variant={occupancyPercent >= 90 ? 'danger' : occupancyPercent >= 70 ? 'warning' : 'success'}>
-                  {classroom.currentCount}/{classroom.capacity}
+                  {childCount}/{capacity}
                 </Badge>
               </div>
             </div>
@@ -93,7 +103,7 @@ function ClassroomCard({ classroom, children, staff, onEdit, onDelete }) {
               <div className="flex items-center gap-1.5 sm:gap-2">
                 <Baby className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-surface-400" />
                 <span className="text-xs sm:text-sm text-surface-600">
-                  {checkedInCount} in
+                  {checkedInCount}/{childCount} in
                 </span>
               </div>
               <div className="flex items-center gap-1.5 sm:gap-2">
@@ -200,8 +210,15 @@ function ClassroomDetail({ id }) {
     );
   }
 
-  const childrenInClass = children?.filter(c => c.classroom === classroom.id) || [];
-  const staffInClass = staff?.filter(s => s.classroom === classroom.id) || [];
+  const childrenInClass = (children || []).filter(
+    (c) => c.classroom === classroom.id || c.classroomId === classroom.id
+  );
+  const staffInClass = (staff || []).filter(
+    (s) => s.classroom === classroom.id || s.classroomId === classroom.id
+  );
+  const childCount = childrenInClass.length;
+  const capacity = classroom.capacity || 0;
+  const occupancyPercent = capacity > 0 ? (childCount / capacity) * 100 : 0;
   const schedule = classroom.schedule || [];
 
   return (
@@ -246,14 +263,14 @@ function ClassroomDetail({ id }) {
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-xs sm:text-sm text-surface-500">Capacity</span>
                   <span className="font-semibold text-surface-900 text-sm sm:text-base">
-                    {classroom.currentCount}/{classroom.capacity}
+                    {childCount}/{capacity}
                   </span>
                 </div>
                 <div className="w-full h-2 bg-surface-100 rounded-full overflow-hidden">
                   <div
                     className="h-full rounded-full"
                     style={{
-                      width: `${(classroom.currentCount / classroom.capacity) * 100}%`,
+                      width: `${occupancyPercent}%`,
                       backgroundColor: classroom.color,
                     }}
                   />

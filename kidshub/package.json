@@ -8,6 +8,7 @@
     "android": "expo start --android --port 5180",
     "ios": "expo start --ios --port 5180",
     "web": "expo start --web --port 5180",
+    "build": "expo export --platform web",
     "lint": "expo lint"
   },
   "dependencies": {
