@@ -35,7 +35,7 @@ import {
 } from '../components/ui';
 import { ActivityIcon, activityLabels } from '../components/icons/ActivityIcons';
 import { useChild, useClassroom, useChildActivities, useParentsData, useStaffData } from '../hooks';
-import { activitiesApi, childrenApi, invitesApi, usersApi } from '../firebase/api';
+import { activitiesApi, childrenApi, emailApi, invitesApi, usersApi } from '../firebase/api';
 import { InviteParentModal, ChildFormModal } from '../components/modals';
 
 /**
@@ -58,6 +58,31 @@ function PendingParentInviteRow({ invite, onCopy, onRevoke, copiedToken }) {
   const inviteUrl = `${KIDSHUB_BASE_URL}/invite/${invite.token}`;
   const copied = copiedToken === invite.token;
 
+  // Local resend state — inline instead of lifted because only this row
+  // ever shows it. 'sending' | 'sent' | 'error:<msg>' | null.
+  const [resending, setResending] = useState(false);
+  const [resendStatus, setResendStatus] = useState(null);
+
+  const handleResend = async () => {
+    setResending(true);
+    setResendStatus(null);
+    try {
+      await emailApi.sendInvite(invite.token);
+      setResendStatus({ kind: 'sent' });
+      setTimeout(() => {
+        setResendStatus((prev) => (prev?.kind === 'sent' ? null : prev));
+      }, 2500);
+    } catch (err) {
+      console.error('[PendingParentInviteRow] resend failed:', err);
+      setResendStatus({
+        kind: 'error',
+        message: err?.detail || err?.message || 'Resend failed',
+      });
+    } finally {
+      setResending(false);
+    }
+  };
+
   return (
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 p-3 bg-surface-50 rounded-xl">
       <div className="min-w-0 flex-1">
@@ -72,10 +97,31 @@ function PendingParentInviteRow({ invite, onCopy, onRevoke, copiedToken }) {
               Pending
             </Badge>
           )}
+          {resendStatus?.kind === 'sent' ? (
+            <Badge variant="success">Email sent</Badge>
+          ) : null}
         </div>
         <code className="block mt-1 text-xs text-surface-500 break-all truncate">{inviteUrl}</code>
+        {resendStatus?.kind === 'error' ? (
+          <p className="mt-1 text-xs text-warning-700 break-words">
+            Resend failed: {resendStatus.message}
+          </p>
+        ) : null}
       </div>
-      <div className="flex gap-2 flex-shrink-0">
+      <div className="flex gap-2 flex-shrink-0 flex-wrap">
+        <Button
+          size="sm"
+          variant="secondary"
+          icon={resending ? Clock : Mail}
+          onClick={handleResend}
+          disabled={resending || expired}
+          title={
+            expired
+              ? 'Invite expired — revoke and create a new one'
+              : 'Resend the activation email to this parent'
+          }>
+          {resending ? 'Sending…' : 'Resend'}
+        </Button>
         <Button
           size="sm"
           variant="secondary"

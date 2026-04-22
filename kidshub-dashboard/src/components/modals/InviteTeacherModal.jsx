@@ -29,7 +29,7 @@ import { AlertTriangle, Check, Copy, ExternalLink, Mail, Send, UserPlus } from '
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { useAuth } from '../../contexts';
-import { invitesApi } from '../../firebase/api';
+import { emailApi, invitesApi } from '../../firebase/api';
 import { useClassroomsData } from '../../hooks';
 import { Button, Modal, ModalFooter } from '../ui';
 
@@ -53,6 +53,12 @@ export function InviteTeacherModal({ isOpen, onClose, staffMember, onCreated }) 
   const [error, setError] = useState('');
   const [createdInvite, setCreatedInvite] = useState(null);
   const [copied, setCopied] = useState(false);
+  // Resend state applies to the invite-created result screen only. Lives
+  // alongside createdInvite (not per-token like the PendingInvites list)
+  // since this modal only ever shows one invite at a time.
+  const [resending, setResending] = useState(false);
+  const [resendResult, setResendResult] = useState(null); // 'sent' | 'error' | null
+  const [resendError, setResendError] = useState('');
 
   const inviterDisplayName = useMemo(() => {
     if (profile?.firstName || profile?.lastName) {
@@ -93,6 +99,9 @@ export function InviteTeacherModal({ isOpen, onClose, staffMember, onCreated }) 
       setCreatedInvite(null);
       setCopied(false);
       setSubmitting(false);
+      setResending(false);
+      setResendResult(null);
+      setResendError('');
     }
   }, [isOpen, staffMember?.id]);
 
@@ -126,6 +135,27 @@ export function InviteTeacherModal({ isOpen, onClose, staffMember, onCreated }) 
       );
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (!createdInvite?.token) return;
+    setResending(true);
+    setResendResult(null);
+    setResendError('');
+    try {
+      await emailApi.sendInvite(createdInvite.token);
+      setResendResult('sent');
+      // Flip the top-of-modal success banner too so the user can see
+      // that the "Automatic email delivery failed" state has cleared
+      // without them having to parse the button state.
+      setCreatedInvite((prev) => (prev ? { ...prev, emailSent: true, emailError: null } : prev));
+    } catch (err) {
+      console.error('[InviteTeacherModal] resend failed:', err);
+      setResendResult('error');
+      setResendError(err?.detail || err?.message || 'Could not resend email');
+    } finally {
+      setResending(false);
     }
   };
 
@@ -186,15 +216,34 @@ export function InviteTeacherModal({ isOpen, onClose, staffMember, onCreated }) 
           ) : (
             <div className="flex items-start gap-2 p-3 bg-warning-50 border border-warning-200 rounded-xl text-xs sm:text-sm text-warning-800 mb-3">
               <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-              <div>
+              <div className="flex-1">
                 Automatic email delivery failed — use the link below to share the
-                invite manually.{' '}
+                invite manually, or retry sending.{' '}
                 <span className="text-warning-700/80">
                   {createdInvite.emailError?.message || ''}
                 </span>
+                <div className="mt-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    icon={Mail}
+                    loading={resending}
+                    onClick={handleResend}>
+                    {resending ? 'Sending…' : 'Resend email'}
+                  </Button>
+                </div>
               </div>
             </div>
           )}
+
+          {resendResult === 'error' ? (
+            <div className="flex items-start gap-2 p-3 bg-danger-50 border border-danger-200 rounded-xl text-xs sm:text-sm text-danger-700 mb-3">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <div>
+                Retry failed: <span className="text-danger-600 break-words">{resendError}</span>
+              </div>
+            </div>
+          ) : null}
 
           <div className="bg-surface-50 border border-surface-200 rounded-xl p-3 sm:p-4 mb-3">
             <p className="text-xs uppercase tracking-wide text-surface-400 mb-1.5">

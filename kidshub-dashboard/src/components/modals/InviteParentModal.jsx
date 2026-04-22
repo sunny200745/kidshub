@@ -23,7 +23,7 @@ import { AlertTriangle, Check, Copy, ExternalLink, Mail, Send, Heart } from 'luc
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { useAuth } from '../../contexts';
-import { invitesApi } from '../../firebase/api';
+import { emailApi, invitesApi } from '../../firebase/api';
 import { Button, Input, Modal, ModalFooter } from '../ui';
 
 /**
@@ -46,6 +46,11 @@ export function InviteParentModal({ isOpen, onClose, onCreated, child }) {
   const [error, setError] = useState('');
   const [createdInvite, setCreatedInvite] = useState(null);
   const [copied, setCopied] = useState(false);
+  // Retry-send state for the result screen. See InviteTeacherModal for the
+  // same pattern — keep the two in sync when either evolves.
+  const [resending, setResending] = useState(false);
+  const [resendResult, setResendResult] = useState(null);
+  const [resendError, setResendError] = useState('');
 
   const inviterDisplayName = useMemo(() => {
     if (profile?.firstName || profile?.lastName) {
@@ -68,6 +73,9 @@ export function InviteParentModal({ isOpen, onClose, onCreated, child }) {
       setCreatedInvite(null);
       setCopied(false);
       setSubmitting(false);
+      setResending(false);
+      setResendResult(null);
+      setResendError('');
     }
   }, [isOpen]);
 
@@ -116,6 +124,24 @@ export function InviteParentModal({ isOpen, onClose, onCreated, child }) {
       );
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (!createdInvite?.token) return;
+    setResending(true);
+    setResendResult(null);
+    setResendError('');
+    try {
+      await emailApi.sendInvite(createdInvite.token);
+      setResendResult('sent');
+      setCreatedInvite((prev) => (prev ? { ...prev, emailSent: true, emailError: null } : prev));
+    } catch (err) {
+      console.error('[InviteParentModal] resend failed:', err);
+      setResendResult('error');
+      setResendError(err?.detail || err?.message || 'Could not resend email');
+    } finally {
+      setResending(false);
     }
   };
 
@@ -174,15 +200,34 @@ export function InviteParentModal({ isOpen, onClose, onCreated, child }) {
           ) : (
             <div className="flex items-start gap-2 p-3 bg-warning-50 border border-warning-200 rounded-xl text-xs sm:text-sm text-warning-800 mb-3">
               <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-              <div>
+              <div className="flex-1">
                 Automatic email delivery failed — use the link below to share the
-                invite manually.{' '}
+                invite manually, or retry sending.{' '}
                 <span className="text-warning-700/80">
                   {createdInvite.emailError?.message || ''}
                 </span>
+                <div className="mt-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    icon={Mail}
+                    loading={resending}
+                    onClick={handleResend}>
+                    {resending ? 'Sending…' : 'Resend email'}
+                  </Button>
+                </div>
               </div>
             </div>
           )}
+
+          {resendResult === 'error' ? (
+            <div className="flex items-start gap-2 p-3 bg-danger-50 border border-danger-200 rounded-xl text-xs sm:text-sm text-danger-700 mb-3">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <div>
+                Retry failed: <span className="text-danger-600 break-words">{resendError}</span>
+              </div>
+            </div>
+          ) : null}
 
           <div className="bg-surface-50 border border-surface-200 rounded-xl p-3 sm:p-4 mb-3">
             <p className="text-xs uppercase tracking-wide text-surface-400 mb-1.5">

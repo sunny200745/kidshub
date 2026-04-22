@@ -32,7 +32,7 @@ import {
 } from '../components/ui';
 import { StaffFormModal, InviteTeacherModal } from '../components/modals';
 import { useAuth } from '../contexts';
-import { invitesApi, staffApi } from '../firebase/api';
+import { emailApi, invitesApi, staffApi } from '../firebase/api';
 import { useStaffData, useClassroomsData } from '../hooks';
 
 const KIDSHUB_BASE_URL = (
@@ -50,6 +50,11 @@ function PendingInvites({ ownerUid, classrooms }) {
   const [loading, setLoading] = useState(true);
   const [copiedToken, setCopiedToken] = useState(null);
   const [revoking, setRevoking] = useState(null);
+  // Tracks per-row resend state: 'sending' while the request is in flight,
+  // 'sent' for a brief success pulse, 'error:<msg>' for a persistent hint
+  // until the owner tries again or closes the row. Keyed by token so
+  // multiple rows can be acted on independently.
+  const [resendState, setResendState] = useState({});
 
   useEffect(() => {
     if (!ownerUid) {
@@ -82,6 +87,29 @@ function PendingInvites({ ownerUid, classrooms }) {
     } catch (err) {
       console.error('[PendingInvites] clipboard write failed:', err);
       window.prompt('Copy this invite link:', url);
+    }
+  };
+
+  const handleResend = async (token) => {
+    setResendState((prev) => ({ ...prev, [token]: { kind: 'sending' } }));
+    try {
+      await emailApi.sendInvite(token);
+      setResendState((prev) => ({ ...prev, [token]: { kind: 'sent' } }));
+      // Clear the "Sent!" pill after a short beat so the row goes back to
+      // its default state. Keep error state sticky until retried.
+      setTimeout(() => {
+        setResendState((prev) => {
+          const next = { ...prev };
+          if (next[token]?.kind === 'sent') delete next[token];
+          return next;
+        });
+      }, 2500);
+    } catch (err) {
+      console.error('[PendingInvites] resend failed:', err);
+      setResendState((prev) => ({
+        ...prev,
+        [token]: { kind: 'error', message: err?.detail || err?.message || 'Resend failed' },
+      }));
     }
   };
 
@@ -123,6 +151,10 @@ function PendingInvites({ ownerUid, classrooms }) {
             const isExpired = expiresAt && expiresAt.getTime() < Date.now();
             const isCopied = copiedToken === invite.token;
             const isRevoking = revoking === invite.token;
+            const resend = resendState[invite.token];
+            const isSending = resend?.kind === 'sending';
+            const justSent = resend?.kind === 'sent';
+            const resendError = resend?.kind === 'error' ? resend.message : '';
 
             return (
               <div
@@ -138,6 +170,9 @@ function PendingInvites({ ownerUid, classrooms }) {
                     ) : (
                       <Badge variant="warning" className="text-xs">Pending</Badge>
                     )}
+                    {justSent ? (
+                      <Badge variant="success" className="text-xs">Email sent</Badge>
+                    ) : null}
                   </div>
                   <div className="flex items-center gap-2 sm:gap-3 mt-1 text-xs text-surface-500 flex-wrap">
                     {classroom ? (
@@ -158,9 +193,27 @@ function PendingInvites({ ownerUid, classrooms }) {
                       </span>
                     ) : null}
                   </div>
+                  {resendError ? (
+                    <p className="mt-1 text-xs text-warning-700 break-words">
+                      Resend failed: {resendError}
+                    </p>
+                  ) : null}
                 </div>
 
                 <div className="flex gap-2 sm:gap-2 self-stretch sm:self-auto">
+                  <Button
+                    variant="secondary"
+                    icon={isSending ? Clock : Mail}
+                    onClick={() => handleResend(invite.token)}
+                    disabled={isSending || isExpired}
+                    title={
+                      isExpired
+                        ? 'Invite expired — revoke and create a new one'
+                        : 'Resend the activation email to this address'
+                    }
+                    className="text-xs sm:text-sm">
+                    {isSending ? 'Sending…' : 'Resend email'}
+                  </Button>
                   <Button
                     variant="secondary"
                     icon={isCopied ? Check : Copy}
@@ -207,7 +260,14 @@ function StaffCard({ member, classrooms, onClick, onEdit, onDelete, onInvite }) 
     handler?.(member);
   };
 
-  const disableInvite = !member.email?.trim() || !member.classroom;
+  // Which preconditions are missing? We surface this as visible microcopy
+  // under the disabled button so owners don't have to hover for a tooltip
+  // to figure out why "Invite to app" is greyed out. Kept as a list so the
+  // UI can join it into a human-readable sentence.
+  const missingForInvite = [];
+  if (!member.email?.trim()) missingForInvite.push('email');
+  if (!member.classroom) missingForInvite.push('classroom');
+  const disableInvite = missingForInvite.length > 0;
 
   return (
     <div className="relative group">
@@ -263,19 +323,26 @@ function StaffCard({ member, classrooms, onClick, onEdit, onDelete, onInvite }) 
                   Invite pending
                 </div>
               ) : (
-                <button
-                  type="button"
-                  onClick={(e) => handleAction(e, onInvite)}
-                  disabled={disableInvite}
-                  title={
-                    disableInvite
-                      ? 'Add email and classroom first to enable invite'
-                      : 'Invite this staff member to the KidsHub app'
-                  }
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-50 text-brand-700 text-xs font-medium hover:bg-brand-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                  <UserPlus className="w-3.5 h-3.5" />
-                  Invite to app
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={(e) => handleAction(e, onInvite)}
+                    disabled={disableInvite}
+                    title={
+                      disableInvite
+                        ? `Add ${missingForInvite.join(' and ')} first to enable invite`
+                        : 'Invite this staff member to the KidsHub app'
+                    }
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-50 text-brand-700 text-xs font-medium hover:bg-brand-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                    <UserPlus className="w-3.5 h-3.5" />
+                    Invite to app
+                  </button>
+                  {disableInvite ? (
+                    <p className="mt-1.5 text-[11px] text-surface-400 leading-snug">
+                      Add {missingForInvite.join(' and ')} to enable
+                    </p>
+                  ) : null}
+                </>
               )}
             </div>
           </div>
