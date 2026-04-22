@@ -111,7 +111,13 @@ module.exports = async (req, res) => {
     });
     return res.status(200).json({ ok: true, to: invite.email });
   } catch (err) {
+    // Surface the underlying Resend/config message in the response so the
+    // dashboard modal can show something actionable ("domain not verified",
+    // "API key missing", etc.) instead of a generic 502. Safe because the
+    // endpoint is origin-locked and the error text comes from our own
+    // sendEmail helper (no raw user input echoed back).
+    const detail = err && err.message ? String(err.message) : 'unknown error';
     console.error('[send-invite-email] Resend failed:', err);
-    return res.status(502).json({ error: 'Email delivery failed' });
+    return res.status(502).json({ error: 'Email delivery failed', detail });
   }
 };

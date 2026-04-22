@@ -79,7 +79,10 @@ module.exports = async (req, res) => {
     await sendEmail({ to: email, subject, html, text });
     return res.status(200).json({ ok: true });
   } catch (err) {
+    // Forward the underlying error detail (same rationale as
+    // send-invite-email.js — origin-locked endpoint, helper-generated text).
+    const detail = err && err.message ? String(err.message) : 'unknown error';
     console.error('[send-welcome-email] Resend failed:', err);
-    return res.status(502).json({ error: 'Email delivery failed' });
+    return res.status(502).json({ error: 'Email delivery failed', detail });
   }
 };

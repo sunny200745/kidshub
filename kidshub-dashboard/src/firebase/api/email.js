@@ -45,15 +45,25 @@ async function post(path, body) {
   });
   const text = await resp.text();
   if (!resp.ok) {
-    let detail = text;
+    // Pull both the short error code ("Email delivery failed") AND the
+    // underlying detail ("Resend error 403: domain not verified") so the
+    // UI can show an actionable message without round-tripping through
+    // Vercel function logs.
+    let short = text;
+    let detail = '';
     try {
       const parsed = JSON.parse(text);
-      detail = parsed.error || parsed.message || text;
+      short = parsed.error || parsed.message || text;
+      detail = parsed.detail || '';
     } catch (_) {
-      // leave detail as raw text
+      // leave as raw text
     }
-    const err = new Error(`${path} failed: ${resp.status} ${detail}`);
+    const message = detail
+      ? `${path} failed: ${resp.status} ${short} — ${detail}`
+      : `${path} failed: ${resp.status} ${short}`;
+    const err = new Error(message);
     err.status = resp.status;
+    err.detail = detail;
     throw err;
   }
   return text ? JSON.parse(text) : {};
