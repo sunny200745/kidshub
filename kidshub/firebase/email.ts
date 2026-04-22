@@ -10,10 +10,15 @@
  *
  * Base URL resolution:
  *   1. EXPO_PUBLIC_EMAIL_API_URL (set per-env)
- *   2. https://getkidshub.com (prod fallback)
+ *   2. https://www.getkidshub.com (prod fallback — canonical host)
+ *
+ * Why www: the apex (getkidshub.com) 307-redirects to www. Browser fetch
+ * can't follow cross-origin redirects on POST preflights, which surfaces
+ * as "Failed to fetch" in the console. See kidshub-dashboard/src/firebase/
+ * api/email.js for the full story.
  */
 
-const DEFAULT_BASE_URL = 'https://getkidshub.com';
+const DEFAULT_BASE_URL = 'https://www.getkidshub.com';
 
 function baseUrl(): string {
   const envUrl = process.env.EXPO_PUBLIC_EMAIL_API_URL;

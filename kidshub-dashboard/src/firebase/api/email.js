@@ -9,15 +9,21 @@
  *
  * Endpoint base URL resolution:
  *   1. VITE_EMAIL_API_URL env var (set per-env in Vercel)
- *   2. https://getkidshub.com — prod default (stable)
+ *   2. https://www.getkidshub.com — prod default (canonical host)
  *
  * All methods are fire-and-forget from the caller's perspective: they
  * resolve on HTTP 2xx, throw on anything else. Callers are encouraged
  * to wrap in try/catch and log-but-continue so email delivery failure
  * never blocks core invite/register flows.
+ *
+ * Why the www default: getkidshub.com 307-redirects to www.getkidshub.com
+ * (Vercel domain canonicalization). Browser fetch() can't follow those
+ * redirects cross-origin on POST preflights, so hitting the apex host
+ * surfaces as a confusing "Failed to fetch" in the console. Pointing at
+ * the canonical host directly sidesteps the redirect entirely.
  */
 
-const DEFAULT_BASE_URL = 'https://getkidshub.com';
+const DEFAULT_BASE_URL = 'https://www.getkidshub.com';
 
 function baseUrl() {
   return (import.meta.env.VITE_EMAIL_API_URL || DEFAULT_BASE_URL).replace(/\/$/, '');
