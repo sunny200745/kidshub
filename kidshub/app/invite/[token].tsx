@@ -60,14 +60,14 @@ import {
 import { useAuth, type Invite } from '@/contexts';
 import { getFriendlyAuthError } from '@/firebase/errors';
 
-type AcceptForm = {
+type AcceptFormState = {
   firstName: string;
   lastName: string;
   password: string;
   confirmPassword: string;
 };
 
-const EMPTY_FORM: AcceptForm = {
+const EMPTY_FORM: AcceptFormState = {
   firstName: '',
   lastName: '',
   password: '',
@@ -290,13 +290,13 @@ function AcceptForm({
   acceptParentInvite: ReturnType<typeof useAuth>['acceptParentInvite'];
 }) {
   const isParent = invite.role === 'parent';
-  const [form, setForm] = useState<AcceptForm>(EMPTY_FORM);
+  const [form, setForm] = useState<AcceptFormState>(EMPTY_FORM);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  const set = <K extends keyof AcceptForm>(key: K) => (value: string) => {
+  const set = <K extends keyof AcceptFormState>(key: K) => (value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
     if (error) setError('');
   };

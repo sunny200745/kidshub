@@ -108,12 +108,12 @@ const TYPE_VARIANTS: Partial<Record<ActivityType, VariantName>> = {
 
 function ActivityRow({
   activity,
-  children,
+  roster,
 }: {
   activity: ClassroomActivity;
-  children: Child[];
+  roster: Child[];
 }) {
-  const child = children.find((c) => c.id === activity.childId);
+  const child = roster.find((c) => c.id === activity.childId);
   const staffMember = staff.find((s) => s.id === activity.staffId);
   const variant = TYPE_VARIANTS[activity.type] ?? 'neutral';
   const label = activityLabels[activity.type] ?? activity.type;
@@ -158,7 +158,7 @@ type NewActivityModalProps = {
     type: ActivityType;
     notes: string;
   }) => Promise<void>;
-  children: Child[];
+  roster: Child[];
   initialType?: ActivityType | null;
 };
 
@@ -166,7 +166,7 @@ function NewActivityModal({
   visible,
   onClose,
   onSubmit,
-  children,
+  roster,
   initialType,
 }: NewActivityModalProps) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -189,7 +189,7 @@ function NewActivityModal({
     }
   }, [visible, initialType]);
 
-  const filteredChildren = children.filter((c) =>
+  const filteredChildren = roster.filter((c) =>
     `${c.firstName} ${c.lastName}`
       .toLowerCase()
       .includes(search.toLowerCase())
@@ -514,7 +514,7 @@ export default function TeacherActivities() {
                       ? 'border-b border-surface-100 dark:border-surface-800'
                       : ''
                   }>
-                  <ActivityRow activity={activity} children={classroomRoster} />
+                  <ActivityRow activity={activity} roster={classroomRoster} />
                 </View>
               ))}
             </View>
@@ -538,7 +538,7 @@ export default function TeacherActivities() {
           setModalInitialType(null);
         }}
         onSubmit={handleSubmit}
-        children={classroomRoster}
+        roster={classroomRoster}
         initialType={modalInitialType}
       />
     </ScreenContainer>
