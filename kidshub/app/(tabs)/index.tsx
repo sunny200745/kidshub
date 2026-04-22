@@ -1,14 +1,18 @@
 import { Image } from 'expo-image';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { HelloWave } from '@/components/hello-wave';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { useAuth, useTheme } from '@/contexts';
 import app from '@/firebase/config';
+import { Link } from 'expo-router';
 
 export default function HomeScreen() {
+  const { preference, setPreference, effective } = useTheme();
+  const { isAuthenticated, loading, role } = useAuth();
+
   return (
     <ParallaxScrollView
       headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
@@ -18,7 +22,7 @@ export default function HomeScreen() {
           style={styles.reactLogo}
         />
       }>
-      {/* p3-8 / p3-5 smoke tests — removed in p3-9 when this screen is replaced */}
+      {/* p3-5 / p3-6 / p3-8 smoke tests — removed in p3-9 when this screen is replaced */}
       <View className="bg-brand-500 p-4 rounded-xl my-2">
         <Text className="text-white font-bold text-base">
           NativeWind smoke test — if this card is pink with bold white text, p3-8 is wired correctly.
@@ -31,6 +35,31 @@ export default function HomeScreen() {
         <Text className="text-white text-xs opacity-90 mt-1">
           If this shows kidhub-7a207, EXPO_PUBLIC_FIREBASE_* env vars loaded correctly (p3-5 ✓).
         </Text>
+      </View>
+      <View className="bg-accent-600 p-4 rounded-xl my-2">
+        <Text className="text-white font-bold text-base">
+          AuthContext: {loading ? 'loading…' : isAuthenticated ? `signed in (role: ${role ?? 'none'})` : 'signed out'}
+        </Text>
+        <Text className="text-white text-xs opacity-90 mt-1">
+          p3-6 ✓ if this card rendered without throwing &quot;useAuth must be used within an AuthProvider&quot;.
+        </Text>
+      </View>
+      <View className="bg-info-600 p-4 rounded-xl my-2">
+        <Text className="text-white font-bold text-base">
+          ThemeContext: preference=&quot;{preference}&quot; → effective=&quot;{effective}&quot;
+        </Text>
+        <View className="flex-row gap-2 mt-2">
+          {(['system', 'light', 'dark'] as const).map((p) => (
+            <Pressable
+              key={p}
+              onPress={() => setPreference(p)}
+              className={`px-3 py-1 rounded-full ${preference === p ? 'bg-white' : 'bg-info-800'}`}>
+              <Text className={`text-xs font-semibold ${preference === p ? 'text-info-700' : 'text-white'}`}>
+                {p}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
       </View>
       <ThemedView style={styles.titleContainer}>
         <ThemedText type="title">Welcome!</ThemedText>
