@@ -11,10 +11,6 @@ import 'react-native-reanimated';
 
 import { AuthProvider, ThemeProvider, useTheme } from '@/contexts';
 
-export const unstable_settings = {
-  anchor: '(tabs)',
-};
-
 // Bridges our ThemeContext.effective ('light' | 'dark') into React Navigation's
 // theme provider so header / tab / stack chrome flip with user preference.
 // Has to live INSIDE <ThemeProvider>, so we factor it out to keep RootLayout flat.
@@ -32,10 +28,18 @@ export default function RootLayout() {
     <ThemeProvider>
       <AuthProvider>
         <NavigationThemeBridge>
-          <Stack>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-          </Stack>
+          {/*
+            File-based routing under app/:
+              /                 app/index.tsx          — role router (Redirects to the right group)
+              /unauthorized     app/unauthorized.tsx   — wrong-role landing
+              /login etc.       app/(auth)/*.tsx       — signed-out-only screens
+              /home             app/(parent)/home.tsx  — parent's landing
+              /classroom        app/(teacher)/classroom.tsx — teacher's landing
+
+            The Stack here is just the container; each group has its own
+            layout (Stack for (auth), Tabs for (parent)/(teacher)).
+          */}
+          <Stack screenOptions={{ headerShown: false }} />
           <StatusBar style="auto" />
         </NavigationThemeBridge>
       </AuthProvider>

@@ -163,7 +163,23 @@ daycares/
 
 ### 3c. Routing + UI
 
-- [ ] **p3-9** Set up Expo Router role-based groups — `(auth)`, `(parent)`, `(teacher)`.
+- [x] **p3-9** Built the routing shell — role-based groups, role router, wrong-role landing.
+  - **Deleted template demos**: `app/(tabs)/` (entire group — `index`, `explore`, `_layout`) and `app/modal.tsx`. The smoke-test home screen from p3-5 through p3-7 went with them, as flagged.
+  - **Trimmed `app/_layout.tsx`**: removed `unstable_settings.anchor: '(tabs)'` and the two demo `Stack.Screen` entries. Now just a headerless `<Stack />` under the provider tree — each group owns its own layout chrome.
+  - **`app/index.tsx` (role router, the ONLY `/` route)**: dispatches based on AuthContext state. `loading` → `<ActivityIndicator/>` + "Loading KidsHub…" copy; anon → `<Redirect href="/login"/>`; parent role → `/home`; teacher role → `/classroom`; anything else (owner, missing, invalid role) → `/unauthorized`. Reason this file exists: groups in `()` don't consume URL segments, so two `index.tsx` files under `(parent)` and `(teacher)` would collide at `/`. Distinct landing paths per role + a dispatcher at `/` is the clean pattern.
+  - **`app/unauthorized.tsx`**: explanation + sign-out button. Owners get an extra "Go to dashboard" link to `dashboard.getkidshub.com` (web only; `Platform.OS === 'web'` guard so native RN doesn't try to render a web-anchor `Link`).
+  - **`(auth)` group** — `_layout.tsx` calls `useAuthRedirect({ require: 'anonymous', redirectTo: '/' })` (signed-in users can't get stuck on /login), then `<Stack headerShown: false>`. Three stub screens: `login.tsx`, `register.tsx`, `forgot-password.tsx`. Each carries a yellow "Stub — p3-9 scaffolding" card pointing at the phase that'll port the real form (p3-10 or p3-13). Cross-links between the three so navigation is verifiable.
+  - **`(parent)` group** — `_layout.tsx` calls `useRequireRole({ allowedRoles: [ROLES.PARENT] })`, then `<Tabs>` pulling `HapticTab` + `IconSymbol` from the Expo template (still useful, not yet replaced in p3-12). One tab for now: `home.tsx` → `/home`. Layout comment lists the follow-ups p3-10 will add (schedule, activity, messages, photos, profile).
+  - **`(teacher)` group** — mirror of `(parent)`, `useRequireRole([ROLES.TEACHER])` + `<Tabs>` with a single `classroom.tsx` → `/classroom`. p3-11 adds attendance / activity / messages / photos / profile tabs.
+  - **Route overlap note**: both groups will eventually have a `messages.tsx` mapping to `/messages`. Expo Router resolves these by "active group" — a parent navigating from /home to /messages hits `(parent)/messages.tsx`; a teacher hits `(teacher)/messages.tsx`. No collision at runtime as long as the role router sends each role into its own group's entry path.
+  - **Smoke test (anonymous state, web SSR)**: all 6 routes return 200 and render their distinct fingerprints:
+    - `/` → `Loading KidsHub…` (router in loading state during SSR, will Redirect on client)
+    - `/login` → `KidsHub` + `Sign in to connect` + `Create an account` + `Forgot password`
+    - `/register` → `Create account` + `Already have an account`
+    - `/unauthorized` → `You're in the wrong place` + `Sign out`
+    - `/home` → `Welcome back` + `Stub` (SSR renders the page; client useEffect will bounce anons to /login)
+    - `/classroom` → `Your classroom` + `Stub` (same SSR behavior)
+    No errors, no babel warnings. Phase 3c shell is stable.
 - [ ] **p3-10** Port parent pages (`Home`, `Schedule`, `Activity`, `Messages`, `Photos`, `Profile`) to `(parent)` group.
 - [ ] **p3-11** Port teacher-relevant pages from `kidshub-dashboard` into `(teacher)` group.
 - [ ] **p3-12** Port shared components (`layout`, `ui`, `icons`) — swap `<div>` for `<View>`/`<Pressable>`, `lucide` → `lucide-react-native`.
