@@ -188,7 +188,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      // Flip loading=true the moment we know there IS a signed-in user but
+      // we haven't read their profile yet. Without this, after a login the
+      // order is:
+      //   1. onAuthStateChanged fires → setUser(fbUser) → isAuthenticated=true
+      //   2. BUT loading=false (carried over from the previous anon state)
+      //   3. RoleRouter evaluates: !loading && isAuthenticated && role=null
+      //      → Redirect to /unauthorized (one-frame flash)
+      //   4. ~50ms later profile snapshot fires → role='parent' → self-heal
+      //      bounces back to / → role router redirects to /home
+      // With loading=true here, step 3 renders RouteSplash instead and the
+      // user only sees the correct destination.
       setUser(fbUser);
+      setProfile(null);
+      setLoading(true);
+
       const profileRef = doc(db, 'users', fbUser.uid);
       unsubProfile = onSnapshot(
         profileRef,
