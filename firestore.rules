@@ -42,6 +42,31 @@ rules_version = '2';
 // `daycareId = ownerUid` on every doc before publishing these rules.
 //
 // =============================================================================
+// Option B: Staff ↔ Teacher linkage (Oct 2026)
+// =============================================================================
+//
+// Staff records (staff/{id}) are the source of truth for who works at a
+// daycare. Teacher app accounts (users with role='teacher') are an OPT-IN
+// overlay granted by the owner via an invite. The link flows:
+//
+//   1. Owner creates staff/{sid} with { appStatus:'none', linkedUserId:null }.
+//   2. Owner clicks "Invite to app" on that staff card — dashboard writes
+//      invites/{token} with staffId=sid + updates staff.appStatus='invited'.
+//   3. Teacher accepts invite in kidshub app:
+//      a. setDoc(users/{uid}) with role='teacher', linkedStaffId=sid,
+//         daycareId, classroomId (all pulled from invite)
+//      b. updateDoc(staff/{sid}) with linkedUserId=uid, appStatus='active'
+//         (permitted by the teacher update branch below — scoped to their
+//         own staff record by email match)
+//      c. deleteDoc(invites/{token})
+//   4. If owner revokes a pending invite, dashboard resets
+//      staff.appStatus='none' in the same batch.
+//
+// Staff delete is client-side blocked (dashboardUX) when linkedUserId is
+// set — the owner must revoke app access first. Hard-deleting a linked
+// staff record would leave the user's session live with dangling state.
+//
+// =============================================================================
 // Owner ↔ Parent linkage (new in p3-15)
 // =============================================================================
 //
@@ -190,6 +215,9 @@ service cloud.firestore {
             && get(/databases/$(database)/documents/invites/$(request.resource.data.inviteToken)).data.childId in request.resource.data.childIds
           )
           // Teacher invite-accept: daycareId + classroomId must match invite.
+          // If the invite has a staffId (Option B), the new user doc's
+          // linkedStaffId must match it so the teacher is unambiguously tied
+          // to the staff roster record they were invited against.
           || (
             request.resource.data.role == 'teacher'
             && request.resource.data.inviteToken is string
@@ -198,6 +226,20 @@ service cloud.firestore {
             && get(/databases/$(database)/documents/invites/$(request.resource.data.inviteToken)).data.email == request.auth.token.email
             && request.resource.data.daycareId == get(/databases/$(database)/documents/invites/$(request.resource.data.inviteToken)).data.daycareId
             && request.resource.data.classroomId == get(/databases/$(database)/documents/invites/$(request.resource.data.inviteToken)).data.classroomId
+            && (
+              // Option B path — invite has staffId, linkedStaffId must match.
+              (
+                get(/databases/$(database)/documents/invites/$(request.resource.data.inviteToken)).data.get('staffId', '') != ''
+                && request.resource.data.get('linkedStaffId', '') == get(/databases/$(database)/documents/invites/$(request.resource.data.inviteToken)).data.staffId
+              )
+              // Legacy path — pre-Option-B invite with no staffId.
+              // linkedStaffId must be absent so we don't forge a link to
+              // an arbitrary staff record.
+              || (
+                get(/databases/$(database)/documents/invites/$(request.resource.data.inviteToken)).data.get('staffId', '') == ''
+                && !('linkedStaffId' in request.resource.data)
+              )
+            )
           )
         );
 
@@ -246,13 +288,19 @@ service cloud.firestore {
     match /invites/{token} {
       allow read: if true;
 
+      // Teacher invites (Option B) carry `staffId` pointing at the pre-existing
+      // staff/{id} roster record. The accept flow then flips staff.appStatus
+      // to 'active' + links linkedUserId. Field is required on new teacher
+      // invites; existing pre-Option-B invites without it are still honored
+      // by accept (linkedStaffId just stays null on the teacher's users doc).
       allow create: if isOwner()
         && request.resource.data.invitedBy == request.auth.uid
         && request.resource.data.daycareId == request.auth.uid
         && request.resource.data.email is string
         && (
           (request.resource.data.role == 'teacher'
-            && request.resource.data.classroomId is string)
+            && request.resource.data.classroomId is string
+            && request.resource.data.staffId is string)
           || (request.resource.data.role == 'parent'
             && request.resource.data.childId is string)
         );
@@ -377,8 +425,34 @@ service cloud.firestore {
       allow create: if isOwner()
         && request.resource.data.daycareId == request.auth.uid;
 
-      allow update, delete: if isOwner() && inMyTenant(resource.data)
-        && request.resource.data.daycareId == resource.data.daycareId;
+      // Option B: a freshly-registered teacher flips their linked staff
+      // record from appStatus='invited' → 'active' and stamps
+      // linkedUserId=self.uid. Scoped down to:
+      //   - requester is a teacher in the same tenant
+      //   - the staff record's email matches their auth email (strong link
+      //     from the staff roster to the invite to the Firebase Auth account)
+      //   - only {linkedUserId, appStatus, updatedAt} change — name/role/
+      //     classroom etc. are frozen
+      //   - linkedUserId must be the requester themselves
+      //   - record isn't already linked to someone else
+      allow update: if (isOwner() && inMyTenant(resource.data)
+          && request.resource.data.daycareId == resource.data.daycareId)
+        || (
+          isTeacher()
+          && inMyTenant(resource.data)
+          && resource.data.email == request.auth.token.email
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'linkedUserId', 'appStatus', 'updatedAt'
+          ])
+          && request.resource.data.linkedUserId == request.auth.uid
+          && request.resource.data.appStatus == 'active'
+          && (
+            resource.data.get('linkedUserId', null) == null
+            || resource.data.linkedUserId == request.auth.uid
+          )
+        );
+
+      allow delete: if isOwner() && inMyTenant(resource.data);
     }
 
     // -------------------------------------------------------------------------

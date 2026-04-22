@@ -3,6 +3,7 @@ import {
   Award,
   Calendar,
   Check,
+  CheckCircle2,
   Clock,
   Copy,
   Mail,
@@ -187,7 +188,7 @@ function PendingInvites({ ownerUid, classrooms }) {
   );
 }
 
-function StaffCard({ member, classrooms, onClick, onEdit, onDelete }) {
+function StaffCard({ member, classrooms, onClick, onEdit, onDelete, onInvite }) {
   const classroom = member.classroom ? classrooms?.find(c => c.id === member.classroom) : null;
 
   const statusColors = {
@@ -196,11 +197,17 @@ function StaffCard({ member, classrooms, onClick, onEdit, onDelete }) {
     offline: 'bg-surface-300',
   };
 
+  // Option B: derive per-card "app access" state. Legacy records without
+  // appStatus default to 'none' so the Invite button shows up.
+  const appStatus = member.appStatus || 'none';
+
   const handleAction = (e, handler) => {
     e.preventDefault();
     e.stopPropagation();
     handler?.(member);
   };
+
+  const disableInvite = !member.email?.trim() || !member.classroom;
 
   return (
     <div className="relative group">
@@ -242,6 +249,35 @@ function StaffCard({ member, classrooms, onClick, onEdit, onDelete }) {
                 <Badge variant="neutral" className="text-xs">+{member.certifications.length - 2}</Badge>
               )}
             </div>
+
+            {/* App-access row: always visible so every card communicates state. */}
+            <div className="mt-3 sm:mt-4 w-full">
+              {appStatus === 'active' ? (
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-success-50 text-success-700 text-xs font-medium">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  App access
+                </div>
+              ) : appStatus === 'invited' ? (
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-warning-50 text-warning-700 text-xs font-medium">
+                  <Clock className="w-3.5 h-3.5" />
+                  Invite pending
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={(e) => handleAction(e, onInvite)}
+                  disabled={disableInvite}
+                  title={
+                    disableInvite
+                      ? 'Add email and classroom first to enable invite'
+                      : 'Invite this staff member to the KidsHub app'
+                  }
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-50 text-brand-700 text-xs font-medium hover:bg-brand-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                  <UserPlus className="w-3.5 h-3.5" />
+                  Invite to app
+                </button>
+              )}
+            </div>
           </div>
         </CardBody>
       </Card>
@@ -257,8 +293,13 @@ function StaffCard({ member, classrooms, onClick, onEdit, onDelete }) {
         <button
           type="button"
           onClick={(e) => handleAction(e, onDelete)}
-          title="Delete staff"
-          className="p-1.5 rounded-lg bg-white/90 backdrop-blur-sm text-surface-500 hover:text-danger-600 hover:bg-white shadow-sm">
+          title={
+            appStatus === 'active'
+              ? 'Revoke app access first to delete'
+              : 'Delete staff'
+          }
+          disabled={appStatus === 'active'}
+          className="p-1.5 rounded-lg bg-white/90 backdrop-blur-sm text-surface-500 hover:text-danger-600 hover:bg-white shadow-sm disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-surface-500 disabled:hover:bg-white/90">
           <Trash2 className="w-3.5 h-3.5" />
         </button>
       </div>
@@ -360,6 +401,12 @@ function StaffModal({ member, classrooms, isOpen, onClose, onEdit, onDelete }) {
         <Button
           variant="secondary"
           icon={Trash2}
+          disabled={member.appStatus === 'active'}
+          title={
+            member.appStatus === 'active'
+              ? 'Revoke app access first to delete'
+              : 'Delete staff member'
+          }
           onClick={() => {
             onClose();
             onDelete?.(member);
@@ -390,7 +437,10 @@ export default function Staff() {
   const [showFormModal, setShowFormModal] = useState(false);
   const [editingStaff, setEditingStaff] = useState(null);
   const [deletingStaff, setDeletingStaff] = useState(null);
-  const [showInviteModal, setShowInviteModal] = useState(false);
+  // Option B: invite always targets a specific staff record. Storing the
+  // staff object (not a boolean) also keeps the modal's fields populated
+  // across re-renders without a useEffect echo.
+  const [invitingStaff, setInvitingStaff] = useState(null);
 
   const openAdd = () => {
     setEditingStaff(null);
@@ -438,12 +488,6 @@ export default function Staff() {
       subtitle={`${staff?.length || 0} team members`}
       actions={
         <div className="hidden sm:flex items-center gap-2">
-          <Button
-            variant="secondary"
-            icon={UserPlus}
-            onClick={() => setShowInviteModal(true)}>
-            Invite teacher
-          </Button>
           <Button icon={Plus} onClick={openAdd}>
             Add Staff
           </Button>
@@ -487,16 +531,9 @@ export default function Staff() {
       </Card>
 
       {/* Mobile action buttons */}
-      <div className="sm:hidden mb-4 flex flex-col gap-2">
+      <div className="sm:hidden mb-4">
         <Button icon={Plus} onClick={openAdd} className="w-full">
           Add Staff
-        </Button>
-        <Button
-          variant="secondary"
-          icon={UserPlus}
-          onClick={() => setShowInviteModal(true)}
-          className="w-full">
-          Invite teacher to app
         </Button>
       </div>
 
@@ -511,6 +548,7 @@ export default function Staff() {
               onClick={setSelectedStaff}
               onEdit={openEdit}
               onDelete={setDeletingStaff}
+              onInvite={setInvitingStaff}
             />
           ))}
         </div>
@@ -546,22 +584,29 @@ export default function Staff() {
         isOpen={!!deletingStaff}
         onClose={() => setDeletingStaff(null)}
         onConfirm={async () => {
-          if (!deletingStaff) return;
+          if (!deletingStaff || deletingStaff.linkedUserId) return;
           await staffApi.delete(deletingStaff.id);
         }}
         title="Delete staff member"
+        blocked={!!deletingStaff?.linkedUserId}
+        blockedReason={
+          deletingStaff?.linkedUserId
+            ? `${deletingStaff.firstName} ${deletingStaff.lastName} currently has active app access. Remove their teacher account in Firebase Auth (or wait for a "Revoke access" action — coming soon) before deleting this staff record.`
+            : undefined
+        }
         message={
-          deletingStaff
+          deletingStaff && !deletingStaff.linkedUserId
             ? `This will permanently delete ${deletingStaff.firstName} ${deletingStaff.lastName}. Activities they authored will remain in the logs but show as "unknown staff". This can't be undone.`
             : ''
         }
         confirmLabel="Delete staff"
       />
 
-      {/* Invite Teacher Modal */}
+      {/* Option B: Invite Teacher Modal — always targets a specific staff record. */}
       <InviteTeacherModal
-        isOpen={showInviteModal}
-        onClose={() => setShowInviteModal(false)}
+        isOpen={!!invitingStaff}
+        onClose={() => setInvitingStaff(null)}
+        staffMember={invitingStaff}
       />
     </Layout>
   );

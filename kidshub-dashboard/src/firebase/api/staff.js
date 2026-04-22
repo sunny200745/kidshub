@@ -95,11 +95,19 @@ export const staffApi = {
     }
   },
 
-  // Create new staff
+  // Create new staff. Option B: stamp app-linkage fields to null/'none'
+  // so downstream UI can safely render "Invite to app" affordances without
+  // defensive defaults at every read site. Email is lowercased so the
+  // Firestore rule `staff.email == request.auth.token.email` (used when a
+  // teacher accepts their invite and self-links the staff record) matches
+  // — Firebase Auth always normalizes the token email to lowercase.
   async create(staffData) {
     const payload = {
       ...staffData,
+      email: (staffData.email || '').trim().toLowerCase(),
       daycareId: currentDaycareId(),
+      linkedUserId: null,
+      appStatus: 'none',
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
@@ -107,13 +115,14 @@ export const staffApi = {
     return { id: docRef.id, ...payload };
   },
 
-  // Update staff
+  // Update staff. Email is lowercased (same reason as create).
   async update(id, data) {
     const docRef = doc(db, COLLECTION, id);
-    await updateDoc(docRef, {
-      ...data,
-      updatedAt: serverTimestamp(),
-    });
+    const payload = { ...data, updatedAt: serverTimestamp() };
+    if (typeof data.email === 'string') {
+      payload.email = data.email.trim().toLowerCase();
+    }
+    await updateDoc(docRef, payload);
     return { id, ...data };
   },
 
@@ -126,7 +135,33 @@ export const staffApi = {
     });
   },
 
-  // Delete staff
+  // Option B helpers for invite flow transitions.
+  //
+  // setAppStatusInvited: called right after invitesApi.create() succeeds so
+  // the staff card flips to "Pending invite" badge.
+  async setAppStatusInvited(id) {
+    const docRef = doc(db, COLLECTION, id);
+    await updateDoc(docRef, {
+      appStatus: 'invited',
+      updatedAt: serverTimestamp(),
+    });
+  },
+
+  // resetAppStatus: called when an owner revokes a pending invite, so the
+  // staff card returns to "Invite to app" state. Safe to call on any staff
+  // record — a no-op if the staff was already 'none' or 'active'.
+  async resetAppStatus(id) {
+    const docRef = doc(db, COLLECTION, id);
+    await updateDoc(docRef, {
+      appStatus: 'none',
+      linkedUserId: null,
+      updatedAt: serverTimestamp(),
+    });
+  },
+
+  // Delete staff. Callers should gate via UI first to block when
+  // linkedUserId is set (see Staff.jsx). Rules will allow the delete
+  // unconditionally for the owner; the UX guard is dashboard-side.
   async delete(id) {
     const docRef = doc(db, COLLECTION, id);
     await deleteDoc(docRef);

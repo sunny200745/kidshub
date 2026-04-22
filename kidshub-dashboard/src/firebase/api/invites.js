@@ -44,6 +44,7 @@ import {
 } from 'firebase/firestore';
 
 import { db } from '../config';
+import { staffApi } from './staff';
 
 const COLLECTION = 'invites';
 
@@ -85,14 +86,17 @@ export const invitesApi = {
    */
   async create({
     email,
+    staffId,
     classroomId,
     classroomName,
     invitedBy,
     invitedByName,
     daycareId,
   }) {
-    if (!email || !classroomId || !invitedBy) {
-      throw new Error('invitesApi.create: email, classroomId, and invitedBy are required.');
+    if (!email || !staffId || !classroomId || !invitedBy) {
+      throw new Error(
+        'invitesApi.create: email, staffId, classroomId, and invitedBy are required.'
+      );
     }
 
     const token = generateInviteToken();
@@ -101,6 +105,7 @@ export const invitesApi = {
     const payload = {
       email: email.trim().toLowerCase(),
       role: 'teacher',
+      staffId,
       classroomId,
       classroomName: classroomName || '',
       daycareId: daycareId || invitedBy,
@@ -111,6 +116,15 @@ export const invitesApi = {
     };
 
     await setDoc(doc(db, COLLECTION, token), payload);
+
+    // Flip the staff card's app-status badge. Best-effort: if the update
+    // fails (e.g. stale client), the invite still exists and the accept
+    // flow will heal by setting appStatus='active' directly.
+    try {
+      await staffApi.setAppStatusInvited(staffId);
+    } catch (err) {
+      console.warn('[invitesApi.create] could not flip staff.appStatus to invited:', err);
+    }
 
     return { token, ...payload, expiresAt: expiresAt.toDate() };
   },
@@ -176,10 +190,36 @@ export const invitesApi = {
   /**
    * Revoke (delete) a pending invite. The Firestore rule allows deletion by
    * the inviter (for revoke) or by the invitee email (for consume-on-accept).
+   *
+   * Option B: if this is a teacher invite with a staffId, reset the staff
+   * card's appStatus back to 'none' so the "Invite to app" affordance
+   * returns. We read the invite before deleting so we have the staffId;
+   * failure to read or reset is non-fatal (the owner can re-invite and
+   * the new create will flip the badge back to 'invited').
    */
   async delete(token) {
     if (!token) throw new Error('invitesApi.delete: token is required.');
+
+    let staffIdToReset = null;
+    try {
+      const snap = await getDoc(doc(db, COLLECTION, token));
+      const data = snap.exists() ? snap.data() : null;
+      if (data?.role === 'teacher' && typeof data.staffId === 'string') {
+        staffIdToReset = data.staffId;
+      }
+    } catch (err) {
+      console.warn('[invitesApi.delete] pre-read failed:', err);
+    }
+
     await deleteDoc(doc(db, COLLECTION, token));
+
+    if (staffIdToReset) {
+      try {
+        await staffApi.resetAppStatus(staffIdToReset);
+      } catch (err) {
+        console.warn('[invitesApi.delete] could not reset staff.appStatus:', err);
+      }
+    }
   },
 
   /**

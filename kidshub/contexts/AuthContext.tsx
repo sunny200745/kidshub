@@ -89,6 +89,12 @@ export type TeacherInvite = {
   role: 'teacher';
   classroomId: string;
   classroomName?: string;
+  /**
+   * Option B: pointer back to the dashboard's staff roster record. Required
+   * on all new teacher invites issued from the dashboard. May be absent on
+   * legacy (pre-Option-B) invites still sitting in Firestore.
+   */
+  staffId?: string;
   daycareId: string;
   invitedBy: string;
   invitedByName?: string;
@@ -408,7 +414,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         displayName: `${firstName.trim()} ${lastName.trim()}`,
       });
 
-      await setDoc(doc(db, 'users', fbUser.uid), {
+      // Option B: if the invite points at a staff roster record, stamp
+      // linkedStaffId on the users doc so the two collections are joined
+      // going forward. Firestore rule for teacher-create enforces this
+      // matches invite.staffId.
+      const userDocPayload: Record<string, unknown> = {
         uid: fbUser.uid,
         firstName: firstName.trim(),
         lastName: lastName.trim(),
@@ -421,7 +431,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         status: 'active',
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-      });
+      };
+      if (invite.staffId) {
+        userDocPayload.linkedStaffId = invite.staffId;
+      }
+
+      await setDoc(doc(db, 'users', fbUser.uid), userDocPayload);
+
+      // Option B: flip the staff roster record to appStatus='active' and
+      // stamp linkedUserId. Allowed by the staff update rule's teacher
+      // branch — scoped to this user's own record via email match. Best
+      // effort: if the staff record was deleted between invite create and
+      // accept, the teacher still has a working app account; the owner
+      // can reconcile by re-adding the staff entry (unusual path).
+      if (invite.staffId) {
+        try {
+          await updateDoc(doc(db, 'staff', invite.staffId), {
+            linkedUserId: fbUser.uid,
+            appStatus: 'active',
+            updatedAt: serverTimestamp(),
+          });
+        } catch (staffErr) {
+          console.warn(
+            '[AuthContext] could not link staff record on accept:',
+            staffErr
+          );
+        }
+      }
 
       // Best-effort cleanup. Failure here is non-fatal — the invite just
       // shows up as "consumed but not deleted" in the dashboard, and the

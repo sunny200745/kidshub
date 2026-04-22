@@ -1,34 +1,37 @@
 /**
  * InviteTeacherModal — owner-facing UI for issuing a teacher invite.
  *
- * Two-stage UX:
- *   Stage 1 (form):    email + classroom select + "Send invite" button
- *   Stage 2 (result):  shows the generated invite URL with copy-to-clipboard,
- *                      a deep link directly to it, and "Send another" / "Done"
+ * Option B contract: the invite ALWAYS targets a pre-existing staff record.
+ * Parent component (Staff.jsx per-card action) passes `staffMember`; this
+ * modal reads the email + classroom off that record and only asks the owner
+ * to confirm before generating the link.
  *
- * On submit we:
- *   1. invitesApi.create({ email, classroomId, classroomName, invitedBy,
- *      invitedByName, daycareId }) — writes invites/{token} via setDoc
+ * Two-stage UX:
+ *   Stage 1 (confirm):  shows staff name/email/classroom + "Create invite"
+ *   Stage 2 (result):   shows the generated invite URL with copy-to-clipboard
+ *
+ * On submit:
+ *   1. invitesApi.create({ email, staffId, classroomId, classroomName,
+ *      invitedBy, invitedByName, daycareId }) — writes invites/{token} +
+ *      flips staff.appStatus to 'invited' (handled inside invitesApi).
  *   2. Display `${KIDSHUB_BASE_URL}/invite/{token}` for the owner to paste
  *      into an email/SMS/Slack DM.
  *
  * Email delivery is intentionally NOT wired here yet (no transactional email
- * provider in the MVP — would need Resend/SendGrid + a serverless route in
- * kidshub-landing). Copy/paste is fine for pilot; switch to email in p3-14
- * follow-up or Phase 4.
+ * provider in the MVP). Copy/paste is fine for pilot.
  *
  * Auth gating: the Firestore rule for invites/{token} create requires
- *   isOwner() && invitedBy == request.auth.uid
+ *   isOwner() && invitedBy == request.auth.uid && staffId is string
  * so this modal MUST be rendered inside ProtectedRoute (which already gates
- * the dashboard to owners). No extra check here.
+ * the dashboard to owners).
  */
-import { Check, Copy, ExternalLink, Mail, Send, UserPlus } from 'lucide-react';
+import { AlertTriangle, Check, Copy, ExternalLink, Send, UserPlus } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { useAuth } from '../../contexts';
 import { invitesApi } from '../../firebase/api';
 import { useClassroomsData } from '../../hooks';
-import { Button, Input, Modal, ModalFooter, Select } from '../ui';
+import { Button, Modal, ModalFooter } from '../ui';
 
 /**
  * Where the kidshub app lives. Read from Vite env at build time so the URL
@@ -42,18 +45,10 @@ const KIDSHUB_BASE_URL = (
   import.meta.env.VITE_KIDSHUB_APP_URL || 'http://localhost:5180'
 ).replace(/\/$/, '');
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-const EMPTY_FORM = {
-  email: '',
-  classroomId: '',
-};
-
-export function InviteTeacherModal({ isOpen, onClose, onCreated }) {
+export function InviteTeacherModal({ isOpen, onClose, staffMember, onCreated }) {
   const { user, profile } = useAuth();
-  const { data: classrooms, loading: classroomsLoading } = useClassroomsData();
+  const { data: classrooms } = useClassroomsData();
 
-  const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [createdInvite, setCreatedInvite] = useState(null);
@@ -68,55 +63,54 @@ export function InviteTeacherModal({ isOpen, onClose, onCreated }) {
     return 'Your daycare';
   }, [profile, user]);
 
-  const classroomOptions = useMemo(() => {
-    const opts = (classrooms || []).map((c) => ({ value: c.id, label: c.name }));
-    return [{ value: '', label: 'Select a classroom\u2026' }, ...opts];
-  }, [classrooms]);
+  const classroom = useMemo(() => {
+    if (!staffMember?.classroom) return null;
+    return classrooms?.find((c) => c.id === staffMember.classroom) || null;
+  }, [staffMember, classrooms]);
+
+  // Precondition checks — each maps to a specific UI message + disabled CTA.
+  // Owners hit these when a staff record is missing an email or classroom
+  // assignment; the modal explains the fix-up step rather than silently
+  // failing at create-time.
+  const blockers = useMemo(() => {
+    const out = [];
+    if (!staffMember) return out;
+    if (!staffMember.email?.trim()) {
+      out.push('This staff record has no email. Edit the staff member to add one first.');
+    }
+    if (!staffMember.classroom) {
+      out.push('This staff record has no classroom assigned. Edit the staff member to pick one first.');
+    }
+    return out;
+  }, [staffMember]);
 
   // Reset all state on every open. Without this, the modal would still show
-  // a previously-created invite if the owner clicks "Invite" right after closing.
+  // a previously-created invite if the owner clicks a different staff card
+  // right after closing.
   useEffect(() => {
     if (isOpen) {
-      setForm(EMPTY_FORM);
       setError('');
       setCreatedInvite(null);
       setCopied(false);
       setSubmitting(false);
     }
-  }, [isOpen]);
+  }, [isOpen, staffMember?.id]);
 
   const inviteUrl = createdInvite
     ? `${KIDSHUB_BASE_URL}/invite/${createdInvite.token}`
     : '';
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
-    if (error) setError('');
-  };
-
-  const validate = () => {
-    if (!form.email.trim()) return 'Teacher email is required.';
-    if (!EMAIL_RE.test(form.email.trim())) return 'Please enter a valid email address.';
-    if (!form.classroomId) return 'Please pick a classroom.';
-    if (!user?.uid) return 'You must be signed in to send invites.';
-    return null;
-  };
-
   const handleSubmit = async () => {
-    const v = validate();
-    if (v) {
-      setError(v);
-      return;
-    }
-
-    const classroom = classrooms?.find((c) => c.id === form.classroomId);
+    if (!staffMember || !user?.uid) return;
+    if (blockers.length > 0) return;
 
     setSubmitting(true);
+    setError('');
     try {
       const invite = await invitesApi.create({
-        email: form.email,
-        classroomId: form.classroomId,
+        email: staffMember.email,
+        staffId: staffMember.id,
+        classroomId: staffMember.classroom,
         classroomName: classroom?.name || '',
         invitedBy: user.uid,
         invitedByName: inviterDisplayName,
@@ -147,15 +141,12 @@ export function InviteTeacherModal({ isOpen, onClose, onCreated }) {
     }
   };
 
-  const handleSendAnother = () => {
-    setCreatedInvite(null);
-    setForm(EMPTY_FORM);
-    setError('');
-    setCopied(false);
-  };
+  const staffName = staffMember
+    ? `${staffMember.firstName || ''} ${staffMember.lastName || ''}`.trim() || 'this staff member'
+    : '';
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Invite a teacher" size="md">
+    <Modal isOpen={isOpen} onClose={onClose} title="Invite to app" size="md">
       {createdInvite ? (
         <>
           <div className="text-center mb-4 sm:mb-6">
@@ -168,7 +159,7 @@ export function InviteTeacherModal({ isOpen, onClose, onCreated }) {
             <p className="text-xs sm:text-sm text-surface-500 mt-1">
               Send this link to <span className="font-medium">{createdInvite.email}</span>.
               They&apos;ll set their own password and land in <span className="font-medium">
-                {createdInvite.classroomName || 'the classroom'}
+                {createdInvite.classroomName || 'their classroom'}
               </span>.
             </p>
           </div>
@@ -203,7 +194,7 @@ export function InviteTeacherModal({ isOpen, onClose, onCreated }) {
           </div>
 
           <p className="text-xs text-surface-400 mt-2">
-            Link expires in 7 days. You can revoke it from the Pending invites list anytime.
+            Link expires in 7 days. Revoke it from the Pending invites list anytime.
           </p>
 
           {error ? (
@@ -213,9 +204,6 @@ export function InviteTeacherModal({ isOpen, onClose, onCreated }) {
           ) : null}
 
           <ModalFooter>
-            <Button variant="secondary" onClick={handleSendAnother}>
-              Send another
-            </Button>
             <Button onClick={onClose}>Done</Button>
           </ModalFooter>
         </>
@@ -225,45 +213,50 @@ export function InviteTeacherModal({ isOpen, onClose, onCreated }) {
             <div className="flex items-start gap-3 p-3 bg-brand-50 border border-brand-100 rounded-xl">
               <UserPlus className="w-5 h-5 text-brand-600 flex-shrink-0 mt-0.5" />
               <div className="text-xs sm:text-sm text-surface-700">
-                Teachers don&apos;t self-register. Send them an invite link and they&apos;ll
-                set up their own password from the KidsHub app.
+                You&apos;re giving <span className="font-medium">{staffName}</span> access to
+                the KidsHub teacher app. They&apos;ll set their own password from the invite
+                link.
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1.5">
-                Teacher email *
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-400 pointer-events-none" />
-                <Input
-                  name="email"
-                  type="email"
-                  value={form.email}
-                  onChange={handleChange}
-                  placeholder="teacher@example.com"
-                  className="pl-9"
-                  disabled={submitting}
-                  autoFocus
-                />
+            <div className="rounded-xl border border-surface-200 divide-y divide-surface-100">
+              <div className="flex items-center justify-between gap-3 p-3">
+                <div className="text-xs uppercase tracking-wide text-surface-400">
+                  Email
+                </div>
+                <div className="text-sm text-surface-900 truncate">
+                  {staffMember?.email || <span className="text-surface-400">—</span>}
+                </div>
               </div>
-              <p className="mt-1 text-xs text-surface-400">
-                They&apos;ll have to register with this exact email.
-              </p>
+              <div className="flex items-center justify-between gap-3 p-3">
+                <div className="text-xs uppercase tracking-wide text-surface-400">
+                  Classroom
+                </div>
+                <div className="text-sm text-surface-900 flex items-center gap-2">
+                  {classroom ? (
+                    <>
+                      <span
+                        className="w-2 h-2 rounded-full"
+                        style={{ backgroundColor: classroom.color }}
+                      />
+                      {classroom.name}
+                    </>
+                  ) : (
+                    <span className="text-surface-400">—</span>
+                  )}
+                </div>
+              </div>
             </div>
 
-            <Select
-              label="Assign to classroom *"
-              name="classroomId"
-              options={classroomOptions}
-              value={form.classroomId}
-              onChange={handleChange}
-              disabled={submitting || classroomsLoading || classroomOptions.length <= 1}
-            />
-            {!classroomsLoading && classroomOptions.length <= 1 ? (
-              <p className="text-xs text-warning-700 -mt-2">
-                You need to create a classroom first. Head to Classrooms to add one.
-              </p>
+            {blockers.length > 0 ? (
+              <div className="p-3 bg-warning-50 border border-warning-200 rounded-xl">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-warning-600 flex-shrink-0 mt-0.5" />
+                  <ul className="text-xs sm:text-sm text-warning-800 space-y-1">
+                    {blockers.map((msg) => <li key={msg}>{msg}</li>)}
+                  </ul>
+                </div>
+              </div>
             ) : null}
 
             {error ? (
@@ -277,7 +270,11 @@ export function InviteTeacherModal({ isOpen, onClose, onCreated }) {
             <Button variant="secondary" onClick={onClose} disabled={submitting}>
               Cancel
             </Button>
-            <Button onClick={handleSubmit} loading={submitting} icon={Send}>
+            <Button
+              onClick={handleSubmit}
+              loading={submitting}
+              disabled={blockers.length > 0}
+              icon={Send}>
               Create invite
             </Button>
           </ModalFooter>
