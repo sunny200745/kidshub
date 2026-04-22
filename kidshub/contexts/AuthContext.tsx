@@ -38,6 +38,7 @@ import React, { createContext, type ReactNode, useContext, useEffect, useState }
 
 import { ROLES, type Role, isValidRole } from '@/constants/roles';
 import { auth, db } from '@/firebase/config';
+import { emailApi } from '@/firebase/email';
 
 /**
  * Input shape for parent self-registration. Teachers do NOT self-register —
@@ -469,6 +470,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.warn('[AuthContext] failed to delete consumed invite:', deleteErr);
       }
 
+      // "Welcome to KidsHub" email — best effort, never blocks. We don't
+      // await a Promise.race or anything fancy; a slow Resend response
+      // just delays the AuthContext function return by the network trip,
+      // which is acceptable since the user is about to land on a role
+      // router that transitions through a splash screen anyway.
+      //
+      // NOTE: `daycareName` isn't a first-class field on invites yet (one
+      // owner = one daycare in the current MVP), so we fall back to the
+      // inviter's display name. When we ship multi-daycare-per-owner we'll
+      // add a proper daycares/{id}.name read here.
+      try {
+        await emailApi.sendWelcome({
+          email: invite.email,
+          firstName: firstName.trim(),
+          role: 'teacher',
+          daycareName: invite.invitedByName || '',
+        });
+      } catch (welcomeErr) {
+        console.warn('[AuthContext] welcome email failed (teacher):', welcomeErr);
+      }
+
       return fbUser;
     } finally {
       setRegistering(false);
@@ -571,6 +593,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await deleteDoc(doc(db, 'invites', token));
       } catch (deleteErr) {
         console.warn('[AuthContext] failed to delete consumed parent invite:', deleteErr);
+      }
+
+      // Welcome email — same contract as teacher flow above. See the
+      // note there about daycareName falling back to invitedByName.
+      try {
+        await emailApi.sendWelcome({
+          email: invite.email,
+          firstName: firstName.trim(),
+          role: 'parent',
+          daycareName: invite.invitedByName || '',
+        });
+      } catch (welcomeErr) {
+        console.warn('[AuthContext] welcome email failed (parent):', welcomeErr);
       }
 
       return fbUser;

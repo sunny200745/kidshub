@@ -19,7 +19,7 @@
  * This modal is rendered inside ProtectedRoute (owner-gated), and we pass
  * invitedBy + daycareId through invitesApi from user.uid.
  */
-import { Check, Copy, ExternalLink, Mail, Send, Heart } from 'lucide-react';
+import { AlertTriangle, Check, Copy, ExternalLink, Mail, Send, Heart } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { useAuth } from '../../contexts';
@@ -147,14 +147,42 @@ export function InviteParentModal({ isOpen, onClose, onCreated, child }) {
               <Check className="w-6 h-6 text-success-600" />
             </div>
             <h3 className="text-base sm:text-lg font-semibold text-surface-900">
-              Invite ready to share
+              {createdInvite.emailSent ? 'Invite email sent' : 'Invite ready to share'}
             </h3>
             <p className="text-xs sm:text-sm text-surface-500 mt-1">
-              Send this link to <span className="font-medium">{createdInvite.email}</span>.
-              They&apos;ll set up their own password and get connected to{' '}
-              <span className="font-medium">{childName}</span>.
+              {createdInvite.emailSent ? (
+                <>
+                  We emailed <span className="font-medium">{createdInvite.email}</span>{' '}
+                  an activation link. They&apos;ll get connected to{' '}
+                  <span className="font-medium">{childName}</span> after setting a password.
+                </>
+              ) : (
+                <>
+                  Send this link to <span className="font-medium">{createdInvite.email}</span>.
+                  They&apos;ll set up their own password and get connected to{' '}
+                  <span className="font-medium">{childName}</span>.
+                </>
+              )}
             </p>
           </div>
+
+          {createdInvite.emailSent ? (
+            <div className="flex items-center gap-2 p-3 bg-success-50 border border-success-200 rounded-xl text-xs sm:text-sm text-success-800 mb-3">
+              <Mail className="w-4 h-4 flex-shrink-0" />
+              Activation email delivered via Resend to <strong>{createdInvite.email}</strong>.
+            </div>
+          ) : (
+            <div className="flex items-start gap-2 p-3 bg-warning-50 border border-warning-200 rounded-xl text-xs sm:text-sm text-warning-800 mb-3">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <div>
+                Automatic email delivery failed — use the link below to share the
+                invite manually.{' '}
+                <span className="text-warning-700/80">
+                  {createdInvite.emailError?.message || ''}
+                </span>
+              </div>
+            </div>
+          )}
 
           <div className="bg-surface-50 border border-surface-200 rounded-xl p-3 sm:p-4 mb-3">
             <p className="text-xs uppercase tracking-wide text-surface-400 mb-1.5">
@@ -209,7 +237,7 @@ export function InviteParentModal({ isOpen, onClose, onCreated, child }) {
               <Heart className="w-5 h-5 text-brand-600 flex-shrink-0 mt-0.5" />
               <div className="text-xs sm:text-sm text-surface-700">
                 Send a secure link to {childName ? <span className="font-medium">{childName}</span> : 'this child'}&apos;s
-                parent. They&apos;ll set up their own KidsHub account and be connected automatically.
+                parent. We&apos;ll email them an activation link — they&apos;ll set up their own KidsHub account and be connected automatically.
               </div>
             </div>
 

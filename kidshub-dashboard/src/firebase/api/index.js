@@ -7,3 +7,4 @@ export { parentsApi } from './parents';
 export { announcementsApi } from './announcements';
 export { invitesApi, generateInviteToken } from './invites';
 export { usersApi } from './users';
+export { emailApi } from './email';

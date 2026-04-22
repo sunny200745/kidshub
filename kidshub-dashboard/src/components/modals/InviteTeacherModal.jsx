@@ -25,7 +25,7 @@
  * so this modal MUST be rendered inside ProtectedRoute (which already gates
  * the dashboard to owners).
  */
-import { AlertTriangle, Check, Copy, ExternalLink, Send, UserPlus } from 'lucide-react';
+import { AlertTriangle, Check, Copy, ExternalLink, Mail, Send, UserPlus } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { useAuth } from '../../contexts';
@@ -154,15 +154,47 @@ export function InviteTeacherModal({ isOpen, onClose, staffMember, onCreated }) 
               <Check className="w-6 h-6 text-success-600" />
             </div>
             <h3 className="text-base sm:text-lg font-semibold text-surface-900">
-              Invite ready to share
+              {createdInvite.emailSent ? 'Invite email sent' : 'Invite ready to share'}
             </h3>
             <p className="text-xs sm:text-sm text-surface-500 mt-1">
-              Send this link to <span className="font-medium">{createdInvite.email}</span>.
-              They&apos;ll set their own password and land in <span className="font-medium">
-                {createdInvite.classroomName || 'their classroom'}
-              </span>.
+              {createdInvite.emailSent ? (
+                <>
+                  We emailed <span className="font-medium">{createdInvite.email}</span>{' '}
+                  an activation link. They&apos;ll land in{' '}
+                  <span className="font-medium">
+                    {createdInvite.classroomName || 'their classroom'}
+                  </span>{' '}
+                  after setting a password.
+                </>
+              ) : (
+                <>
+                  Send this link to <span className="font-medium">{createdInvite.email}</span>.
+                  They&apos;ll set their own password and land in{' '}
+                  <span className="font-medium">
+                    {createdInvite.classroomName || 'their classroom'}
+                  </span>.
+                </>
+              )}
             </p>
           </div>
+
+          {createdInvite.emailSent ? (
+            <div className="flex items-center gap-2 p-3 bg-success-50 border border-success-200 rounded-xl text-xs sm:text-sm text-success-800 mb-3">
+              <Mail className="w-4 h-4 flex-shrink-0" />
+              Activation email delivered via Resend to <strong>{createdInvite.email}</strong>.
+            </div>
+          ) : (
+            <div className="flex items-start gap-2 p-3 bg-warning-50 border border-warning-200 rounded-xl text-xs sm:text-sm text-warning-800 mb-3">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <div>
+                Automatic email delivery failed — use the link below to share the
+                invite manually.{' '}
+                <span className="text-warning-700/80">
+                  {createdInvite.emailError?.message || ''}
+                </span>
+              </div>
+            </div>
+          )}
 
           <div className="bg-surface-50 border border-surface-200 rounded-xl p-3 sm:p-4 mb-3">
             <p className="text-xs uppercase tracking-wide text-surface-400 mb-1.5">
@@ -214,8 +246,8 @@ export function InviteTeacherModal({ isOpen, onClose, staffMember, onCreated }) 
               <UserPlus className="w-5 h-5 text-brand-600 flex-shrink-0 mt-0.5" />
               <div className="text-xs sm:text-sm text-surface-700">
                 You&apos;re giving <span className="font-medium">{staffName}</span> access to
-                the KidsHub teacher app. They&apos;ll set their own password from the invite
-                link.
+                the KidsHub teacher app. We&apos;ll email an activation link to
+                their address — they set their own password from that link.
               </div>
             </div>
 

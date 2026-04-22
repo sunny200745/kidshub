@@ -45,6 +45,7 @@ import {
 
 import { db } from '../config';
 import { staffApi } from './staff';
+import { emailApi } from './email';
 
 const COLLECTION = 'invites';
 
@@ -126,7 +127,21 @@ export const invitesApi = {
       console.warn('[invitesApi.create] could not flip staff.appStatus to invited:', err);
     }
 
-    return { token, ...payload, expiresAt: expiresAt.toDate() };
+    // Fire off the "Activate your account" email. Best-effort — if Resend
+    // is down or the endpoint is misconfigured, the invite still exists
+    // and the owner can fall back to copying the URL manually. We log but
+    // never throw so the owner's happy path stays unblocked.
+    let emailSent = false;
+    let emailError = null;
+    try {
+      await emailApi.sendInvite(token);
+      emailSent = true;
+    } catch (err) {
+      emailError = err;
+      console.warn('[invitesApi.create] invite email delivery failed:', err);
+    }
+
+    return { token, ...payload, expiresAt: expiresAt.toDate(), emailSent, emailError };
   },
 
   /**
@@ -173,7 +188,18 @@ export const invitesApi = {
 
     await setDoc(doc(db, COLLECTION, token), payload);
 
-    return { token, ...payload, expiresAt: expiresAt.toDate() };
+    // Best-effort invite email (see create() above for rationale).
+    let emailSent = false;
+    let emailError = null;
+    try {
+      await emailApi.sendInvite(token);
+      emailSent = true;
+    } catch (err) {
+      emailError = err;
+      console.warn('[invitesApi.createParentInvite] invite email delivery failed:', err);
+    }
+
+    return { token, ...payload, expiresAt: expiresAt.toDate(), emailSent, emailError };
   },
 
   /**
