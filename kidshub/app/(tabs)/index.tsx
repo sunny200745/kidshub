@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 
 import { HelloWave } from '@/components/hello-wave';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
@@ -17,6 +17,12 @@ export default function HomeScreen() {
           style={styles.reactLogo}
         />
       }>
+      {/* p3-8 NativeWind smoke test — removed in p3-9 when this screen is replaced */}
+      <View className="bg-brand-500 p-4 rounded-xl my-2">
+        <Text className="text-white font-bold text-base">
+          NativeWind smoke test — if this card is pink with bold white text, p3-8 is wired correctly.
+        </Text>
+      </View>
       <ThemedView style={styles.titleContainer}>
         <ThemedText type="title">Welcome!</ThemedText>
         <HelloWave />

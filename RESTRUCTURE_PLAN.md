@@ -130,7 +130,15 @@ daycares/
 - [ ] **p3-5** Port Firebase config (decide: JS SDK cross-platform vs `@react-native-firebase`).
 - [ ] **p3-6** Port auth/user/theme contexts to Expo.
 - [ ] **p3-7** Port hooks, swapping `react-router-dom` for `expo-router` equivalents.
-- [ ] **p3-8** Replace Tailwind with NativeWind (or Tamagui) for cross-platform styling.
+- [x] **p3-8** Installed NativeWind v4 + Tailwind 3.4. Six-file setup per the official Expo guide:
+  - `tailwind.config.js` with full color palette ported from `kidshub-legacy/tailwind.config.js` (brand pink ramp #FFF0F7→#8F0040, accent purple, surface slate, success/warning/danger/info, plus Inter font family). NB: dropped the `boxShadow` and `keyframes`/`animation` extensions — RN doesn't honor CSS box shadows or CSS keyframes the same way; we'll use `react-native-reanimated` for animations and platform-aware shadow styles in p3-12 if we miss them. Content globs cover `app/`, `components/`, `hooks/`, `constants/`.
+  - `global.css` — three Tailwind directives only (`@tailwind base/components/utilities`).
+  - `babel.config.js` — `babel-preset-expo` with `jsxImportSource: 'nativewind'` + `nativewind/babel` preset chained.
+  - `metro.config.js` — extended the existing monorepo config (watchFolders + nodeModulesPaths + disableHierarchicalLookup) by wrapping the final export in `withNativeWind(config, { input: './global.css' })`.
+  - `nativewind-env.d.ts` — single triple-slash directive for type completion. NativeWind installer auto-added it to `tsconfig.json` includes.
+  - `app/_layout.tsx` — added `import '../global.css'` at the top so the stylesheet is in the bundle from app boot.
+  - Pinned `babel-preset-expo@~54.0.10` (npm initially installed v55 which Expo SDK 54 flagged as incompatible).
+  - Visual smoke test: dropped a `<View className="bg-brand-500 p-4 rounded-xl my-2">` banner on the home screen, verified `bg-brand-500` compiled to `rgb(255 45 138)` (= #FF2D8A, our brand pink), `font-bold`/`p-4`/`rounded-xl`/`text-white` all present in served HTML. Banner gets removed in p3-9 when we replace the screen wholesale.
 
 ### 3c. Routing + UI
 
