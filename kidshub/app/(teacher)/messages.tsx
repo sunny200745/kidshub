@@ -201,7 +201,7 @@ function Thread({ conversation, onBack, onSend }: ThreadProps) {
         </View>
         <Pressable onPress={submit} disabled={!draft.trim()}>
           <LinearGradient
-            colors={draft.trim() ? ['#FF2D8A', '#8B5CF6'] : ['#E5E7EB', '#E5E7EB']}
+            colors={draft.trim() ? ['#14B8A6', '#0D9488'] : ['#E5E7EB', '#E5E7EB']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={{
@@ -224,7 +224,7 @@ function MessageBubble({ message }: { message: Message }) {
     return (
       <View className="self-end max-w-[80%]">
         <LinearGradient
-          colors={['#FF2D8A', '#8B5CF6']}
+          colors={['#14B8A6', '#0D9488']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={{ borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10 }}>

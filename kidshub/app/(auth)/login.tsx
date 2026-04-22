@@ -174,10 +174,10 @@ export default function LoginScreen() {
               </Pressable>
 
               <View className="mt-6 pt-5 border-t border-surface-100 dark:border-surface-700 items-center">
-                <Text className="text-sm text-surface-500 dark:text-surface-400">
-                  Don&apos;t have an account?{' '}
+                <Text className="text-sm text-surface-500 dark:text-surface-400 text-center">
+                  Need access?{' '}
                   <Link href="/register" className="text-brand-600 dark:text-brand-400 font-semibold">
-                    Create one
+                    Ask your daycare for an invite
                   </Link>
                 </Text>
               </View>

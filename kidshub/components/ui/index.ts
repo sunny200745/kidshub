@@ -15,3 +15,5 @@ export { Avatar } from './avatar';
 export type { AvatarProps, AvatarSize } from './avatar';
 export { Badge } from './badge';
 export type { BadgeProps, BadgeVariant } from './badge';
+export { RoleBadge } from './role-badge';
+export type { RoleBadgeProps } from './role-badge';

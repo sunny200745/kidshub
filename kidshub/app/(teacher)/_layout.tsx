@@ -23,52 +23,55 @@
  */
 import { Tabs } from 'expo-router';
 import {
-  Activity as ActivityIcon,
-  Home,
+  ClipboardList,
+  LayoutGrid,
   MessageSquare,
-  User,
   UserCheck,
+  UserCog,
 } from 'lucide-react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { RouteSplash } from '@/components/route-splash';
-import { Colors } from '@/constants/theme';
 import { ROLES } from '@/constants/roles';
-import { useTheme } from '@/contexts';
-import { useRequireRole } from '@/hooks';
+import { getRoleTheme, useRequireRole } from '@/hooks';
+
+const TEACHER_THEME = getRoleTheme(ROLES.TEACHER);
 
 export default function TeacherLayout() {
   const { status } = useRequireRole({ allowedRoles: [ROLES.TEACHER] });
-  const { effective } = useTheme();
 
   if (status !== 'allowed') return <RouteSplash />;
 
+  // Teacher view uses teal for active tab tint (vs brand pink on parent side)
+  // — same hook all other teacher screens pull their accent from.
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[effective].tint,
+        tabBarActiveTintColor: TEACHER_THEME.accentHex,
+        tabBarInactiveTintColor: '#64748b',
         headerShown: false,
         tabBarButton: HapticTab,
+        tabBarLabelStyle: { fontWeight: '600', fontSize: 11, letterSpacing: 0.2 },
       }}>
       <Tabs.Screen
         name="classroom"
         options={{
-          title: 'Classroom',
-          tabBarIcon: ({ color, size }) => <Home size={size} color={color} />,
+          title: 'Roster',
+          tabBarIcon: ({ color, size }) => <LayoutGrid size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="check-in"
         options={{
-          title: 'Check in',
+          title: 'Attendance',
           tabBarIcon: ({ color, size }) => <UserCheck size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="activities"
         options={{
-          title: 'Activities',
-          tabBarIcon: ({ color, size }) => <ActivityIcon size={size} color={color} />,
+          title: 'Log',
+          tabBarIcon: ({ color, size }) => <ClipboardList size={size} color={color} />,
         }}
       />
       <Tabs.Screen
@@ -81,8 +84,8 @@ export default function TeacherLayout() {
       <Tabs.Screen
         name="teacher-profile"
         options={{
-          title: 'Profile',
-          tabBarIcon: ({ color, size }) => <User size={size} color={color} />,
+          title: 'Staff',
+          tabBarIcon: ({ color, size }) => <UserCog size={size} color={color} />,
         }}
       />
     </Tabs>

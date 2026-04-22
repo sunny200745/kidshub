@@ -7,13 +7,14 @@
  */
 import { Image, Text, View } from 'react-native';
 
-export type AvatarSize = 'sm' | 'md' | 'lg' | 'xl';
+export type AvatarSize = 'sm' | 'md' | 'lg' | 'xl' | '2xl';
 
 const SIZES: Record<AvatarSize, { box: number; font: number }> = {
   sm: { box: 32, font: 12 },
   md: { box: 40, font: 14 },
   lg: { box: 48, font: 16 },
   xl: { box: 64, font: 20 },
+  '2xl': { box: 96, font: 32 },
 };
 
 export type AvatarProps = {

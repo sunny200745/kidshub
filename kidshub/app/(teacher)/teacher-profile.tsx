@@ -145,7 +145,7 @@ export default function TeacherProfile() {
         <CardBody className="p-0">
           <SettingsRow
             icon={Users}
-            iconColor="#FF2D8A"
+            iconColor="#14B8A6"
             label="Children"
             detail={`${classroomRoster.length} enrolled · ${classroom.ageRange}`}
           />

@@ -96,7 +96,7 @@ function ChildCheckRow({ child, onAction }: ChildCardProps) {
         ) : (
           <Pressable
             onPress={() => onAction(child, 'in')}
-            className="bg-brand-500 flex-row items-center gap-1.5 px-3 py-2 rounded-xl">
+            className="bg-teacher-500 flex-row items-center gap-1.5 px-3 py-2 rounded-xl">
             <UserCheck size={14} color="white" />
             <Text className="text-white font-semibold text-sm">In</Text>
           </Pressable>
@@ -216,7 +216,7 @@ function CheckInSheet({ child, type, onClose, onConfirm, isProcessing }: ModalPr
             <Pressable
               onPress={confirm}
               disabled={isProcessing}
-              className="flex-1 bg-brand-500 rounded-xl py-3 items-center flex-row justify-center gap-2">
+              className="flex-1 bg-teacher-500 rounded-xl py-3 items-center flex-row justify-center gap-2">
               {isProcessing ? <ActivityIndicator color="white" /> : null}
               <Text className="text-white font-semibold">
                 {type === 'in' ? 'Confirm check in' : 'Confirm check out'}
@@ -320,8 +320,8 @@ export default function TeacherCheckIn() {
         </Card>
         <Card className="flex-1">
           <CardBody className="p-4 flex-row items-center gap-3">
-            <View className="w-10 h-10 rounded-xl bg-brand-100 dark:bg-brand-500/20 items-center justify-center">
-              <Clock size={20} color="#FF2D8A" />
+            <View className="w-10 h-10 rounded-xl bg-teacher-100 dark:bg-teacher-500/20 items-center justify-center">
+              <Clock size={20} color="#14B8A6" />
             </View>
             <View>
               <Text className="text-2xl font-bold text-surface-900 dark:text-surface-50">
@@ -356,7 +356,7 @@ export default function TeacherCheckIn() {
                     onPress={() => setFilter(option.value)}
                     className={`px-4 py-2 rounded-xl ${
                       isActive
-                        ? 'bg-brand-500'
+                        ? 'bg-teacher-500'
                         : 'bg-surface-100 dark:bg-surface-800'
                     }`}>
                     <Text

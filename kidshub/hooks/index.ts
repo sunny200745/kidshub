@@ -21,3 +21,10 @@ export { useAuthRedirect } from './use-auth-redirect';
 export type { AuthRequirement, UseAuthRedirectOptions } from './use-auth-redirect';
 export { useRequireRole } from './use-require-role';
 export type { UseRequireRoleOptions } from './use-require-role';
+
+/**
+ * Role-aware theming (parent: pink, teacher: teal). See use-role-theme.ts
+ * for the token map + usage patterns.
+ */
+export { useRoleTheme, getRoleTheme } from './use-role-theme';
+export type { RoleTheme } from './use-role-theme';

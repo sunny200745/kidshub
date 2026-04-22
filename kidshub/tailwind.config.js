@@ -37,6 +37,23 @@ module.exports = {
           800: '#5B21B6',
           900: '#4C1D95',
         },
+        // Teacher role palette — teal. Used only inside the (teacher) group
+        // (see contexts/ThemeContext + useRoleTheme) so parents still see
+        // the brand/pink palette. Picked teal because it reads "operational"
+        // and is far enough from the brand pink that a teacher glancing at
+        // the app never confuses it with the parent view.
+        teacher: {
+          50: '#F0FDFA',
+          100: '#CCFBF1',
+          200: '#99F6E4',
+          300: '#5EEAD4',
+          400: '#2DD4BF',
+          500: '#14B8A6',
+          600: '#0D9488',
+          700: '#0F766E',
+          800: '#115E59',
+          900: '#134E4A',
+        },
         surface: {
           50: '#F8FAFC',
           100: '#F1F5F9',

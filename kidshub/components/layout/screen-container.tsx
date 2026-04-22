@@ -25,6 +25,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { ReactNode } from 'react';
 import { ScrollView, Text, View, type ViewStyle } from 'react-native';
 
+import { RoleBadge } from '@/components/ui/role-badge';
+
 export type ScreenContainerProps = {
   title?: string;
   subtitle?: string;
@@ -33,6 +35,8 @@ export type ScreenContainerProps = {
   scrollable?: boolean;
   /** Disable the title/subtitle header block (useful when the child renders its own hero). */
   hideHeader?: boolean;
+  /** When true (default) renders the Parent/Teacher role pill next to the title. */
+  showRoleBadge?: boolean;
   /** Extra classes on the outermost safe-area wrapper. */
   className?: string;
   /** Extra style on the ScrollView content (only when `scrollable`). */
@@ -45,21 +49,27 @@ export function ScreenContainer({
   children,
   scrollable = true,
   hideHeader = false,
+  showRoleBadge = true,
   className = '',
   contentContainerStyle,
 }: ScreenContainerProps) {
   const Header = !hideHeader && (title || subtitle) ? (
     <View className="px-4 pt-4 pb-2">
-      {title ? (
-        <Text className="text-2xl font-bold text-surface-900 dark:text-surface-50">
-          {title}
-        </Text>
-      ) : null}
-      {subtitle ? (
-        <Text className="text-sm text-surface-500 dark:text-surface-400 mt-0.5">
-          {subtitle}
-        </Text>
-      ) : null}
+      <View className="flex-row items-start justify-between gap-2">
+        <View className="flex-1">
+          {title ? (
+            <Text className="text-2xl font-bold text-surface-900 dark:text-surface-50">
+              {title}
+            </Text>
+          ) : null}
+          {subtitle ? (
+            <Text className="text-sm text-surface-500 dark:text-surface-400 mt-0.5">
+              {subtitle}
+            </Text>
+          ) : null}
+        </View>
+        {showRoleBadge ? <RoleBadge className="mt-1" /> : null}
+      </View>
     </View>
   ) : null;
 

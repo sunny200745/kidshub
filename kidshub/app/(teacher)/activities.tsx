@@ -364,7 +364,7 @@ function NewActivityModal({
                 <Pressable
                   onPress={submit}
                   disabled={loading}
-                  className="flex-1 bg-brand-500 rounded-xl py-3 items-center flex-row justify-center gap-2">
+                  className="flex-1 bg-teacher-500 rounded-xl py-3 items-center flex-row justify-center gap-2">
                   {loading ? <ActivityIndicator color="white" /> : null}
                   <Text className="text-white font-semibold">Log activity</Text>
                 </Pressable>
@@ -461,7 +461,7 @@ export default function TeacherActivities() {
       {/* Big log button */}
       <Pressable
         onPress={() => openModal()}
-        className="bg-brand-500 rounded-xl py-3 items-center flex-row justify-center gap-2 mb-4">
+        className="bg-teacher-500 rounded-xl py-3 items-center flex-row justify-center gap-2 mb-4">
         <Plus size={18} color="white" />
         <Text className="text-white font-semibold">Log activity</Text>
       </Pressable>
@@ -480,7 +480,7 @@ export default function TeacherActivities() {
                 key={t}
                 onPress={() => setFilterType(t)}
                 className={`px-4 py-2 rounded-xl ${
-                  isActive ? 'bg-brand-500' : 'bg-surface-100 dark:bg-surface-800'
+                  isActive ? 'bg-teacher-500' : 'bg-surface-100 dark:bg-surface-800'
                 }`}>
                 <Text
                   className={`text-sm font-medium ${

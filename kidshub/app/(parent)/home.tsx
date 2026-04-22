@@ -14,6 +14,7 @@
  * Data source: mock data for now (data/mockData.ts). Swapped for Firestore
  * live reads in p3-15 once security rules are in place.
  */
+import { LinearGradient } from 'expo-linear-gradient';
 import { Link } from 'expo-router';
 import {
   Bell,
@@ -30,7 +31,8 @@ import { Pressable, Text, View } from 'react-native';
 
 import { ActivityIcon } from '@/components/icons/activity-icon';
 import { ScreenContainer } from '@/components/layout';
-import { Avatar, Card, CardBody } from '@/components/ui';
+import { Avatar, Card, CardBody, RoleBadge } from '@/components/ui';
+import { Fonts } from '@/constants/theme';
 import {
   announcements,
   myChildren,
@@ -48,49 +50,22 @@ function formatTime(iso: string): string {
 }
 
 function ChildStatusCard({ child }: { child: Child }) {
-  const isCheckedIn = child.status === 'checked-in';
-  const checkInTime = formatTime(child.checkInTime);
-
+  // Identity + check-in state already live in the hero above, so this card
+  // is now the "day snapshot" — classroom context + 3 quick stats. Keeps a
+  // visible anchor for the classroom color stripe.
   return (
     <Card className="overflow-hidden">
-      {/* Accent stripe in the classroom's assigned color */}
-      <View style={{ height: 8, backgroundColor: child.classroomColor }} />
+      <View style={{ height: 6, backgroundColor: child.classroomColor }} />
       <CardBody className="p-4">
-        <View className="flex-row items-start gap-4">
-          <Avatar name={`${child.firstName} ${child.lastName}`} size="xl" />
-          <View className="flex-1">
-            <Text className="text-lg font-semibold text-surface-900 dark:text-surface-50">
-              {child.firstName} {child.lastName}
-            </Text>
-            <Text className="text-sm text-surface-500 dark:text-surface-400">
-              {child.classroom}
-            </Text>
-
-            <View className="flex-row flex-wrap items-center gap-4 mt-3">
-              <View className="flex-row items-center gap-1.5">
-                <View
-                  className={`w-2 h-2 rounded-full ${
-                    isCheckedIn ? 'bg-success-500' : 'bg-surface-300'
-                  }`}
-                />
-                <Text className="text-sm text-surface-600 dark:text-surface-300">
-                  {isCheckedIn ? 'Checked In' : 'Not Checked In'}
-                </Text>
-              </View>
-              {isCheckedIn ? (
-                <View className="flex-row items-center gap-1.5">
-                  <Clock size={14} color="#64748B" />
-                  <Text className="text-sm text-surface-500 dark:text-surface-400">
-                    {checkInTime}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-          </View>
+        <View className="flex-row items-center justify-between mb-4">
+          <Text className="text-sm font-semibold text-surface-700 dark:text-surface-200">
+            {child.classroom}
+          </Text>
+          <Text className="text-[11px] text-surface-400 uppercase tracking-wider font-semibold">
+            Today&apos;s snapshot
+          </Text>
         </View>
-
-        {/* Quick stats: 3-up grid of meals / nap / photos counts */}
-        <View className="flex-row gap-3 mt-4 pt-4 border-t border-surface-100 dark:border-surface-700">
+        <View className="flex-row gap-3">
           <QuickStat icon={Utensils} label="Meals" value="2" color="warning" />
           <QuickStat icon={Moon} label="Nap" value="Sleeping" color="info" />
           <QuickStat icon={Camera} label="Photos" value="3" color="brand" />
@@ -281,15 +256,71 @@ export default function ParentHome() {
   const greeting = getGreeting();
 
   return (
-    <ScreenContainer title="Home" subtitle={`Here's how ${child.firstName} is doing today`}>
-      <View className="gap-4">
-        <View>
-          <Text className="text-xl font-bold text-surface-900 dark:text-surface-50">
-            {greeting}!
-          </Text>
-          <Text className="text-sm text-surface-500 dark:text-surface-400">
-            Here&apos;s how {child.firstName} is doing today
-          </Text>
+    // hideHeader so the container doesn't duplicate the greeting we render
+    // below. The parent hero IS the page's title on this screen.
+    <ScreenContainer hideHeader showRoleBadge={false}>
+      <View className="gap-4 pt-2">
+        {/* Parent hero — warm pink-gradient card, big avatar, personal greeting.
+            Intentionally contrasts with the teacher cockpit (data-first teal
+            band) so a glance tells you whose view you're in. */}
+        <View className="overflow-hidden rounded-3xl">
+          <LinearGradient
+            colors={['#FFE0EF', '#FFF0F7', '#FFFFFF']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={{ padding: 20 }}>
+            <View className="flex-row items-center justify-between mb-4">
+              <RoleBadge />
+              <Text className="text-[11px] text-surface-500 font-medium">
+                {new Date().toLocaleDateString('en-US', {
+                  weekday: 'long',
+                  month: 'long',
+                  day: 'numeric',
+                })}
+              </Text>
+            </View>
+
+            <View className="items-center">
+              <View
+                style={{
+                  shadowColor: '#FF2D8A',
+                  shadowOpacity: 0.18,
+                  shadowRadius: 12,
+                  shadowOffset: { width: 0, height: 4 },
+                  elevation: 4,
+                }}>
+                <Avatar
+                  name={`${child.firstName} ${child.lastName}`}
+                  size="2xl"
+                  className="border-4 border-white"
+                />
+              </View>
+              <Text
+                className="text-surface-500 dark:text-surface-300 text-sm mt-3"
+                style={{ fontFamily: Fonts.rounded }}>
+                {greeting},
+              </Text>
+              <Text
+                className="text-3xl font-bold text-surface-900 dark:text-surface-50 text-center"
+                style={{ fontFamily: Fonts.rounded }}>
+                {child.firstName}&apos;s doing great
+                <Text style={{ color: '#F0106B' }}> today</Text>
+              </Text>
+
+              <View className="flex-row items-center gap-1.5 mt-2 px-3 py-1 rounded-full bg-white/60">
+                <View
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    child.status === 'checked-in' ? 'bg-success-500' : 'bg-surface-300'
+                  }`}
+                />
+                <Text className="text-xs font-semibold text-surface-700">
+                  {child.status === 'checked-in'
+                    ? `Checked in · ${formatTime(child.checkInTime)}`
+                    : 'Not checked in yet'}
+                </Text>
+              </View>
+            </View>
+          </LinearGradient>
         </View>
 
         <AnnouncementBanner />
