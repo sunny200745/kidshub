@@ -7,17 +7,33 @@ import {
   updateDoc,
   deleteDoc,
   onSnapshot,
+  query,
+  where,
   serverTimestamp,
 } from 'firebase/firestore';
-import { db } from '../config';
+import { auth, db } from '../config';
 
 const COLLECTION = 'classrooms';
 
+function currentDaycareId() {
+  const uid = auth?.currentUser?.uid;
+  if (!uid) {
+    throw new Error('classroomsApi: no authenticated user — cannot stamp daycareId');
+  }
+  return uid;
+}
+
 export const classroomsApi = {
   // Get all classrooms
+  // Scoped by daycareId — required because Firestore rules gate list queries
+  // via resource.data.daycareId. Unfiltered reads fail permission-denied.
   async getAll() {
     try {
-      const querySnapshot = await getDocs(collection(db, COLLECTION));
+      const q = query(
+        collection(db, COLLECTION),
+        where('daycareId', '==', currentDaycareId())
+      );
+      const querySnapshot = await getDocs(q);
       return querySnapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
@@ -45,12 +61,14 @@ export const classroomsApi = {
 
   // Create new classroom
   async create(classroomData) {
-    const docRef = await addDoc(collection(db, COLLECTION), {
+    const payload = {
       ...classroomData,
+      daycareId: currentDaycareId(),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-    });
-    return { id: docRef.id, ...classroomData };
+    };
+    const docRef = await addDoc(collection(db, COLLECTION), payload);
+    return { id: docRef.id, ...payload };
   },
 
   // Update classroom
@@ -78,10 +96,14 @@ export const classroomsApi = {
     await deleteDoc(docRef);
   },
 
-  // Subscribe to real-time updates
+  // Subscribe to real-time updates (scoped by daycareId — see getAll).
   subscribe(callback) {
-    return onSnapshot(
+    const q = query(
       collection(db, COLLECTION),
+      where('daycareId', '==', currentDaycareId())
+    );
+    return onSnapshot(
+      q,
       (snapshot) => {
         const classrooms = snapshot.docs.map((doc) => ({
           id: doc.id,

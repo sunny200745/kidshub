@@ -9,10 +9,15 @@
  */
 import { Stack } from 'expo-router';
 
+import { RouteSplash } from '@/components/route-splash';
 import { useAuthRedirect } from '@/hooks';
 
 export default function AuthLayout() {
-  useAuthRedirect({ require: 'anonymous', redirectTo: '/' });
+  const { status } = useAuthRedirect({ require: 'anonymous', redirectTo: '/' });
+
+  // While AuthContext is settling, OR while we're bouncing an already-signed-in
+  // visitor back to /, show a neutral splash so they don't briefly see /login.
+  if (status !== 'allowed') return <RouteSplash />;
 
   return <Stack screenOptions={{ headerShown: false }} />;
 }

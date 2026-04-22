@@ -11,15 +11,27 @@ import {
   onSnapshot,
   serverTimestamp,
 } from 'firebase/firestore';
-import { db } from '../config';
+import { auth, db } from '../config';
 
 const COLLECTION = 'staff';
 
+function currentDaycareId() {
+  const uid = auth?.currentUser?.uid;
+  if (!uid) {
+    throw new Error('staffApi: no authenticated user — cannot stamp daycareId');
+  }
+  return uid;
+}
+
 export const staffApi = {
-  // Get all staff
+  // Get all staff (scoped by daycareId — Firestore rules require it).
   async getAll() {
     try {
-      const querySnapshot = await getDocs(collection(db, COLLECTION));
+      const q = query(
+        collection(db, COLLECTION),
+        where('daycareId', '==', currentDaycareId())
+      );
+      const querySnapshot = await getDocs(q);
       return querySnapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
@@ -45,11 +57,12 @@ export const staffApi = {
     }
   },
 
-  // Get staff by classroom
+  // Get staff by classroom (tenant-scoped).
   async getByClassroom(classroomId) {
     try {
       const q = query(
         collection(db, COLLECTION),
+        where('daycareId', '==', currentDaycareId()),
         where('classroom', '==', classroomId)
       );
       const querySnapshot = await getDocs(q);
@@ -63,11 +76,12 @@ export const staffApi = {
     }
   },
 
-  // Get online staff
+  // Get online staff (tenant-scoped).
   async getOnline() {
     try {
       const q = query(
         collection(db, COLLECTION),
+        where('daycareId', '==', currentDaycareId()),
         where('status', '==', 'online')
       );
       const querySnapshot = await getDocs(q);
@@ -83,12 +97,14 @@ export const staffApi = {
 
   // Create new staff
   async create(staffData) {
-    const docRef = await addDoc(collection(db, COLLECTION), {
+    const payload = {
       ...staffData,
+      daycareId: currentDaycareId(),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-    });
-    return { id: docRef.id, ...staffData };
+    };
+    const docRef = await addDoc(collection(db, COLLECTION), payload);
+    return { id: docRef.id, ...payload };
   },
 
   // Update staff
@@ -116,10 +132,14 @@ export const staffApi = {
     await deleteDoc(docRef);
   },
 
-  // Subscribe to real-time updates
+  // Subscribe to real-time updates (scoped by daycareId).
   subscribe(callback) {
-    return onSnapshot(
+    const q = query(
       collection(db, COLLECTION),
+      where('daycareId', '==', currentDaycareId())
+    );
+    return onSnapshot(
+      q,
       (snapshot) => {
         const staff = snapshot.docs.map((doc) => ({
           id: doc.id,

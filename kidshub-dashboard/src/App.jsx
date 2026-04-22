@@ -16,6 +16,7 @@ import Messages from './pages/Messages';
 import Schedule from './pages/Schedule';
 import CheckIn from './pages/CheckIn';
 import Activities from './pages/Activities';
+import Announcements from './pages/Announcements';
 import Settings from './pages/Settings';
 
 function App() {
@@ -54,7 +55,10 @@ function App() {
           {/* Activities Routes */}
           <Route path="/activities" element={<ProtectedRoute><Activities /></ProtectedRoute>} />
           <Route path="/activities/new" element={<ProtectedRoute><Activities /></ProtectedRoute>} />
-          
+
+          {/* Announcements Route */}
+          <Route path="/announcements" element={<ProtectedRoute><Announcements /></ProtectedRoute>} />
+
           {/* Settings Route */}
           <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
           

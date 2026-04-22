@@ -10,16 +10,33 @@ import {
   where,
   onSnapshot,
   serverTimestamp,
+  writeBatch,
 } from 'firebase/firestore';
-import { db } from '../config';
+import { auth, db } from '../config';
 
 const COLLECTION = 'children';
 
+function currentDaycareId() {
+  // In the dashboard, the signed-in user is always the owner, so their uid
+  // IS the daycareId (1 owner = 1 daycare in our data model). If this ever
+  // changes (e.g. a second owner joining an existing daycare as a co-admin),
+  // the rule for setting daycareId will move to reading users/{uid}.daycareId.
+  const uid = auth?.currentUser?.uid;
+  if (!uid) {
+    throw new Error('childrenApi: no authenticated user — cannot stamp daycareId');
+  }
+  return uid;
+}
+
 export const childrenApi = {
-  // Get all children
+  // Get all children (scoped by daycareId — Firestore rules require it).
   async getAll() {
     try {
-      const querySnapshot = await getDocs(collection(db, COLLECTION));
+      const q = query(
+        collection(db, COLLECTION),
+        where('daycareId', '==', currentDaycareId())
+      );
+      const querySnapshot = await getDocs(q);
       return querySnapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
@@ -45,11 +62,12 @@ export const childrenApi = {
     }
   },
 
-  // Get children by classroom
+  // Get children by classroom (tenant-scoped).
   async getByClassroom(classroomId) {
     try {
       const q = query(
         collection(db, COLLECTION),
+        where('daycareId', '==', currentDaycareId()),
         where('classroom', '==', classroomId)
       );
       const querySnapshot = await getDocs(q);
@@ -63,11 +81,12 @@ export const childrenApi = {
     }
   },
 
-  // Get checked-in children
+  // Get checked-in children (tenant-scoped).
   async getCheckedIn() {
     try {
       const q = query(
         collection(db, COLLECTION),
+        where('daycareId', '==', currentDaycareId()),
         where('status', '==', 'checked-in')
       );
       const querySnapshot = await getDocs(q);
@@ -83,12 +102,20 @@ export const childrenApi = {
 
   // Create new child
   async create(childData) {
-    const docRef = await addDoc(collection(db, COLLECTION), {
+    const daycareId = currentDaycareId();
+    const payload = {
       ...childData,
+      daycareId,
+      // parentIds is the array used by Firestore rules to gate parent reads
+      // (a parent sees a child iff childId ∈ userChildIds AND they are in
+      // the child's parentIds). Always initialize even if empty — owners link
+      // parents via usersApi.linkParentToChild later.
+      parentIds: Array.isArray(childData.parentIds) ? childData.parentIds : [],
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-    });
-    return { id: docRef.id, ...childData };
+    };
+    const docRef = await addDoc(collection(db, COLLECTION), payload);
+    return { id: docRef.id, ...payload };
   },
 
   // Update child
@@ -132,10 +159,65 @@ export const childrenApi = {
     await deleteDoc(docRef);
   },
 
-  // Subscribe to real-time updates
+  /**
+   * Delete a child along with their dependent log data (activities, messages).
+   * Batched in groups of 400 to stay under Firestore's 500-op batch limit.
+   *
+   * We deliberately do NOT cascade into parent users — unlink is a manual
+   * owner action via the ChildProfile Contacts tab. This method will throw
+   * if the child still has parentIds linked; the UI blocks the delete
+   * before calling this, but we guard here too for safety.
+   */
+  async deleteWithDependents(id) {
+    if (!id) throw new Error('childrenApi.deleteWithDependents: id required');
+    const daycareId = currentDaycareId();
+
+    const childSnap = await getDoc(doc(db, COLLECTION, id));
+    if (!childSnap.exists()) return;
+    const child = childSnap.data();
+    if (Array.isArray(child.parentIds) && child.parentIds.length > 0) {
+      throw new Error(
+        `Cannot delete child while ${child.parentIds.length} parent(s) are still linked. Unlink them first.`
+      );
+    }
+
+    // Collect dependent docs (tenant-scoped so rules accept the list queries).
+    const [activitiesSnap, messagesSnap] = await Promise.all([
+      getDocs(query(
+        collection(db, 'activities'),
+        where('daycareId', '==', daycareId),
+        where('childId', '==', id),
+      )),
+      getDocs(query(
+        collection(db, 'messages'),
+        where('daycareId', '==', daycareId),
+        where('childId', '==', id),
+      )),
+    ]);
+
+    const allRefs = [
+      ...activitiesSnap.docs.map((d) => d.ref),
+      ...messagesSnap.docs.map((d) => d.ref),
+      doc(db, COLLECTION, id),
+    ];
+
+    // Chunk into batches of up to 400 writes.
+    const CHUNK = 400;
+    for (let i = 0; i < allRefs.length; i += CHUNK) {
+      const batch = writeBatch(db);
+      allRefs.slice(i, i + CHUNK).forEach((ref) => batch.delete(ref));
+      await batch.commit();
+    }
+  },
+
+  // Subscribe to real-time updates (scoped by daycareId).
   subscribe(callback) {
-    return onSnapshot(
+    const q = query(
       collection(db, COLLECTION),
+      where('daycareId', '==', currentDaycareId())
+    );
+    return onSnapshot(
+      q,
       (snapshot) => {
         const children = snapshot.docs.map((doc) => ({
           id: doc.id,

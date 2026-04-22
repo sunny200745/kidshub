@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   addDoc,
   updateDoc,
@@ -12,15 +13,52 @@ import {
   onSnapshot,
   serverTimestamp,
 } from 'firebase/firestore';
-import { db } from '../config';
+import { auth, db } from '../config';
 
 const COLLECTION = 'activities';
 
+function currentDaycareId() {
+  const uid = auth?.currentUser?.uid;
+  if (!uid) {
+    throw new Error('activitiesApi: no authenticated user — cannot stamp daycareId');
+  }
+  return uid;
+}
+
+/**
+ * Derive the classroomId for a new activity. Teachers' Firestore rule grants
+ * read access to activities where `classroomId == userClassroom()`, so every
+ * new activity MUST carry this field. If the caller already provided it,
+ * use as-is. Otherwise, look it up from the child's doc (one extra read).
+ */
+async function resolveClassroomId(activityData) {
+  if (activityData.classroomId) return activityData.classroomId;
+  if (!activityData.childId) {
+    throw new Error('activitiesApi.create: childId is required to derive classroomId');
+  }
+  const childSnap = await getDoc(doc(db, 'children', activityData.childId));
+  if (!childSnap.exists()) {
+    throw new Error(`activitiesApi.create: child ${activityData.childId} not found`);
+  }
+  const child = childSnap.data();
+  // Children use `classroom` as the FK field name today (pre-rename). Accept
+  // either to keep this forward-compatible with the planned rename.
+  const classroomId = child.classroomId || child.classroom;
+  if (!classroomId) {
+    throw new Error(`activitiesApi.create: child ${activityData.childId} has no classroom`);
+  }
+  return classroomId;
+}
+
 export const activitiesApi = {
-  // Get all activities
+  // Get all activities (tenant-scoped).
   async getAll(limitCount = 100) {
     try {
-      const querySnapshot = await getDocs(collection(db, COLLECTION));
+      const q = query(
+        collection(db, COLLECTION),
+        where('daycareId', '==', currentDaycareId())
+      );
+      const querySnapshot = await getDocs(q);
       const activities = querySnapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
@@ -32,12 +70,16 @@ export const activitiesApi = {
     }
   },
 
-  // Get activities for today
+  // Get activities for today (tenant-scoped).
   async getToday() {
     try {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const querySnapshot = await getDocs(collection(db, COLLECTION));
+      const q = query(
+        collection(db, COLLECTION),
+        where('daycareId', '==', currentDaycareId())
+      );
+      const querySnapshot = await getDocs(q);
       const activities = querySnapshot.docs
         .map((doc) => ({
           id: doc.id,
@@ -52,11 +94,12 @@ export const activitiesApi = {
     }
   },
 
-  // Get activities by child
+  // Get activities by child (tenant-scoped).
   async getByChild(childId) {
     try {
       const q = query(
         collection(db, COLLECTION),
+        where('daycareId', '==', currentDaycareId()),
         where('childId', '==', childId)
       );
       const querySnapshot = await getDocs(q);
@@ -71,11 +114,12 @@ export const activitiesApi = {
     }
   },
 
-  // Get activities by type
+  // Get activities by type (tenant-scoped).
   async getByType(type) {
     try {
       const q = query(
         collection(db, COLLECTION),
+        where('daycareId', '==', currentDaycareId()),
         where('type', '==', type)
       );
       const querySnapshot = await getDocs(q);
@@ -92,12 +136,16 @@ export const activitiesApi = {
 
   // Create new activity
   async create(activityData) {
-    const docRef = await addDoc(collection(db, COLLECTION), {
+    const classroomId = await resolveClassroomId(activityData);
+    const payload = {
       ...activityData,
+      classroomId,
+      daycareId: currentDaycareId(),
       timestamp: activityData.timestamp || new Date().toISOString(),
       createdAt: serverTimestamp(),
-    });
-    return { id: docRef.id, ...activityData };
+    };
+    const docRef = await addDoc(collection(db, COLLECTION), payload);
+    return { id: docRef.id, ...payload };
   },
 
   // Log check-in activity
@@ -138,13 +186,16 @@ export const activitiesApi = {
     await deleteDoc(docRef);
   },
 
-  // Subscribe to today's activities
+  // Subscribe to today's activities (tenant-scoped).
   subscribeToToday(callback) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
-    return onSnapshot(
+    const q = query(
       collection(db, COLLECTION),
+      where('daycareId', '==', currentDaycareId())
+    );
+    return onSnapshot(
+      q,
       (snapshot) => {
         const activities = snapshot.docs
           .map((doc) => ({
@@ -162,10 +213,11 @@ export const activitiesApi = {
     );
   },
 
-  // Subscribe to child activities
+  // Subscribe to child activities (tenant-scoped).
   subscribeToChild(childId, callback) {
     const q = query(
       collection(db, COLLECTION),
+      where('daycareId', '==', currentDaycareId()),
       where('childId', '==', childId)
     );
     

@@ -23,6 +23,11 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  // `registering` masks loading=true while Register.jsx is mid-flight between
+  // createUserWithEmailAndPassword and the users/{uid} setDoc. Without it the
+  // profile snapshot fires with `exists=false`, role becomes null, and
+  // ProtectedRoute redirects to /unauthorized before the doc is written.
+  const [registering, setRegistering] = useState(false);
 
   useEffect(() => {
     let unsubProfile = null;
@@ -80,6 +85,8 @@ export function AuthProvider({ children }) {
   const rawRole = profile?.role ?? null;
   const role = isValidRole(rawRole) ? rawRole : null;
 
+  const effectiveLoading = loading || registering;
+
   const value = {
     user,
     profile,
@@ -87,11 +94,13 @@ export function AuthProvider({ children }) {
     isOwner: role === ROLES.OWNER,
     isTeacher: role === ROLES.TEACHER,
     isParent: role === ROLES.PARENT,
-    loading,
+    loading: effectiveLoading,
     login,
     logout,
     resetPassword,
     isAuthenticated: !!user,
+    registering,
+    setRegistering,
   };
 
   return (

@@ -10,15 +10,27 @@ import {
   onSnapshot,
   serverTimestamp,
 } from 'firebase/firestore';
-import { db } from '../config';
+import { auth, db } from '../config';
 
 const COLLECTION = 'messages';
 
+function currentDaycareId() {
+  const uid = auth?.currentUser?.uid;
+  if (!uid) {
+    throw new Error('messagesApi: no authenticated user — cannot stamp daycareId');
+  }
+  return uid;
+}
+
 export const messagesApi = {
-  // Get all messages
+  // Get all messages (tenant-scoped).
   async getAll() {
     try {
-      const querySnapshot = await getDocs(collection(db, COLLECTION));
+      const q = query(
+        collection(db, COLLECTION),
+        where('daycareId', '==', currentDaycareId())
+      );
+      const querySnapshot = await getDocs(q);
       const messages = querySnapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
@@ -30,11 +42,12 @@ export const messagesApi = {
     }
   },
 
-  // Get messages by conversation
+  // Get messages by conversation (tenant-scoped).
   async getByConversation(conversationId) {
     try {
       const q = query(
         collection(db, COLLECTION),
+        where('daycareId', '==', currentDaycareId()),
         where('conversationId', '==', conversationId)
       );
       const querySnapshot = await getDocs(q);
@@ -49,11 +62,12 @@ export const messagesApi = {
     }
   },
 
-  // Get messages by child
+  // Get messages by child (tenant-scoped).
   async getByChild(childId) {
     try {
       const q = query(
         collection(db, COLLECTION),
+        where('daycareId', '==', currentDaycareId()),
         where('childId', '==', childId)
       );
       const querySnapshot = await getDocs(q);
@@ -68,11 +82,12 @@ export const messagesApi = {
     }
   },
 
-  // Get unread messages count
+  // Get unread messages count (tenant-scoped).
   async getUnreadCount() {
     try {
       const q = query(
         collection(db, COLLECTION),
+        where('daycareId', '==', currentDaycareId()),
         where('read', '==', false),
         where('senderType', '==', 'parent')
       );
@@ -86,13 +101,15 @@ export const messagesApi = {
 
   // Create new message
   async create(messageData) {
-    const docRef = await addDoc(collection(db, COLLECTION), {
+    const payload = {
       ...messageData,
+      daycareId: messageData.daycareId || currentDaycareId(),
       timestamp: new Date().toISOString(),
       read: false,
       createdAt: serverTimestamp(),
-    });
-    return { id: docRef.id, ...messageData };
+    };
+    const docRef = await addDoc(collection(db, COLLECTION), payload);
+    return { id: docRef.id, ...payload };
   },
 
   // Send message from staff
@@ -117,10 +134,11 @@ export const messagesApi = {
     });
   },
 
-  // Mark all messages in conversation as read
+  // Mark all messages in conversation as read (tenant-scoped read, then writes).
   async markConversationAsRead(conversationId) {
     const q = query(
       collection(db, COLLECTION),
+      where('daycareId', '==', currentDaycareId()),
       where('conversationId', '==', conversationId),
       where('read', '==', false)
     );
@@ -137,13 +155,14 @@ export const messagesApi = {
     await deleteDoc(docRef);
   },
 
-  // Subscribe to conversation
+  // Subscribe to conversation (tenant-scoped).
   subscribeToConversation(conversationId, callback) {
     const q = query(
       collection(db, COLLECTION),
+      where('daycareId', '==', currentDaycareId()),
       where('conversationId', '==', conversationId)
     );
-    
+
     return onSnapshot(
       q,
       (snapshot) => {
@@ -162,10 +181,14 @@ export const messagesApi = {
     );
   },
 
-  // Subscribe to all messages (for conversation list)
+  // Subscribe to all messages for conversation list (tenant-scoped).
   subscribe(callback) {
-    return onSnapshot(
+    const q = query(
       collection(db, COLLECTION),
+      where('daycareId', '==', currentDaycareId())
+    );
+    return onSnapshot(
+      q,
       (snapshot) => {
         const messages = snapshot.docs
           .map((doc) => ({

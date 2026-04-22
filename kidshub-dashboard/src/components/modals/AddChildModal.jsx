@@ -1,4 +1,11 @@
-import React, { useState } from 'react';
+/**
+ * ChildFormModal — create or edit a child.
+ *
+ * Pass `child` to enter edit mode (pre-fills form, updates on submit).
+ * Without it, the modal is in create mode. `AddChildModal` is kept as a
+ * named alias for backward compatibility.
+ */
+import React, { useEffect, useState } from 'react';
 import { X, Plus, AlertTriangle } from 'lucide-react';
 import { Modal, ModalFooter, Button, Input, Select, Textarea, Badge } from '../ui';
 import { childrenApi } from '../../firebase/api';
@@ -23,13 +30,52 @@ const initialFormData = {
   },
 };
 
-export function AddChildModal({ isOpen, onClose, onSuccess }) {
+function buildInitialForm(child) {
+  if (!child) return initialFormData;
+  return {
+    firstName: child.firstName || '',
+    lastName: child.lastName || '',
+    dateOfBirth: child.dateOfBirth || '',
+    gender: child.gender || 'Male',
+    classroom: child.classroom || child.classroomId || '',
+    allergies: Array.isArray(child.allergies) ? child.allergies : [],
+    medicalConditions: Array.isArray(child.medicalConditions) ? child.medicalConditions : [],
+    dietaryRestrictions: Array.isArray(child.dietaryRestrictions) ? child.dietaryRestrictions : [],
+    specialInstructions: child.specialInstructions || '',
+    schedule: {
+      ...initialFormData.schedule,
+      ...(child.schedule || {}),
+    },
+  };
+}
+
+function calculateAge(dob) {
+  if (!dob) return '';
+  const birth = new Date(dob);
+  const today = new Date();
+  const months = (today.getFullYear() - birth.getFullYear()) * 12 + (today.getMonth() - birth.getMonth());
+  if (months < 12) return `${months} months`;
+  const years = Math.floor(months / 12);
+  return `${years} year${years > 1 ? 's' : ''}`;
+}
+
+export function ChildFormModal({ isOpen, onClose, onSuccess, child }) {
+  const isEdit = !!child;
   const { data: classrooms } = useClassroomsData();
-  const [formData, setFormData] = useState(initialFormData);
+
+  const [formData, setFormData] = useState(() => buildInitialForm(child));
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [allergyInput, setAllergyInput] = useState('');
   const [conditionInput, setConditionInput] = useState('');
   const [dietaryInput, setDietaryInput] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      setFormData(buildInitialForm(child));
+      setError('');
+    }
+  }, [child, isOpen]);
 
   const classroomOptions = [
     { value: '', label: 'Select Classroom' },
@@ -105,56 +151,70 @@ export function AddChildModal({ isOpen, onClose, onSuccess }) {
     }));
   };
 
-  const calculateAge = (dob) => {
-    if (!dob) return '';
-    const birth = new Date(dob);
-    const today = new Date();
-    const months = (today.getFullYear() - birth.getFullYear()) * 12 + (today.getMonth() - birth.getMonth());
-    if (months < 12) return `${months} months`;
-    const years = Math.floor(months / 12);
-    return `${years} year${years > 1 ? 's' : ''}`;
-  };
-
   const handleSubmit = async () => {
     if (!formData.firstName || !formData.lastName || !formData.dateOfBirth || !formData.classroom) {
-      alert('Please fill in all required fields');
+      setError('Please fill in all required fields.');
       return;
     }
 
+    setError('');
     setLoading(true);
     try {
-      await childrenApi.create({
+      const basePayload = {
         ...formData,
         age: calculateAge(formData.dateOfBirth),
-        status: 'absent',
-        checkInTime: null,
-        avatar: null,
-        parents: [],
-        emergencyContacts: [],
-        authorizedPickups: [],
-        enrollmentDate: new Date().toISOString().split('T')[0],
-      });
-      
-      setFormData(initialFormData);
+      };
+
+      if (isEdit) {
+        await childrenApi.update(child.id, basePayload);
+      } else {
+        await childrenApi.create({
+          ...basePayload,
+          status: 'absent',
+          checkInTime: null,
+          avatar: null,
+          parents: [],
+          emergencyContacts: [],
+          authorizedPickups: [],
+          enrollmentDate: new Date().toISOString().split('T')[0],
+        });
+      }
+
+      if (!isEdit) setFormData(initialFormData);
       onSuccess?.();
       onClose();
-    } catch (error) {
-      console.error('Error adding child:', error);
-      alert('Error adding child. Please try again.');
+    } catch (err) {
+      console.error(`Error ${isEdit ? 'updating' : 'adding'} child:`, err);
+      setError(
+        err?.code === 'permission-denied'
+          ? "You don't have permission to do that. If this looks wrong, contact support."
+          : `Could not ${isEdit ? 'save changes' : 'add child'}. Please try again.`
+      );
     } finally {
       setLoading(false);
     }
   };
 
   const handleClose = () => {
-    setFormData(initialFormData);
+    if (loading) return;
+    if (!isEdit) setFormData(initialFormData);
+    setError('');
     onClose();
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Add New Child" size="lg">
+    <Modal
+      isOpen={isOpen}
+      onClose={handleClose}
+      title={isEdit ? 'Edit Child' : 'Add New Child'}
+      size="lg">
       <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
-        {/* Basic Info */}
+        {error ? (
+          <div className="p-3 bg-danger-50 border border-danger-200 rounded-xl text-sm text-danger-700">
+            {error}
+          </div>
+        ) : null}
+
         <div className="grid grid-cols-2 gap-4">
           <Input
             label="First Name *"
@@ -197,7 +257,6 @@ export function AddChildModal({ isOpen, onClose, onSuccess }) {
           onChange={handleChange}
         />
 
-        {/* Weekly Schedule */}
         <div>
           <label className="block text-sm font-medium text-surface-700 mb-2">
             Weekly Schedule
@@ -212,15 +271,13 @@ export function AddChildModal({ isOpen, onClose, onSuccess }) {
                   enrolled
                     ? 'bg-brand-500 text-white'
                     : 'bg-surface-100 text-surface-500'
-                }`}
-              >
+                }`}>
                 {day.charAt(0).toUpperCase() + day.slice(1, 3)}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Allergies */}
         <div>
           <label className="block text-sm font-medium text-surface-700 mb-2">
             Allergies
@@ -253,7 +310,6 @@ export function AddChildModal({ isOpen, onClose, onSuccess }) {
           )}
         </div>
 
-        {/* Medical Conditions */}
         <div>
           <label className="block text-sm font-medium text-surface-700 mb-2">
             Medical Conditions
@@ -285,7 +341,6 @@ export function AddChildModal({ isOpen, onClose, onSuccess }) {
           )}
         </div>
 
-        {/* Dietary Restrictions */}
         <div>
           <label className="block text-sm font-medium text-surface-700 mb-2">
             Dietary Restrictions
@@ -317,7 +372,6 @@ export function AddChildModal({ isOpen, onClose, onSuccess }) {
           )}
         </div>
 
-        {/* Special Instructions */}
         <Textarea
           label="Special Instructions"
           name="specialInstructions"
@@ -333,9 +387,11 @@ export function AddChildModal({ isOpen, onClose, onSuccess }) {
           Cancel
         </Button>
         <Button onClick={handleSubmit} loading={loading}>
-          Add Child
+          {isEdit ? 'Save Changes' : 'Add Child'}
         </Button>
       </ModalFooter>
     </Modal>
   );
 }
+
+export const AddChildModal = ChildFormModal;

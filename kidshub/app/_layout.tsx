@@ -30,14 +30,18 @@ export default function RootLayout() {
         <NavigationThemeBridge>
           {/*
             File-based routing under app/:
-              /                 app/index.tsx          — role router (Redirects to the right group)
-              /unauthorized     app/unauthorized.tsx   — wrong-role landing
-              /login etc.       app/(auth)/*.tsx       — signed-out-only screens
-              /home             app/(parent)/home.tsx  — parent's landing
+              /                 app/index.tsx              — role router (Redirects to the right group)
+              /unauthorized     app/unauthorized.tsx       — wrong-role landing
+              /login etc.       app/(auth)/*.tsx           — signed-out-only screens
+              /invite/{token}   app/invite/[token].tsx     — teacher invite acceptance (open route)
+              /home             app/(parent)/home.tsx      — parent's landing
               /classroom        app/(teacher)/classroom.tsx — teacher's landing
 
             The Stack here is just the container; each group has its own
-            layout (Stack for (auth), Tabs for (parent)/(teacher)).
+            layout (Stack for (auth), Tabs for (parent)/(teacher)). The
+            invite route lives outside any group so it's reachable by both
+            anonymous teachers (the common case) and signed-in users (who
+            see a "sign out to continue" card).
           */}
           <Stack screenOptions={{ headerShown: false }} />
           <StatusBar style="auto" />

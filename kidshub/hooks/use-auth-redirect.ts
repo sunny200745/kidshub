@@ -26,9 +26,28 @@ export type UseAuthRedirectOptions = {
   redirectTo: string;
 };
 
-export function useAuthRedirect({ require, redirectTo }: UseAuthRedirectOptions) {
+export type AuthRedirectStatus = 'loading' | 'allowed' | 'redirecting';
+
+export type UseAuthRedirectResult = {
+  status: AuthRedirectStatus;
+  loading: boolean;
+  isAuthenticated: boolean;
+};
+
+export function useAuthRedirect({
+  require,
+  redirectTo,
+}: UseAuthRedirectOptions): UseAuthRedirectResult {
   const router = useRouter();
   const { isAuthenticated, loading } = useAuth();
+
+  const meetsRequirement =
+    require === 'authenticated' ? isAuthenticated : !isAuthenticated;
+  const status: AuthRedirectStatus = loading
+    ? 'loading'
+    : meetsRequirement
+      ? 'allowed'
+      : 'redirecting';
 
   useEffect(() => {
     if (loading) return;
@@ -39,5 +58,5 @@ export function useAuthRedirect({ require, redirectTo }: UseAuthRedirectOptions)
     }
   }, [loading, isAuthenticated, require, redirectTo, router]);
 
-  return { loading, isAuthenticated };
+  return { status, loading, isAuthenticated };
 }

@@ -1,8 +1,8 @@
 import React from 'react';
-import { useLocation, Link } from 'react-router-dom';
+import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { ShieldAlert, LogOut, ExternalLink, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts';
-import { ROLES, ROLE_LABELS } from '../constants/roles';
+import { ROLES, ROLE_LABELS, DASHBOARD_ALLOWED_ROLES } from '../constants/roles';
 
 /**
  * Friendly bounce page for authenticated users who can't access the dashboard.
@@ -17,9 +17,20 @@ import { ROLES, ROLE_LABELS } from '../constants/roles';
  */
 export default function Unauthorized() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, role, logout, loading } = useAuth();
   const reason = location.state?.reason ?? 'unknown';
   const [signingOut, setSigningOut] = React.useState(false);
+
+  // Self-heal: if the profile snapshot eventually arrives with an allowed
+  // role (can happen when a registration write races the auth listener),
+  // bounce the user back into the app instead of leaving them stranded here.
+  React.useEffect(() => {
+    if (loading) return;
+    if (role && DASHBOARD_ALLOWED_ROLES.includes(role)) {
+      navigate('/', { replace: true });
+    }
+  }, [loading, role, navigate]);
 
   const handleSignOut = async () => {
     try {

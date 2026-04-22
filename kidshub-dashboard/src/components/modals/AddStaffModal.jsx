@@ -1,4 +1,11 @@
-import React, { useState } from 'react';
+/**
+ * StaffFormModal — create or edit a staff member.
+ *
+ * Pass `staffMember` to enter edit mode (pre-fills form, updates on submit).
+ * Without it, the modal is in create mode. `AddStaffModal` is kept as a
+ * named alias for backward compatibility.
+ */
+import React, { useEffect, useState } from 'react';
 import { Plus, X, Award } from 'lucide-react';
 import { Modal, ModalFooter, Button, Input, Select, Textarea, Badge } from '../ui';
 import { staffApi } from '../../firebase/api';
@@ -34,11 +41,36 @@ const initialFormData = {
   bio: '',
 };
 
-export function AddStaffModal({ isOpen, onClose, onSuccess }) {
+function buildInitialForm(staffMember) {
+  if (!staffMember) return initialFormData;
+  return {
+    firstName: staffMember.firstName || '',
+    lastName: staffMember.lastName || '',
+    email: staffMember.email || '',
+    phone: staffMember.phone || '',
+    role: staffMember.role || 'Teacher',
+    classroom: staffMember.classroom || staffMember.classroomId || '',
+    certifications: Array.isArray(staffMember.certifications) ? staffMember.certifications : [],
+    hireDate: staffMember.hireDate || new Date().toISOString().split('T')[0],
+    bio: staffMember.bio || '',
+  };
+}
+
+export function StaffFormModal({ isOpen, onClose, onSuccess, staffMember }) {
+  const isEdit = !!staffMember;
   const { data: classrooms } = useClassroomsData();
-  const [formData, setFormData] = useState(initialFormData);
+
+  const [formData, setFormData] = useState(() => buildInitialForm(staffMember));
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [certInput, setCertInput] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      setFormData(buildInitialForm(staffMember));
+      setError('');
+    }
+  }, [staffMember, isOpen]);
 
   const classroomOptions = [
     { value: '', label: 'No Classroom (Admin/Floating)' },
@@ -69,39 +101,63 @@ export function AddStaffModal({ isOpen, onClose, onSuccess }) {
 
   const handleSubmit = async () => {
     if (!formData.firstName || !formData.lastName || !formData.email || !formData.role) {
-      alert('Please fill in all required fields');
+      setError('Please fill in all required fields.');
       return;
     }
 
+    setError('');
     setLoading(true);
     try {
-      await staffApi.create({
+      const payload = {
         ...formData,
-        avatar: null,
-        status: 'offline',
         classroom: formData.classroom || null,
-      });
-      
-      setFormData(initialFormData);
+      };
+
+      if (isEdit) {
+        await staffApi.update(staffMember.id, payload);
+      } else {
+        await staffApi.create({
+          ...payload,
+          avatar: null,
+          status: 'offline',
+        });
+      }
+
+      if (!isEdit) setFormData(initialFormData);
       onSuccess?.();
       onClose();
-    } catch (error) {
-      console.error('Error adding staff:', error);
-      alert('Error adding staff member. Please try again.');
+    } catch (err) {
+      console.error(`Error ${isEdit ? 'updating' : 'adding'} staff:`, err);
+      setError(
+        err?.code === 'permission-denied'
+          ? "You don't have permission to do that. If this looks wrong, contact support."
+          : `Could not ${isEdit ? 'save changes' : 'add staff member'}. Please try again.`
+      );
     } finally {
       setLoading(false);
     }
   };
 
   const handleClose = () => {
-    setFormData(initialFormData);
+    if (loading) return;
+    if (!isEdit) setFormData(initialFormData);
+    setError('');
     onClose();
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Add New Staff Member" size="lg">
+    <Modal
+      isOpen={isOpen}
+      onClose={handleClose}
+      title={isEdit ? 'Edit Staff Member' : 'Add New Staff Member'}
+      size="lg">
       <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
-        {/* Basic Info */}
+        {error ? (
+          <div className="p-3 bg-danger-50 border border-danger-200 rounded-xl text-sm text-danger-700">
+            {error}
+          </div>
+        ) : null}
+
         <div className="grid grid-cols-2 gap-4">
           <Input
             label="First Name *"
@@ -163,13 +219,11 @@ export function AddStaffModal({ isOpen, onClose, onSuccess }) {
           onChange={handleChange}
         />
 
-        {/* Certifications */}
         <div>
           <label className="block text-sm font-medium text-surface-700 mb-2">
             Certifications
           </label>
-          
-          {/* Quick add common certifications */}
+
           <div className="flex flex-wrap gap-2 mb-3">
             {commonCertifications.map((cert) => (
               <button
@@ -181,14 +235,12 @@ export function AddStaffModal({ isOpen, onClose, onSuccess }) {
                   formData.certifications.includes(cert)
                     ? 'bg-success-100 border-success-300 text-success-700 cursor-not-allowed'
                     : 'bg-white border-surface-200 text-surface-600 hover:border-brand-300 hover:bg-brand-50'
-                }`}
-              >
+                }`}>
                 {formData.certifications.includes(cert) ? '✓ ' : '+ '}{cert}
               </button>
             ))}
           </div>
 
-          {/* Custom certification input */}
           <div className="flex gap-2 mb-2">
             <input
               type="text"
@@ -203,7 +255,6 @@ export function AddStaffModal({ isOpen, onClose, onSuccess }) {
             </Button>
           </div>
 
-          {/* Selected certifications */}
           {formData.certifications.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {formData.certifications.map((cert, index) => (
@@ -219,7 +270,6 @@ export function AddStaffModal({ isOpen, onClose, onSuccess }) {
           )}
         </div>
 
-        {/* Bio */}
         <Textarea
           label="Bio"
           name="bio"
@@ -235,9 +285,11 @@ export function AddStaffModal({ isOpen, onClose, onSuccess }) {
           Cancel
         </Button>
         <Button onClick={handleSubmit} loading={loading}>
-          Add Staff Member
+          {isEdit ? 'Save Changes' : 'Add Staff Member'}
         </Button>
       </ModalFooter>
     </Modal>
   );
 }
+
+export const AddStaffModal = StaffFormModal;

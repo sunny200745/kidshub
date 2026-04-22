@@ -11,10 +11,14 @@
  *   - If the user IS signed in but their role isn't one of `allowedRoles`,
  *     redirects to `unauthorizedRedirectTo` (default '/unauthorized').
  *
- * Used in p3-13 to hang (parent) and (teacher) group layouts off role-scoped
- * guards, e.g. inside app/(parent)/_layout.tsx:
+ * Returns a `status` so the caller can gate render until the guard resolves.
+ * This matters because router.replace() runs in an effect — without gating,
+ * a parent could glimpse the teacher tab bar for one frame before the
+ * redirect lands. Recommended layout pattern:
  *
- *     useRequireRole({ allowedRoles: [ROLES.PARENT] });
+ *     const { status } = useRequireRole({ allowedRoles: [ROLES.PARENT] });
+ *     if (status !== 'allowed') return <SplashOrNull />;
+ *     return <Tabs ... />;
  *
  * Firestore security rules (p3-15) do the real gatekeeping server-side; this
  * is defense-in-depth + UX (bouncing to an explanatory screen beats a silent
@@ -32,13 +36,29 @@ export type UseRequireRoleOptions = {
   unauthorizedRedirectTo?: string;
 };
 
+export type RequireRoleStatus = 'loading' | 'allowed' | 'redirecting';
+
+export type UseRequireRoleResult = {
+  status: RequireRoleStatus;
+  loading: boolean;
+  isAuthenticated: boolean;
+  role: ReturnType<typeof useAuth>['role'];
+};
+
 export function useRequireRole({
   allowedRoles,
   unauthedRedirectTo = '/login',
   unauthorizedRedirectTo = '/unauthorized',
-}: UseRequireRoleOptions) {
+}: UseRequireRoleOptions): UseRequireRoleResult {
   const router = useRouter();
   const { isAuthenticated, loading, role } = useAuth();
+
+  const isAllowed = isAuthenticated && !!role && allowedRoles.includes(role);
+  const status: RequireRoleStatus = loading
+    ? 'loading'
+    : isAllowed
+      ? 'allowed'
+      : 'redirecting';
 
   useEffect(() => {
     if (loading) return;
@@ -59,5 +79,5 @@ export function useRequireRole({
     router,
   ]);
 
-  return { loading, isAuthenticated, role };
+  return { status, loading, isAuthenticated, role };
 }

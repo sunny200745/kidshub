@@ -7,22 +7,41 @@
  * UX-wise it's much better to bounce early than to show a page full of
  * "permission denied" errors.
  *
- * Tabs: starting with just Home; p3-10 adds Schedule / Activity / Messages /
- * Photos / Profile as we port those pages from kidshub-legacy.
+ * Tabs (left-to-right on the tab bar):
+ *   Home → Activity → Schedule → Messages → Photos → Profile
+ *
+ * Why lucide-react-native instead of IconSymbol for the tab bar:
+ *   IconSymbol maps to SF Symbols on iOS and MaterialIcons on Android/web,
+ *   which gave us inconsistent glyphs (e.g. "house.fill" became a Material
+ *   house on Android that looked very different from the iOS one). Lucide
+ *   ships a single vector family that renders identically on every platform
+ *   and matches the legacy web UI exactly.
  */
 import { Tabs } from 'expo-router';
+import {
+  Activity as ActivityIcon,
+  Calendar,
+  Home,
+  ImageIcon,
+  MessageSquare,
+  User,
+} from 'lucide-react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
+import { RouteSplash } from '@/components/route-splash';
 import { Colors } from '@/constants/theme';
 import { ROLES } from '@/constants/roles';
 import { useTheme } from '@/contexts';
 import { useRequireRole } from '@/hooks';
 
 export default function ParentLayout() {
-  useRequireRole({ allowedRoles: [ROLES.PARENT] });
-
+  const { status } = useRequireRole({ allowedRoles: [ROLES.PARENT] });
   const { effective } = useTheme();
+
+  // Hold the splash until the role check settles. A teacher tapping a stale
+  // /home link would otherwise see the parent tab bar render for one frame
+  // before useEffect bounces them to /unauthorized.
+  if (status !== 'allowed') return <RouteSplash />;
 
   return (
     <Tabs
@@ -35,10 +54,44 @@ export default function ParentLayout() {
         name="home"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          tabBarIcon: ({ color, size }) => <Home size={size} color={color} />,
         }}
       />
-      {/* p3-10 adds: schedule, activity, messages, photos, profile */}
+      <Tabs.Screen
+        name="activity"
+        options={{
+          title: 'Activity',
+          tabBarIcon: ({ color, size }) => <ActivityIcon size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="schedule"
+        options={{
+          title: 'Schedule',
+          tabBarIcon: ({ color, size }) => <Calendar size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="messages"
+        options={{
+          title: 'Messages',
+          tabBarIcon: ({ color, size }) => <MessageSquare size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="photos"
+        options={{
+          title: 'Photos',
+          tabBarIcon: ({ color, size }) => <ImageIcon size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Profile',
+          tabBarIcon: ({ color, size }) => <User size={size} color={color} />,
+        }}
+      />
     </Tabs>
   );
 }

@@ -1,6 +1,14 @@
-import React, { useState } from 'react';
+/**
+ * ClassroomFormModal — create or edit a classroom.
+ *
+ * Pass `classroom` to enter edit mode (pre-fills form, updates on submit).
+ * Without it, the modal is in create mode. `AddClassroomModal` is kept as a
+ * named alias for backward compatibility; all new callers should prefer
+ * `ClassroomFormModal`.
+ */
+import React, { useEffect, useState } from 'react';
 import { Plus, X, Clock } from 'lucide-react';
-import { Modal, ModalFooter, Button, Input, Textarea, Badge } from '../ui';
+import { Modal, ModalFooter, Button, Input, Textarea } from '../ui';
 import { classroomsApi } from '../../firebase/api';
 
 const colorOptions = [
@@ -39,11 +47,38 @@ const initialFormData = {
   schedule: defaultSchedule,
 };
 
-export function AddClassroomModal({ isOpen, onClose, onSuccess }) {
-  const [formData, setFormData] = useState(initialFormData);
+function buildInitialForm(classroom) {
+  if (!classroom) return initialFormData;
+  return {
+    name: classroom.name || '',
+    ageGroup: classroom.ageGroup || '',
+    ageRange: classroom.ageRange || '',
+    capacity: classroom.capacity ?? 12,
+    description: classroom.description || '',
+    color: classroom.color || '#FF2D8A',
+    schedule: Array.isArray(classroom.schedule) && classroom.schedule.length
+      ? classroom.schedule
+      : defaultSchedule,
+  };
+}
+
+export function ClassroomFormModal({ isOpen, onClose, onSuccess, classroom }) {
+  const isEdit = !!classroom;
+
+  const [formData, setFormData] = useState(() => buildInitialForm(classroom));
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [newScheduleTime, setNewScheduleTime] = useState('');
   const [newScheduleActivity, setNewScheduleActivity] = useState('');
+
+  // Re-sync form when the classroom prop changes (e.g. clicking Edit on a
+  // different classroom without closing the modal first).
+  useEffect(() => {
+    if (isOpen) {
+      setFormData(buildInitialForm(classroom));
+      setError('');
+    }
+  }, [classroom, isOpen]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -70,40 +105,63 @@ export function AddClassroomModal({ isOpen, onClose, onSuccess }) {
 
   const handleSubmit = async () => {
     if (!formData.name || !formData.ageGroup || !formData.capacity) {
-      alert('Please fill in all required fields');
+      setError('Please fill in all required fields.');
       return;
     }
 
+    setError('');
     setLoading(true);
     try {
-      await classroomsApi.create({
+      const payload = {
         ...formData,
-        capacity: parseInt(formData.capacity),
-        currentCount: 0,
-        staff: [],
-        leadTeacher: null,
-      });
-      
-      setFormData(initialFormData);
+        capacity: parseInt(formData.capacity, 10),
+      };
+      if (isEdit) {
+        await classroomsApi.update(classroom.id, payload);
+      } else {
+        await classroomsApi.create({
+          ...payload,
+          currentCount: 0,
+          staff: [],
+          leadTeacher: null,
+        });
+      }
+
+      if (!isEdit) setFormData(initialFormData);
       onSuccess?.();
       onClose();
-    } catch (error) {
-      console.error('Error adding classroom:', error);
-      alert('Error adding classroom. Please try again.');
+    } catch (err) {
+      console.error(`Error ${isEdit ? 'updating' : 'adding'} classroom:`, err);
+      setError(
+        err?.code === 'permission-denied'
+          ? "You don't have permission to do that. If this looks wrong, contact support."
+          : `Could not ${isEdit ? 'save changes' : 'add classroom'}. Please try again.`
+      );
     } finally {
       setLoading(false);
     }
   };
 
   const handleClose = () => {
-    setFormData(initialFormData);
+    if (loading) return;
+    if (!isEdit) setFormData(initialFormData);
+    setError('');
     onClose();
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Add New Classroom" size="lg">
+    <Modal
+      isOpen={isOpen}
+      onClose={handleClose}
+      title={isEdit ? 'Edit Classroom' : 'Add New Classroom'}
+      size="lg">
       <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
-        {/* Basic Info */}
+        {error ? (
+          <div className="p-3 bg-danger-50 border border-danger-200 rounded-xl text-sm text-danger-700">
+            {error}
+          </div>
+        ) : null}
+
         <Input
           label="Classroom Name *"
           name="name"
@@ -139,7 +197,6 @@ export function AddClassroomModal({ isOpen, onClose, onSuccess }) {
           max="30"
         />
 
-        {/* Color Selection */}
         <div>
           <label className="block text-sm font-medium text-surface-700 mb-2">
             Classroom Color
@@ -169,13 +226,11 @@ export function AddClassroomModal({ isOpen, onClose, onSuccess }) {
           rows={2}
         />
 
-        {/* Schedule */}
         <div>
           <label className="block text-sm font-medium text-surface-700 mb-2">
             Daily Schedule
           </label>
-          
-          {/* Add new schedule item */}
+
           <div className="flex gap-2 mb-3">
             <input
               type="text"
@@ -197,20 +252,17 @@ export function AddClassroomModal({ isOpen, onClose, onSuccess }) {
             </Button>
           </div>
 
-          {/* Schedule list */}
           <div className="space-y-1 max-h-40 overflow-y-auto">
             {formData.schedule.map((item, index) => (
               <div
                 key={index}
-                className="flex items-center gap-3 p-2 bg-surface-50 rounded-lg"
-              >
+                className="flex items-center gap-3 p-2 bg-surface-50 rounded-lg">
                 <Clock className="w-4 h-4 text-surface-400" />
                 <span className="w-20 text-sm font-medium text-surface-600">{item.time}</span>
                 <span className="flex-1 text-sm text-surface-800">{item.activity}</span>
                 <button
                   onClick={() => removeScheduleItem(index)}
-                  className="p-1 hover:bg-surface-200 rounded"
-                >
+                  className="p-1 hover:bg-surface-200 rounded">
                   <X className="w-4 h-4 text-surface-400" />
                 </button>
               </div>
@@ -224,9 +276,12 @@ export function AddClassroomModal({ isOpen, onClose, onSuccess }) {
           Cancel
         </Button>
         <Button onClick={handleSubmit} loading={loading}>
-          Add Classroom
+          {isEdit ? 'Save Changes' : 'Add Classroom'}
         </Button>
       </ModalFooter>
     </Modal>
   );
 }
+
+// Back-compat alias. New code should import ClassroomFormModal directly.
+export const AddClassroomModal = ClassroomFormModal;

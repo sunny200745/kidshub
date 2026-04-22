@@ -21,8 +21,8 @@
  *     always works: cold-start the app, land here, get routed.
  */
 import { Redirect } from 'expo-router';
-import { ActivityIndicator, Text, View } from 'react-native';
 
+import { RouteSplash } from '@/components/route-splash';
 import { ROLES } from '@/constants/roles';
 import { useAuth } from '@/contexts';
 
@@ -30,12 +30,7 @@ export default function RoleRouter() {
   const { loading, isAuthenticated, role } = useAuth();
 
   if (loading) {
-    return (
-      <View className="flex-1 items-center justify-center bg-surface-50 dark:bg-surface-900">
-        <ActivityIndicator size="large" />
-        <Text className="mt-3 text-surface-500 text-sm">Loading KidsHub…</Text>
-      </View>
-    );
+    return <RouteSplash />;
   }
 
   if (!isAuthenticated) {

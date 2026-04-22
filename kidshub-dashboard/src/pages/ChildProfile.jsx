@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -14,6 +14,11 @@ import {
   FileText,
   MessageSquare,
   Edit,
+  UserPlus,
+  Copy,
+  Check,
+  Trash2,
+  Clock,
 } from 'lucide-react';
 import { Layout } from '../components/layout';
 import {
@@ -26,10 +31,66 @@ import {
   Button,
   LoadingPage,
   EmptyState,
+  ConfirmDialog,
 } from '../components/ui';
 import { ActivityIcon, activityLabels } from '../components/icons/ActivityIcons';
 import { useChild, useClassroom, useChildActivities, useParentsData, useStaffData } from '../hooks';
-import { activitiesApi } from '../firebase/api';
+import { activitiesApi, childrenApi, invitesApi, usersApi } from '../firebase/api';
+import { InviteParentModal, ChildFormModal } from '../components/modals';
+
+/**
+ * Same VITE_KIDSHUB_APP_URL as InviteParentModal — kept as a local constant
+ * to avoid depending on the modal's internal export (which would pull in
+ * its entire React tree just for a URL).
+ */
+const KIDSHUB_BASE_URL = (
+  import.meta.env.VITE_KIDSHUB_APP_URL || 'http://localhost:5191'
+).replace(/\/$/, '');
+
+/**
+ * Inline pending parent invite row — shown in the Contacts tab.
+ * Duplicates Staff.jsx's PendingInviteRow at a smaller scale; extract to
+ * a shared component if/when a third call site appears.
+ */
+function PendingParentInviteRow({ invite, onCopy, onRevoke, copiedToken }) {
+  const expiresMs = invite.expiresAt?.toMillis?.();
+  const expired = typeof expiresMs === 'number' && expiresMs < Date.now();
+  const inviteUrl = `${KIDSHUB_BASE_URL}/invite/${invite.token}`;
+  const copied = copiedToken === invite.token;
+
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 p-3 bg-surface-50 rounded-xl">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Mail className="w-3.5 h-3.5 text-surface-400 flex-shrink-0" />
+          <span className="text-sm font-medium text-surface-800 truncate">{invite.email}</span>
+          {expired ? (
+            <Badge variant="danger">Expired</Badge>
+          ) : (
+            <Badge variant="neutral">
+              <Clock className="w-3 h-3" />
+              Pending
+            </Badge>
+          )}
+        </div>
+        <code className="block mt-1 text-xs text-surface-500 break-all truncate">{inviteUrl}</code>
+      </div>
+      <div className="flex gap-2 flex-shrink-0">
+        <Button
+          size="sm"
+          variant="secondary"
+          icon={copied ? Check : Copy}
+          onClick={() => onCopy(inviteUrl, invite.token)}
+          className={copied ? 'bg-success-100 text-success-700 hover:bg-success-200' : ''}>
+          {copied ? 'Copied' : 'Copy'}
+        </Button>
+        <Button size="sm" variant="secondary" icon={Trash2} onClick={() => onRevoke(invite)}>
+          Revoke
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 const quickLogActions = [
   { type: 'meal', icon: Utensils, label: 'Meal', color: 'bg-warning-100 text-warning-600' },
@@ -103,6 +164,72 @@ export default function ChildProfile() {
   const { data: parents } = useParentsData();
   const { data: staff } = useStaffData();
   const [activeTab, setActiveTab] = useState('timeline');
+  const [showInviteParentModal, setShowInviteParentModal] = useState(false);
+  const [pendingParentInvites, setPendingParentInvites] = useState([]);
+  const [copiedInviteToken, setCopiedInviteToken] = useState('');
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [linkedParentUsers, setLinkedParentUsers] = useState([]);
+  const [loadingLinkedParents, setLoadingLinkedParents] = useState(false);
+  const [confirmUnlinkParent, setConfirmUnlinkParent] = useState(null);
+
+  useEffect(() => {
+    if (!id) return undefined;
+    const unsub = invitesApi.subscribeForChild(id, setPendingParentInvites);
+    return () => unsub?.();
+  }, [id]);
+
+  // Resolve users/{uid} docs for each linked parent (child.parentIds).
+  // We don't subscribe since parent profile changes are rare; a one-shot
+  // fetch on mount + whenever the list of linked UIDs changes is enough,
+  // and avoids extra listeners for each parent.
+  useEffect(() => {
+    const uids = Array.isArray(child?.parentIds) ? child.parentIds : [];
+    if (!child || uids.length === 0) {
+      setLinkedParentUsers([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingLinkedParents(true);
+    Promise.all(uids.map((uid) => usersApi.getById(uid).catch(() => null)))
+      .then((results) => {
+        if (cancelled) return;
+        setLinkedParentUsers(results.filter(Boolean));
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingLinkedParents(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [child?.id, child?.parentIds?.join('|')]);
+
+  const performUnlinkParent = async (parent) => {
+    if (!parent?.id || !id) return;
+    await usersApi.unlinkParentFromChild(parent.id, id);
+    setLinkedParentUsers((prev) => prev.filter((p) => p.id !== parent.id));
+  };
+
+  const handleCopyInvite = async (url, token) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedInviteToken(token);
+      setTimeout(() => setCopiedInviteToken(''), 2000);
+    } catch (err) {
+      console.error('[ChildProfile] clipboard write failed:', err);
+    }
+  };
+
+  const handleRevokeInvite = async (invite) => {
+    if (!invite?.token) return;
+    if (!window.confirm(`Revoke the invite for ${invite.email}?`)) return;
+    try {
+      await invitesApi.delete(invite.token);
+    } catch (err) {
+      console.error('[ChildProfile] failed to revoke invite:', err);
+      window.alert('Could not revoke the invite. Please try again.');
+    }
+  };
 
   const handleQuickLog = async (type) => {
     try {
@@ -144,7 +271,7 @@ export default function ChildProfile() {
     );
   }
 
-  const parentContacts = child.parents?.map((parentId) => 
+  const parentContacts = child.parents?.map((parentId) =>
     parents?.find(p => p.id === parentId)
   ).filter(Boolean) || [];
 
@@ -153,6 +280,30 @@ export default function ChildProfile() {
     { id: 'info', label: 'Info' },
     { id: 'contacts', label: 'Contacts' },
   ];
+
+  // Dependency checks for delete — consistent with the "block_with_deps"
+  // policy. Owner must explicitly unlink parents before we wipe the child
+  // (activities + messages are cascaded automatically since they're logs).
+  const linkedParentCount =
+    (Array.isArray(child.parentIds) ? child.parentIds.length : 0) ||
+    (Array.isArray(child.parents) ? child.parents.length : 0);
+  const pendingInviteCount = pendingParentInvites.length;
+
+  let deleteBlockedReason = null;
+  if (linkedParentCount > 0 || pendingInviteCount > 0) {
+    const parts = [];
+    if (linkedParentCount > 0) {
+      parts.push(
+        `${linkedParentCount} linked ${linkedParentCount === 1 ? 'parent' : 'parents'}`
+      );
+    }
+    if (pendingInviteCount > 0) {
+      parts.push(
+        `${pendingInviteCount} pending ${pendingInviteCount === 1 ? 'invite' : 'invites'}`
+      );
+    }
+    deleteBlockedReason = `This child still has ${parts.join(' and ')}. Unlink parents and revoke pending invites from the Contacts tab first.`;
+  }
 
   return (
     <Layout
@@ -172,8 +323,19 @@ export default function ChildProfile() {
           <Button variant="secondary" icon={MessageSquare} className="hidden sm:inline-flex">
             Message Parents
           </Button>
-          <Button variant="secondary" icon={Edit} className="hidden sm:inline-flex">
+          <Button
+            variant="secondary"
+            icon={Edit}
+            onClick={() => setEditOpen(true)}
+            className="hidden sm:inline-flex">
             Edit
+          </Button>
+          <Button
+            variant="secondary"
+            icon={Trash2}
+            onClick={() => setDeleteOpen(true)}
+            className="hidden sm:inline-flex">
+            Delete
           </Button>
         </div>
       }
@@ -284,12 +446,23 @@ export default function ChildProfile() {
           </Card>
 
           {/* Mobile Actions */}
-          <div className="sm:hidden grid grid-cols-2 gap-2">
+          <div className="sm:hidden grid grid-cols-3 gap-2">
             <Button variant="secondary" icon={MessageSquare} className="text-sm">
               Message
             </Button>
-            <Button variant="secondary" icon={Edit} className="text-sm">
+            <Button
+              variant="secondary"
+              icon={Edit}
+              onClick={() => setEditOpen(true)}
+              className="text-sm">
               Edit
+            </Button>
+            <Button
+              variant="secondary"
+              icon={Trash2}
+              onClick={() => setDeleteOpen(true)}
+              className="text-sm">
+              Delete
             </Button>
           </div>
         </div>
@@ -415,7 +588,96 @@ export default function ChildProfile() {
 
               {/* Contacts Tab */}
               {activeTab === 'contacts' && (
-                <div className="space-y-3 sm:space-y-4">
+                <div className="space-y-4 sm:space-y-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div>
+                      <h4 className="text-sm font-semibold text-surface-900">Parent app access</h4>
+                      <p className="text-xs text-surface-500 mt-0.5">
+                        Send a link — the parent sets up their own KidsHub account.
+                      </p>
+                    </div>
+                    <Button
+                      icon={UserPlus}
+                      onClick={() => setShowInviteParentModal(true)}>
+                      Invite parent to app
+                    </Button>
+                  </div>
+
+                  {pendingParentInvites.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium uppercase tracking-wide text-surface-400">
+                        Pending invites
+                      </p>
+                      {pendingParentInvites.map((invite) => (
+                        <PendingParentInviteRow
+                          key={invite.token}
+                          invite={invite}
+                          onCopy={handleCopyInvite}
+                          onRevoke={handleRevokeInvite}
+                          copiedToken={copiedInviteToken}
+                        />
+                      ))}
+                    </div>
+                  )}
+
+                  {/* App-linked parents: users who have signed up and can see
+                      this child in the KidsHub app. Unlinking here removes the
+                      child from their childIds and this UID from the child's
+                      parentIds (see usersApi.unlinkParentFromChild). */}
+                  {(linkedParentUsers.length > 0 || loadingLinkedParents) && (
+                    <div className="space-y-2 pt-2 border-t border-surface-100">
+                      <p className="text-xs font-medium uppercase tracking-wide text-surface-400">
+                        App-linked parents
+                      </p>
+                      {loadingLinkedParents && linkedParentUsers.length === 0 ? (
+                        <p className="text-sm text-surface-500">Loading linked parents…</p>
+                      ) : (
+                        linkedParentUsers.map((parent) => (
+                          <div
+                            key={parent.id}
+                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 p-3 bg-surface-50 rounded-xl">
+                            <div className="min-w-0 flex-1 flex items-center gap-3">
+                              <Avatar
+                                name={
+                                  parent.firstName || parent.lastName
+                                    ? `${parent.firstName || ''} ${parent.lastName || ''}`.trim()
+                                    : (parent.email || 'P')
+                                }
+                                size="md"
+                              />
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-surface-900 truncate">
+                                  {parent.firstName || parent.lastName
+                                    ? `${parent.firstName || ''} ${parent.lastName || ''}`.trim()
+                                    : 'Parent'}
+                                </p>
+                                {parent.email ? (
+                                  <p className="text-xs text-surface-500 truncate flex items-center gap-1">
+                                    <Mail className="w-3 h-3 flex-shrink-0" />
+                                    {parent.email}
+                                  </p>
+                                ) : null}
+                              </div>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              icon={Trash2}
+                              onClick={() => setConfirmUnlinkParent(parent)}>
+                              Remove
+                            </Button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+
+                  <div className="pt-2 border-t border-surface-100">
+                    <p className="text-xs font-medium uppercase tracking-wide text-surface-400 mb-2">
+                      Contacts on file
+                    </p>
+                  </div>
+
                   {parentContacts.length > 0 ? (
                     parentContacts.map((parent) => (
                       <div
@@ -469,6 +731,51 @@ export default function ChildProfile() {
           </Card>
         </div>
       </div>
+
+      <InviteParentModal
+        isOpen={showInviteParentModal}
+        onClose={() => setShowInviteParentModal(false)}
+        child={child}
+      />
+
+      <ChildFormModal
+        isOpen={editOpen}
+        onClose={() => setEditOpen(false)}
+        child={child}
+      />
+
+      <ConfirmDialog
+        isOpen={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={async () => {
+          await childrenApi.deleteWithDependents(child.id);
+          // Navigate away — the child is gone and the detail view would
+          // show "Not found" otherwise.
+          window.location.assign('/children');
+        }}
+        title="Delete child"
+        message={`This will permanently delete ${child.firstName} ${child.lastName} along with their activity log and messages. This can't be undone.`}
+        confirmLabel="Delete child"
+        blocked={!!deleteBlockedReason}
+        blockedReason={deleteBlockedReason}
+      />
+
+      <ConfirmDialog
+        isOpen={!!confirmUnlinkParent}
+        onClose={() => setConfirmUnlinkParent(null)}
+        onConfirm={async () => {
+          await performUnlinkParent(confirmUnlinkParent);
+        }}
+        title="Remove parent access"
+        message={
+          confirmUnlinkParent
+            ? `${
+                confirmUnlinkParent.firstName || confirmUnlinkParent.email || 'This parent'
+              } will lose access to ${child.firstName}'s profile in the KidsHub app. Their own account is kept — you can re-link them any time by sending a new invite.`
+            : ''
+        }
+        confirmLabel="Remove access"
+      />
     </Layout>
   );
 }

@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
 import { Navigate, useNavigate, Link } from 'react-router-dom';
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  updateProfile,
+} from 'firebase/auth';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2, User, Phone, Building2, Shield, Clock, Users } from 'lucide-react';
 import { auth, db } from '../firebase/config';
 import { useAuth } from '../contexts';
@@ -9,7 +13,7 @@ import { ROLES } from '../constants/roles';
 
 export default function Register() {
   const navigate = useNavigate();
-  const { isAuthenticated, loading: authLoading } = useAuth();
+  const { isAuthenticated, loading: authLoading, setRegistering } = useAuth();
   
   const [formData, setFormData] = useState({
     firstName: '',
@@ -99,15 +103,49 @@ export default function Register() {
 
     setError('');
     setLoading(true);
+    // Mask loading:true across the entire flow so ProtectedRoute doesn't see a
+    // transient `user && !profile` window and bounce us to /unauthorized.
+    setRegistering(true);
 
+    let user = null;
     try {
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        formData.email,
-        formData.password
-      );
-
-      const user = userCredential.user;
+      try {
+        const userCredential = await createUserWithEmailAndPassword(
+          auth,
+          formData.email,
+          formData.password
+        );
+        user = userCredential.user;
+      } catch (err) {
+        // Self-heal: a previous attempt may have created the Firebase Auth
+        // user but failed to write users/{uid} (e.g. stale rules). Re-auth
+        // with the same credentials so we can finish the Firestore write.
+        if (err.code === 'auth/email-already-in-use') {
+          try {
+            const existing = await signInWithEmailAndPassword(
+              auth,
+              formData.email,
+              formData.password
+            );
+            const existingProfile = await getDoc(
+              doc(db, 'users', existing.user.uid)
+            );
+            if (existingProfile.exists()) {
+              setError('An account with this email already exists');
+              return;
+            }
+            user = existing.user;
+          } catch (signInErr) {
+            if (signInErr.code === 'auth/wrong-password') {
+              setError('An account with this email already exists');
+              return;
+            }
+            throw signInErr;
+          }
+        } else {
+          throw err;
+        }
+      }
 
       await updateProfile(user, {
         displayName: `${formData.firstName} ${formData.lastName}`,
@@ -121,6 +159,12 @@ export default function Register() {
         phone: formData.phone || null,
         centerName: formData.centerName,
         role: ROLES.OWNER,
+        // For owners, daycareId == their own uid (1 owner = 1 daycare). Every
+        // business doc they create (children, classrooms, activities, ...) is
+        // stamped with this value, and Firestore rules read it back from the
+        // user's own users doc via get(/users/{auth.uid}).data.daycareId — so
+        // all three roles (owner/teacher/parent) use the same rule lookup.
+        daycareId: user.uid,
         status: 'active',
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -151,15 +195,18 @@ export default function Register() {
       navigate('/');
     } catch (err) {
       console.error('Registration error:', err);
-      if (err.code === 'auth/email-already-in-use') {
-        setError('An account with this email already exists');
-      } else if (err.code === 'auth/weak-password') {
+      if (err.code === 'auth/weak-password') {
         setError('Password is too weak. Please use a stronger password.');
+      } else if (err.code === 'permission-denied') {
+        setError(
+          'Registration blocked by server rules. Please refresh the page and try again.'
+        );
       } else {
         setError('An error occurred during registration. Please try again.');
       }
     } finally {
       setLoading(false);
+      setRegistering(false);
     }
   };
 

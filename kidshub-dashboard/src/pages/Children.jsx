@@ -9,6 +9,8 @@ import {
   CheckCircle,
   XCircle,
   Baby,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
 import { Layout } from '../components/layout';
 import {
@@ -23,11 +25,13 @@ import {
   LoadingPage,
   LoadingCards,
   EmptyState,
+  ConfirmDialog,
 } from '../components/ui';
-import { AddChildModal } from '../components/modals';
+import { ChildFormModal } from '../components/modals';
+import { childrenApi } from '../firebase/api';
 import { useChildrenData, useClassroomsData } from '../hooks';
 
-function ChildCard({ child, classrooms }) {
+function ChildCard({ child, classrooms, onEdit, onDelete }) {
   const classroom = classrooms?.find(c => c.id === child.classroom);
 
   const formatCheckInTime = (timestamp) => {
@@ -40,8 +44,15 @@ function ChildCard({ child, classrooms }) {
     });
   };
 
+  const stopLinkNav = (e, handler) => {
+    e.preventDefault();
+    e.stopPropagation();
+    handler?.(child);
+  };
+
   return (
-    <Link to={`/children/${child.id}`}>
+    <div className="relative group">
+      <Link to={`/children/${child.id}`}>
       <Card hover className="h-full">
         <CardBody className="p-4 sm:p-5">
           <div className="flex flex-col items-center text-center">
@@ -90,12 +101,36 @@ function ChildCard({ child, classrooms }) {
           </div>
         </CardBody>
       </Card>
-    </Link>
+      </Link>
+
+      <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+        <button
+          type="button"
+          onClick={(e) => stopLinkNav(e, onEdit)}
+          title="Edit child"
+          className="p-1.5 rounded-lg bg-white/90 backdrop-blur-sm text-surface-500 hover:text-brand-600 hover:bg-white shadow-sm">
+          <Pencil className="w-3.5 h-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={(e) => stopLinkNav(e, onDelete)}
+          title="Delete child"
+          className="p-1.5 rounded-lg bg-white/90 backdrop-blur-sm text-surface-500 hover:text-danger-600 hover:bg-white shadow-sm">
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
   );
 }
 
-function ChildListItem({ child, classrooms }) {
+function ChildListItem({ child, classrooms, onEdit, onDelete }) {
   const classroom = classrooms?.find(c => c.id === child.classroom);
+
+  const stopLinkNav = (e, handler) => {
+    e.preventDefault();
+    e.stopPropagation();
+    handler?.(child);
+  };
 
   const formatCheckInTime = (timestamp) => {
     if (!timestamp) return '-';
@@ -108,47 +143,66 @@ function ChildListItem({ child, classrooms }) {
   };
 
   return (
-    <Link
-      to={`/children/${child.id}`}
-      className="flex items-center gap-3 sm:gap-4 p-3 sm:p-4 hover:bg-surface-50 transition-colors"
-    >
-      <Avatar
-        name={`${child.firstName} ${child.lastName}`}
-        size="md"
-      />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <h3 className="font-medium text-surface-900 text-sm sm:text-base">
-            {child.firstName} {child.lastName}
-          </h3>
-          {child.allergies?.length > 0 && (
-            <Badge variant="danger" className="hidden sm:inline-flex">
-              <AlertTriangle className="w-3 h-3" />
-              Allergies
-            </Badge>
-          )}
-        </div>
-        <div className="flex items-center gap-2 sm:gap-3 mt-0.5">
-          <span className="text-xs sm:text-sm text-surface-500">{child.age}</span>
-          <span className="text-surface-300 hidden sm:inline">•</span>
-          <div className="flex items-center gap-1.5">
-            <div
-              className="w-2 h-2 rounded-full"
-              style={{ backgroundColor: classroom?.color }}
-            />
-            <span className="text-xs sm:text-sm text-surface-500 truncate">{classroom?.name}</span>
+    <div className="group relative">
+      <Link
+        to={`/children/${child.id}`}
+        className="flex items-center gap-3 sm:gap-4 p-3 sm:p-4 hover:bg-surface-50 transition-colors">
+        <Avatar
+          name={`${child.firstName} ${child.lastName}`}
+          size="md"
+        />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="font-medium text-surface-900 text-sm sm:text-base">
+              {child.firstName} {child.lastName}
+            </h3>
+            {child.allergies?.length > 0 && (
+              <Badge variant="danger" className="hidden sm:inline-flex">
+                <AlertTriangle className="w-3 h-3" />
+                Allergies
+              </Badge>
+            )}
+          </div>
+          <div className="flex items-center gap-2 sm:gap-3 mt-0.5">
+            <span className="text-xs sm:text-sm text-surface-500">{child.age}</span>
+            <span className="text-surface-300 hidden sm:inline">•</span>
+            <div className="flex items-center gap-1.5">
+              <div
+                className="w-2 h-2 rounded-full"
+                style={{ backgroundColor: classroom?.color }}
+              />
+              <span className="text-xs sm:text-sm text-surface-500 truncate">{classroom?.name}</span>
+            </div>
           </div>
         </div>
+        <div className="text-right flex-shrink-0 flex items-center gap-3">
+          <div>
+            <StatusBadge status={child.status} />
+            {child.status === 'checked-in' && (
+              <p className="text-xs text-surface-400 mt-1 hidden sm:block">
+                {formatCheckInTime(child.checkInTime)}
+              </p>
+            )}
+          </div>
+        </div>
+      </Link>
+      <div className="absolute top-1/2 -translate-y-1/2 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+        <button
+          type="button"
+          onClick={(e) => stopLinkNav(e, onEdit)}
+          title="Edit child"
+          className="p-1.5 rounded-lg bg-white/90 backdrop-blur-sm text-surface-500 hover:text-brand-600 hover:bg-white shadow-sm">
+          <Pencil className="w-3.5 h-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={(e) => stopLinkNav(e, onDelete)}
+          title="Delete child"
+          className="p-1.5 rounded-lg bg-white/90 backdrop-blur-sm text-surface-500 hover:text-danger-600 hover:bg-white shadow-sm">
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
       </div>
-      <div className="text-right flex-shrink-0">
-        <StatusBadge status={child.status} />
-        {child.status === 'checked-in' && (
-          <p className="text-xs text-surface-400 mt-1 hidden sm:block">
-            {formatCheckInTime(child.checkInTime)}
-          </p>
-        )}
-      </div>
-    </Link>
+    </div>
   );
 }
 
@@ -160,7 +214,31 @@ export default function Children() {
   const [searchQuery, setSearchQuery] = useState('');
   const [classroomFilter, setClassroomFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [showFormModal, setShowFormModal] = useState(false);
+  const [editingChild, setEditingChild] = useState(null);
+  const [deletingChild, setDeletingChild] = useState(null);
+
+  const openAdd = () => {
+    setEditingChild(null);
+    setShowFormModal(true);
+  };
+  const openEdit = (child) => {
+    setEditingChild(child);
+    setShowFormModal(true);
+  };
+  const closeForm = () => {
+    setShowFormModal(false);
+    setEditingChild(null);
+  };
+
+  const linkedParentCount = deletingChild
+    ? (Array.isArray(deletingChild.parentIds) ? deletingChild.parentIds.length : 0) ||
+      (Array.isArray(deletingChild.parents) ? deletingChild.parents.length : 0)
+    : 0;
+  const childDeleteBlockedReason =
+    linkedParentCount > 0
+      ? `This child still has ${linkedParentCount} linked ${linkedParentCount === 1 ? 'parent' : 'parents'}. Open the child profile, go to Contacts, and unlink them first.`
+      : null;
 
   const loading = childrenLoading || classroomsLoading;
 
@@ -203,7 +281,7 @@ export default function Children() {
       title="Children"
       subtitle={`${children?.length || 0} enrolled children`}
       actions={
-        <Button icon={Plus} onClick={() => setShowAddModal(true)} className="hidden sm:inline-flex">Add Child</Button>
+        <Button icon={Plus} onClick={openAdd} className="hidden sm:inline-flex">Add Child</Button>
       }
     >
       {/* Stats Summary */}
@@ -271,7 +349,7 @@ export default function Children() {
 
       {/* Mobile Add Button */}
       <div className="sm:hidden mb-4">
-        <Button icon={Plus} onClick={() => setShowAddModal(true)} className="w-full">Add Child</Button>
+        <Button icon={Plus} onClick={openAdd} className="w-full">Add Child</Button>
       </div>
 
       {/* Children Display */}
@@ -279,14 +357,26 @@ export default function Children() {
         viewMode === 'grid' ? (
           <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
             {filteredChildren.map((child) => (
-              <ChildCard key={child.id} child={child} classrooms={classrooms} />
+              <ChildCard
+                key={child.id}
+                child={child}
+                classrooms={classrooms}
+                onEdit={openEdit}
+                onDelete={setDeletingChild}
+              />
             ))}
           </div>
         ) : (
           <Card>
             <div className="divide-y divide-surface-100">
               {filteredChildren.map((child) => (
-                <ChildListItem key={child.id} child={child} classrooms={classrooms} />
+                <ChildListItem
+                  key={child.id}
+                  child={child}
+                  classrooms={classrooms}
+                  onEdit={openEdit}
+                  onDelete={setDeletingChild}
+                />
               ))}
             </div>
           </Card>
@@ -303,11 +393,28 @@ export default function Children() {
         </Card>
       )}
 
-      {/* Add Child Modal */}
-      <AddChildModal
-        isOpen={showAddModal}
-        onClose={() => setShowAddModal(false)}
-        onSuccess={() => setShowAddModal(false)}
+      <ChildFormModal
+        isOpen={showFormModal}
+        onClose={closeForm}
+        child={editingChild}
+      />
+
+      <ConfirmDialog
+        isOpen={!!deletingChild}
+        onClose={() => setDeletingChild(null)}
+        onConfirm={async () => {
+          if (!deletingChild) return;
+          await childrenApi.deleteWithDependents(deletingChild.id);
+        }}
+        title="Delete child"
+        message={
+          deletingChild
+            ? `This will permanently delete ${deletingChild.firstName} ${deletingChild.lastName} along with their activity log and messages. This can't be undone.`
+            : ''
+        }
+        confirmLabel="Delete child"
+        blocked={!!childDeleteBlockedReason}
+        blockedReason={childDeleteBlockedReason}
       />
     </Layout>
   );

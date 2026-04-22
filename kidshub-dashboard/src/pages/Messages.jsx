@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Send, Search, MoreVertical, Phone, Video, MessageSquare, ArrowLeft } from 'lucide-react';
+import { Send, Search, MoreVertical, Phone, Video, MessageSquare, ArrowLeft, Trash2 } from 'lucide-react';
 import { Layout } from '../components/layout';
-import { Card, CardBody, Avatar, Button, IconButton, Input, LoadingPage, EmptyState } from '../components/ui';
+import { Card, CardBody, Avatar, Button, IconButton, Input, LoadingPage, EmptyState, ConfirmDialog } from '../components/ui';
 import { useMessagesData, useChildrenData, useParentsData, useStaffData } from '../hooks';
 import { messagesApi } from '../firebase/api';
 
@@ -75,7 +75,7 @@ function ConversationList({ conversations, selectedId, onSelect, children, paren
   );
 }
 
-function MessageBubble({ message, parents, staff }) {
+function MessageBubble({ message, parents, staff, onDelete }) {
   const sender =
     message.senderType === 'parent'
       ? parents?.find(p => p.id === message.senderId)
@@ -91,7 +91,7 @@ function MessageBubble({ message, parents, staff }) {
   };
 
   return (
-    <div className={`flex gap-2 sm:gap-3 ${isOwn ? 'flex-row-reverse' : ''}`}>
+    <div className={`group flex gap-2 sm:gap-3 ${isOwn ? 'flex-row-reverse' : ''}`}>
       {!isOwn && (
         <Avatar
           name={sender ? `${sender.firstName} ${sender.lastName}` : 'Unknown'}
@@ -100,14 +100,25 @@ function MessageBubble({ message, parents, staff }) {
         />
       )}
       <div className={`max-w-[80%] sm:max-w-[70%] ${isOwn ? 'items-end' : 'items-start'}`}>
-        <div
-          className={`px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl ${
-            isOwn
-              ? 'bg-brand-500 text-white rounded-br-md'
-              : 'bg-surface-100 text-surface-900 rounded-bl-md'
-          }`}
-        >
-          <p className="text-sm">{message.content}</p>
+        <div className={`flex items-center gap-1.5 ${isOwn ? 'flex-row-reverse' : ''}`}>
+          <div
+            className={`px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl ${
+              isOwn
+                ? 'bg-brand-500 text-white rounded-br-md'
+                : 'bg-surface-100 text-surface-900 rounded-bl-md'
+            }`}
+          >
+            <p className="text-sm">{message.content}</p>
+          </div>
+          {onDelete && (
+            <button
+              type="button"
+              onClick={() => onDelete(message)}
+              className="p-1 rounded-lg text-surface-400 hover:text-danger-600 hover:bg-danger-50 opacity-0 group-hover:opacity-100 focus:opacity-100 transition"
+              aria-label="Delete message">
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
         <p className={`text-xs text-surface-400 mt-1 ${isOwn ? 'text-right' : ''}`}>
           {formatTime(message.timestamp)}
@@ -117,7 +128,7 @@ function MessageBubble({ message, parents, staff }) {
   );
 }
 
-function ChatView({ conversation, children, parents, staff, onBack }) {
+function ChatView({ conversation, children, parents, staff, onBack, onDeleteMessage }) {
   const [newMessage, setNewMessage] = useState('');
   const child = children?.find(c => c.id === conversation?.childId);
   const parentId = conversation?.messages.find((m) => m.senderType === 'parent')?.senderId;
@@ -193,6 +204,7 @@ function ChatView({ conversation, children, parents, staff, onBack }) {
             message={message}
             parents={parents}
             staff={staff}
+            onDelete={onDeleteMessage}
           />
         ))}
       </div>
@@ -230,6 +242,7 @@ export default function Messages() {
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showChat, setShowChat] = useState(false);
+  const [deletingMessage, setDeletingMessage] = useState(null);
 
   const loading = messagesLoading || childrenLoading || parentsLoading || staffLoading;
 
@@ -326,9 +339,29 @@ export default function Messages() {
             parents={parents}
             staff={staff}
             onBack={() => setShowChat(false)}
+            onDeleteMessage={setDeletingMessage}
           />
         </Card>
       </div>
+
+      <ConfirmDialog
+        isOpen={!!deletingMessage}
+        onClose={() => setDeletingMessage(null)}
+        onConfirm={async () => {
+          await messagesApi.delete(deletingMessage.id);
+        }}
+        title="Delete message"
+        message={
+          deletingMessage
+            ? `This will permanently remove the message "${
+                deletingMessage.content?.length > 80
+                  ? `${deletingMessage.content.slice(0, 80)}…`
+                  : deletingMessage.content
+              }". The other participant will no longer see it either.`
+            : ''
+        }
+        confirmLabel="Delete message"
+      />
     </Layout>
   );
 }

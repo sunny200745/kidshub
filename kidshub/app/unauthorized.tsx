@@ -6,15 +6,37 @@
  *
  * Action: show a plain-English explanation + sign-out button. On web we also
  * link to the dashboard for owners.
+ *
+ * Self-heal redirect: if the user's role becomes a valid kidshub role while
+ * they're sitting on this screen, send them back through the role router.
+ * This matters because of a race during parent self-registration:
+ *   1. createUserWithEmailAndPassword fires onAuthStateChanged immediately.
+ *   2. AuthContext resolves with isAuthenticated=true, role=null (because
+ *      the setDoc(users/{uid}) hasn't completed yet).
+ *   3. The role router sees role=null and dispatches to /unauthorized.
+ *   4. ~50ms later setDoc completes, the snapshot listener fires again, and
+ *      AuthContext now reports role='parent'.
+ * Without this hook the user would stay stuck on /unauthorized even though
+ * they're now in a perfectly valid state.
  */
-import { Link } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
+import { useEffect } from 'react';
 import { Platform, Pressable, Text, View } from 'react-native';
 
-import { ROLE_LABELS, ROLES } from '@/constants/roles';
+import { KIDSHUB_ALLOWED_ROLES, ROLE_LABELS, ROLES } from '@/constants/roles';
 import { useAuth } from '@/contexts';
 
 export default function Unauthorized() {
-  const { role, logout } = useAuth();
+  const router = useRouter();
+  const { loading, isAuthenticated, role, logout } = useAuth();
+
+  useEffect(() => {
+    if (loading) return;
+    if (!isAuthenticated) return;
+    if (role && KIDSHUB_ALLOWED_ROLES.includes(role)) {
+      router.replace('/');
+    }
+  }, [loading, isAuthenticated, role, router]);
 
   const isOwner = role === ROLES.OWNER;
   const label = role ? (ROLE_LABELS[role] ?? role) : 'No role assigned';

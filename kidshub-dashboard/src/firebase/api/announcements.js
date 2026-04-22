@@ -7,17 +7,31 @@ import {
   updateDoc,
   deleteDoc,
   onSnapshot,
+  query,
+  where,
   serverTimestamp,
 } from 'firebase/firestore';
-import { db } from '../config';
+import { auth, db } from '../config';
 
 const COLLECTION = 'announcements';
 
+function currentDaycareId() {
+  const uid = auth?.currentUser?.uid;
+  if (!uid) {
+    throw new Error('announcementsApi: no authenticated user — cannot stamp daycareId');
+  }
+  return uid;
+}
+
 export const announcementsApi = {
-  // Get all announcements
+  // Get all announcements (tenant-scoped).
   async getAll(limitCount = 20) {
     try {
-      const querySnapshot = await getDocs(collection(db, COLLECTION));
+      const q = query(
+        collection(db, COLLECTION),
+        where('daycareId', '==', currentDaycareId())
+      );
+      const querySnapshot = await getDocs(q);
       const announcements = querySnapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
@@ -48,12 +62,14 @@ export const announcementsApi = {
 
   // Create new announcement
   async create(announcementData) {
-    const docRef = await addDoc(collection(db, COLLECTION), {
+    const payload = {
       ...announcementData,
+      daycareId: currentDaycareId(),
       timestamp: new Date().toISOString(),
       createdAt: serverTimestamp(),
-    });
-    return { id: docRef.id, ...announcementData };
+    };
+    const docRef = await addDoc(collection(db, COLLECTION), payload);
+    return { id: docRef.id, ...payload };
   },
 
   // Update announcement
@@ -72,10 +88,14 @@ export const announcementsApi = {
     await deleteDoc(docRef);
   },
 
-  // Subscribe to announcements
+  // Subscribe to announcements (tenant-scoped).
   subscribe(callback, limitCount = 10) {
-    return onSnapshot(
+    const q = query(
       collection(db, COLLECTION),
+      where('daycareId', '==', currentDaycareId())
+    );
+    return onSnapshot(
+      q,
       (snapshot) => {
         const announcements = snapshot.docs
           .map((doc) => ({

@@ -1,7 +1,7 @@
 rules_version = '2';
 
 // =============================================================================
-// KidsHub Firestore Security Rules
+// KidsHub Firestore Security Rules — p3-15 role-scoped + multi-tenant ruleset
 // =============================================================================
 //
 // Source of truth: this file. Keep rules in git, not just in the Firebase
@@ -14,38 +14,54 @@ rules_version = '2';
 //
 // (Future: Phase 4 will wire up `firebase deploy --only firestore:rules` via
 //  a proper `firebase.json` + firebase-tools in CI, so editing this file and
-//  pushing to main auto-deploys.)
+//  pushing to main auto-deploys. See p4-3.)
 //
 // =============================================================================
-// Design notes for the CURRENT (pilot, Phase 2) data model
+// Tenant model (p3-15)
 // =============================================================================
 //
-// The app uses FLAT top-level collections — `children`, `staff`, `classrooms`,
-// `activities`, `messages`, `parents`, `announcements` — with no per-center
-// scoping field on each doc. This is a known limitation tracked in p3-15.
+// Every business doc (children/classrooms/staff/activities/messages/parents/
+// announcements) carries a `daycareId` field. Every user doc carries a role
+// and role-specific scoping fields:
 //
-// Implication: we cannot enforce proper multi-tenancy (owner A can't read
-// owner B's data) without either (a) adding a `centerId` field to every doc
-// and referencing it in rules, or (b) migrating to nested subcollections like
-// `centers/{cid}/children/{childId}`.
+//   role='owner'    → daycareId = own uid                              (1:1)
+//   role='teacher'  → daycareId + classroomId (both set at invite-accept)
+//   role='parent'   → daycareId (null until an owner links the 1st child)
+//                   + childIds[] (list of children they can see)
 //
-// The Phase 3 kidshub rebuild is the right moment to do that refactor because
-// teacher/parent roles entering the system make tenant isolation non-optional.
+// These fields are the ONLY way a non-owner user is granted access to a
+// business doc. Rules read them off the requester's users/{uid} doc on
+// every evaluation via the `userDoc()` helper.
 //
-// For Phase 2 (pilot scale, ~1-3 owners, all trusted), this ruleset:
-//   - Blocks ALL unauthenticated traffic (closes the current "world-readable"
-//     vulnerability).
-//   - Blocks non-owner authenticated users (teachers, parents — currently
-//     none, but future-proofs for Phase 3).
-//   - Allows any authenticated OWNER to read/write any doc in the flat
-//     business collections. NOT multi-tenant safe, but adequate for pilot.
-//   - Locks users/{uid} so each user can only read/write their OWN profile
-//     doc, and cannot change their own role (prevents self-promotion).
-//   - Locks centers/{ownerId} so only the matching owner can access it.
+// Multi-tenant isolation: an owner can only read/write docs whose
+// daycareId == their own uid. Cross-tenant access is impossible.
 //
-// Phase 3 (p3-15) will tighten this significantly — those rules will scope
-// reads/writes by classroomId for teachers, childId for parents, and
-// ownerId/centerId for owners.
+// Legacy docs without daycareId are INTENTIONALLY unreadable after this
+// ruleset ships — this is a clean-slate pilot. If there's existing test
+// data that needs to keep working, run a one-off backfill stamping
+// `daycareId = ownerUid` on every doc before publishing these rules.
+//
+// =============================================================================
+// Owner ↔ Parent linkage (new in p3-15)
+// =============================================================================
+//
+// Parents sign up in the kidshub app with an empty childIds list and no
+// daycareId. They can't see any business data until an owner explicitly
+// links them to one of their children (dashboard UI for this is a follow-up,
+// but the rule is baked in so the feature won't require another rules roll).
+//
+// Linkage mechanics (see usersApi.linkParentToChild):
+//   - Owner updates users/{parentUid}.childIds (arrayUnion childId)
+//   - Owner updates users/{parentUid}.daycareId = ownerUid (first link only)
+//   - Owner updates children/{childId}.parentIds (arrayUnion parentUid)
+//
+// Rules below restrict the owner's writeable fields on a parent's users doc
+// to ONLY {childIds, daycareId, updatedAt} — they cannot rename the parent,
+// change their role, or edit PII.
+//
+// Owners cannot "steal" a parent already linked to another daycare: the
+// resource.data.daycareId must be either null (fresh link) or already
+// match the owner's own uid (re-adding a child).
 //
 // =============================================================================
 
@@ -64,81 +80,440 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    // Returns true only if the requester has an existing users/{uid} doc
-    // whose role field equals 'owner'. Costs one extra document read per
-    // rule evaluation, which is fine at pilot scale.
-    function isOwner() {
-      return isAuthenticated()
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'owner';
+    // The requester's own users/{uid} doc. Callers must gate with exists()
+    // (via isOwner/isTeacher/isParent) before accessing fields, or they risk
+    // rule evaluation errors when the user has no profile doc yet.
+    //
+    // Firestore dedupes identical get() calls within a single rule evaluation,
+    // so repeated userDoc() reads count as one operation against the 10-op
+    // per-rule limit.
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
-    // Role-string validation — kept in sync with kidshub-dashboard/src/constants/roles.js
+    function userRole() {
+      return userDoc().role;
+    }
+
+    function userDaycare() {
+      return userDoc().get('daycareId', '');
+    }
+
+    function userClassroom() {
+      return userDoc().get('classroomId', '');
+    }
+
+    function userChildIds() {
+      return userDoc().get('childIds', []);
+    }
+
+    function hasProfile() {
+      return isAuthenticated()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isOwner()   { return hasProfile() && userRole() == 'owner'; }
+    function isTeacher() { return hasProfile() && userRole() == 'teacher'; }
+    function isParent()  { return hasProfile() && userRole() == 'parent'; }
+
     function isValidRole(role) {
       return role in ['owner', 'teacher', 'parent'];
     }
 
-    // -------------------------------------------------------------------------
-    // users/{uid} — profile docs, gate of the role model
-    // -------------------------------------------------------------------------
-    //
-    // Users can read and update ONLY their own doc. They can create it once
-    // during self-signup. They cannot change their role after creation
-    // (prevents a signed-in parent/teacher from self-promoting to owner).
-    //
-    // Phase 2 scope: only owners should exist in the system. Self-signup
-    // therefore must set role='owner'. Phase 3 will relax this when parents
-    // self-register and teachers are invited.
-    //
-    match /users/{userId} {
-      allow read: if isSelf(userId);
+    // Business-doc tenant check. Returns true iff the doc's daycareId
+    // matches the requester's daycareId. Legacy docs without daycareId
+    // return false → unreadable (intentional clean-slate enforcement).
+    function inMyTenant(data) {
+      return 'daycareId' in data && data.daycareId == userDaycare();
+    }
 
-      allow create: if isSelf(userId)
-        && request.resource.data.role == 'owner'
-        && isValidRole(request.resource.data.role);
-
-      allow update: if isSelf(userId)
-        && request.resource.data.role == resource.data.role  // role is immutable post-creation
-        && request.resource.data.uid == resource.data.uid;    // uid is immutable
-
-      allow delete: if false;  // never allow self-delete via client; owner can disable via admin flow
+    // Children may use either `classroomId` (canonical) or `classroom`
+    // (legacy field name still present in some dashboard code paths).
+    // Accept both until the legacy field is renamed.
+    function childClassroom(data) {
+      return data.get('classroomId', data.get('classroom', ''));
     }
 
     // -------------------------------------------------------------------------
-    // centers/{ownerId} — tenant doc, keyed by the owner's uid
+    // users/{uid} — profile + role + scoping fields
     // -------------------------------------------------------------------------
     //
-    // Register.jsx writes this with the owner's uid as the document ID, so
-    // the matching owner is the ONLY user who should ever access it.
+    // Read:
+    //   - self (always)
+    //   - owner reading another user in their tenant (for linkParentToChild,
+    //     dashboard Parents/Staff pages going forward, etc.)
     //
+    // Create (self-signup): role-specific scoping enforcement.
+    //   - owner  → daycareId MUST equal own uid (1 owner = 1 daycare)
+    //   - parent → daycareId MUST NOT be set (owners seed it on first link)
+    //   - teacher → daycareId + classroomId MUST match the invite doc;
+    //              invite must exist + have matching email + role=teacher
+    //
+    // Update:
+    //   - self (profile edits): role/uid/daycareId/childIds all frozen
+    //   - owner linking a parent: may only change
+    //       {childIds, daycareId, updatedAt}
+    //     and only on parent users whose daycareId is null or already == own uid
+    //
+    // Delete: never from client (Admin SDK path for future soft-delete).
+    //
+    match /users/{userId} {
+      allow read: if isSelf(userId)
+        || (isOwner() && inMyTenant(resource.data));
+
+      allow create: if isSelf(userId)
+        && isValidRole(request.resource.data.role)
+        && (
+          // Owner self-signup: daycareId must equal own uid.
+          (
+            request.resource.data.role == 'owner'
+            && request.resource.data.daycareId == userId
+          )
+          // Parent self-signup (dormant account): daycareId must NOT be set.
+          // The account exists but has no data access until an owner links
+          // it to a child via usersApi.linkParentToChild.
+          || (
+            request.resource.data.role == 'parent'
+            && !('daycareId' in request.resource.data)
+          )
+          // Parent invite-accept (p3-20): daycareId + childIds must match
+          // the invite. Stamps childIds[inviteChildId] so the parent can
+          // immediately see that child's data without a second owner step.
+          || (
+            request.resource.data.role == 'parent'
+            && request.resource.data.inviteToken is string
+            && exists(/databases/$(database)/documents/invites/$(request.resource.data.inviteToken))
+            && get(/databases/$(database)/documents/invites/$(request.resource.data.inviteToken)).data.role == 'parent'
+            && get(/databases/$(database)/documents/invites/$(request.resource.data.inviteToken)).data.email == request.auth.token.email
+            && request.resource.data.daycareId == get(/databases/$(database)/documents/invites/$(request.resource.data.inviteToken)).data.daycareId
+            && request.resource.data.childIds is list
+            && get(/databases/$(database)/documents/invites/$(request.resource.data.inviteToken)).data.childId in request.resource.data.childIds
+          )
+          // Teacher invite-accept: daycareId + classroomId must match invite.
+          || (
+            request.resource.data.role == 'teacher'
+            && request.resource.data.inviteToken is string
+            && exists(/databases/$(database)/documents/invites/$(request.resource.data.inviteToken))
+            && get(/databases/$(database)/documents/invites/$(request.resource.data.inviteToken)).data.role == 'teacher'
+            && get(/databases/$(database)/documents/invites/$(request.resource.data.inviteToken)).data.email == request.auth.token.email
+            && request.resource.data.daycareId == get(/databases/$(database)/documents/invites/$(request.resource.data.inviteToken)).data.daycareId
+            && request.resource.data.classroomId == get(/databases/$(database)/documents/invites/$(request.resource.data.inviteToken)).data.classroomId
+          )
+        );
+
+      allow update: if
+        // Self profile edit — frozen fields cannot be touched.
+        (
+          isSelf(userId)
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'role', 'uid', 'daycareId', 'childIds', 'classroomId', 'inviteToken', 'invitedBy'
+          ])
+        )
+        // Owner linking a parent — may only touch {childIds, daycareId, updatedAt}
+        // and only on parent users without a conflicting existing daycareId.
+        || (
+          isOwner()
+          && resource.data.role == 'parent'
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.uid == resource.data.uid
+          && request.resource.data.daycareId == request.auth.uid
+          && (
+            resource.data.get('daycareId', '') == ''
+            || resource.data.get('daycareId', '') == request.auth.uid
+          )
+          && request.resource.data.diff(resource.data)
+              .affectedKeys().hasOnly(['childIds', 'daycareId', 'updatedAt'])
+        );
+
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // invites/{token} — pending teacher + parent invites (p3-14, p3-20)
+    // -------------------------------------------------------------------------
+    //
+    // Two invite flavours share this collection; they differ by role + the
+    // associated scoping field:
+    //   role='teacher' → classroomId (which classroom the teacher joins)
+    //   role='parent'  → childId     (which child the parent is linked to)
+    //
+    // Common constraints for both:
+    //   - invitedBy  must equal the owner's uid (forgery-proof)
+    //   - daycareId  must equal the owner's uid (can't invite into another tenant)
+    //   - email      must be a string (locked at creation; accept-time check
+    //                  in users create rule re-verifies against auth.token.email)
+    //
+    match /invites/{token} {
+      allow read: if true;
+
+      allow create: if isOwner()
+        && request.resource.data.invitedBy == request.auth.uid
+        && request.resource.data.daycareId == request.auth.uid
+        && request.resource.data.email is string
+        && (
+          (request.resource.data.role == 'teacher'
+            && request.resource.data.classroomId is string)
+          || (request.resource.data.role == 'parent'
+            && request.resource.data.childId is string)
+        );
+
+      allow delete: if isAuthenticated()
+        && (
+          // Inviter revoking their own invite.
+          (isOwner() && request.auth.uid == resource.data.invitedBy)
+          // Invitee consuming the invite during accept.
+          || request.auth.token.email == resource.data.email
+        );
+
+      allow update: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // centers/{ownerId} — 1:1 tenant metadata keyed by owner uid
+    // -------------------------------------------------------------------------
     match /centers/{ownerId} {
       allow read, write: if isSelf(ownerId) && isOwner();
     }
 
     // -------------------------------------------------------------------------
-    // Flat business collections
+    // children/{childId}
     // -------------------------------------------------------------------------
     //
-    // Pilot-scale rule: any authenticated owner can read/write.
-    // Known gap: doesn't isolate multiple owners from each other. Acceptable
-    // for pilot (~1-3 owners, all trusted). Phase 3 p3-15 will scope these
-    // per-center.
+    // Read:
+    //   - owner: any child in their tenant
+    //   - teacher: children in their classroom (classroomId OR legacy classroom)
+    //   - parent: children whose id is in the parent's childIds AND whose
+    //             parentIds[] includes the parent's uid (both sides of the
+    //             relationship must be in sync — belt-and-suspenders)
     //
-    match /children/{childId}       { allow read, write: if isOwner(); }
-    match /classrooms/{classroomId} { allow read, write: if isOwner(); }
-    match /staff/{staffId}          { allow read, write: if isOwner(); }
-    match /activities/{activityId}  { allow read, write: if isOwner(); }
-    match /messages/{messageId}     { allow read, write: if isOwner(); }
-    match /parents/{parentId}       { allow read, write: if isOwner(); }
-    match /announcements/{annId}    { allow read, write: if isOwner(); }
+    // Create: owner only. Must stamp daycareId == own uid + parentIds[] list.
+    //
+    // Update:
+    //   - owner: any field, within tenant
+    //   - teacher: ONLY check-in/out fields on children in their classroom,
+    //              and may not change daycareId
+    //
+    // Delete: owner only.
+    //
+    match /children/{childId} {
+      allow read: if (isOwner() && inMyTenant(resource.data))
+        || (isTeacher() && inMyTenant(resource.data)
+            && childClassroom(resource.data) == userClassroom())
+        || (isParent()
+            && childId in userChildIds()
+            && request.auth.uid in resource.data.get('parentIds', []));
+
+      allow create: if isOwner()
+        && request.resource.data.daycareId == request.auth.uid
+        && request.resource.data.parentIds is list;
+
+      allow update: if (isOwner() && inMyTenant(resource.data))
+        || (
+          isTeacher()
+          && inMyTenant(resource.data)
+          && childClassroom(resource.data) == userClassroom()
+          && request.resource.data.daycareId == resource.data.daycareId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status', 'checkInTime', 'checkOutTime',
+            'lastCheckInBy', 'lastCheckInNotes',
+            'lastCheckOutBy', 'lastCheckOutNotes',
+            'updatedAt'
+          ])
+        )
+        // Parent self-link (p3-20). After accepting an invite, the parent
+        // writes users/{uid} with childIds=[thisChildId], then writes
+        // children/{thisChildId}.parentIds to include their own uid so the
+        // parent read rule (`uid in parentIds`) unlocks. Constraints:
+        //   - parent must already have this childId in their users doc
+        //     (set by the invite-accept setDoc one step earlier)
+        //   - only parentIds + updatedAt may be modified
+        //   - daycareId must not change
+        //   - the parent must be adding themselves
+        //   - no existing parent link may be removed (subset check)
+        || (
+          isParent()
+          && inMyTenant(resource.data)
+          && childId in userChildIds()
+          && request.resource.data.daycareId == resource.data.daycareId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'parentIds', 'updatedAt'
+          ])
+          && request.auth.uid in request.resource.data.parentIds
+          && resource.data.get('parentIds', []).toSet()
+              .difference(request.resource.data.parentIds.toSet()).size() == 0
+        );
+
+      allow delete: if isOwner() && inMyTenant(resource.data);
+    }
+
+    // -------------------------------------------------------------------------
+    // classrooms/{classroomId}
+    // -------------------------------------------------------------------------
+    match /classrooms/{classroomId} {
+      allow read: if (isOwner() && inMyTenant(resource.data))
+        || (isTeacher() && inMyTenant(resource.data) && classroomId == userClassroom())
+        || (isParent() && inMyTenant(resource.data));
+
+      allow create: if isOwner()
+        && request.resource.data.daycareId == request.auth.uid;
+
+      allow update, delete: if isOwner() && inMyTenant(resource.data)
+        && request.resource.data.daycareId == resource.data.daycareId;
+    }
+
+    // -------------------------------------------------------------------------
+    // staff/{staffId} — legacy owner-managed employee roster
+    // -------------------------------------------------------------------------
+    //
+    // This collection is the dashboard's record of employees-on-payroll.
+    // Separate from `users where role='teacher'` (which are app accounts).
+    // Phase 4 cleanup will reconcile these — for now, owners manage staff,
+    // teachers can see their co-workers in the same daycare.
+    //
+    match /staff/{staffId} {
+      allow read: if (isOwner() && inMyTenant(resource.data))
+        || (isTeacher() && inMyTenant(resource.data));
+
+      allow create: if isOwner()
+        && request.resource.data.daycareId == request.auth.uid;
+
+      allow update, delete: if isOwner() && inMyTenant(resource.data)
+        && request.resource.data.daycareId == resource.data.daycareId;
+    }
+
+    // -------------------------------------------------------------------------
+    // activities/{activityId}
+    // -------------------------------------------------------------------------
+    //
+    // Read:
+    //   - owner: any in tenant
+    //   - teacher: any in their classroom
+    //   - parent: any where childId ∈ parent's childIds
+    //
+    // Create:
+    //   - owner: must stamp daycareId == own uid + valid classroomId string
+    //   - teacher: must stamp daycareId == own daycareId
+    //              + classroomId == own classroomId
+    //              + staffId == own uid
+    //     (guarantees a teacher can only log activities for their class, and
+    //      can't attribute them to another staff member)
+    //
+    // Update/delete: owner only. Activities are an audit trail.
+    //
+    match /activities/{activityId} {
+      allow read: if (isOwner() && inMyTenant(resource.data))
+        || (isTeacher() && inMyTenant(resource.data)
+            && resource.data.get('classroomId', '') == userClassroom())
+        || (isParent() && resource.data.childId in userChildIds());
+
+      allow create: if (
+          isOwner()
+          && request.resource.data.daycareId == request.auth.uid
+          && request.resource.data.classroomId is string
+        )
+        || (
+          isTeacher()
+          && request.resource.data.daycareId == userDaycare()
+          && request.resource.data.classroomId == userClassroom()
+          && request.resource.data.staffId == request.auth.uid
+        );
+
+      allow update, delete: if isOwner() && inMyTenant(resource.data);
+    }
+
+    // -------------------------------------------------------------------------
+    // messages/{messageId}
+    // -------------------------------------------------------------------------
+    //
+    // Read:
+    //   - owner: any in tenant
+    //   - participants (sender or recipient) within same tenant
+    //
+    // Create: authenticated user stamping themselves as sender + their own
+    //         daycareId. Prevents impersonation and cross-tenant message
+    //         injection.
+    //
+    // Update: recipient marking their received message as read (only `read`
+    //         and `readAt` fields), OR owner editing any field in tenant.
+    //
+    // Delete: sender, or owner in tenant.
+    //
+    match /messages/{messageId} {
+      allow read: if (isOwner() && inMyTenant(resource.data))
+        || (
+          inMyTenant(resource.data)
+          && (
+            resource.data.senderId == request.auth.uid
+            || resource.data.recipientId == request.auth.uid
+          )
+        );
+
+      // Two legitimate create paths:
+      //   1. Normal: a signed-in user sends their own message (senderId == uid).
+      //   2. Owner-in-tenant: owner writes messages on behalf of their daycare
+      //      — used by the seed demo dataset (senderIds like 'parent-1') and
+      //      future owner-broadcast / system-message features. Constrained to
+      //      the owner's own tenant (daycareId == owner.uid) so an owner of
+      //      daycare A can't inject messages into daycare B.
+      allow create: if (
+          isAuthenticated()
+          && request.resource.data.senderId == request.auth.uid
+          && request.resource.data.daycareId == userDaycare()
+        )
+        || (
+          isOwner()
+          && request.resource.data.daycareId == request.auth.uid
+        );
+
+      allow update: if (
+          // Recipient marking as read.
+          resource.data.recipientId == request.auth.uid
+          && inMyTenant(resource.data)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt'])
+        )
+        || (isOwner() && inMyTenant(resource.data));
+
+      allow delete: if (resource.data.senderId == request.auth.uid && inMyTenant(resource.data))
+        || (isOwner() && inMyTenant(resource.data));
+    }
+
+    // -------------------------------------------------------------------------
+    // parents/{parentId} — legacy owner-managed parent roster
+    // -------------------------------------------------------------------------
+    //
+    // Separate from `users where role='parent'` (which are app accounts).
+    // Phase 4 cleanup will reconcile. For now, owners manage this roster
+    // directly; parents and teachers have no business with it.
+    //
+    match /parents/{parentId} {
+      allow read: if isOwner() && inMyTenant(resource.data);
+      allow create: if isOwner()
+        && request.resource.data.daycareId == request.auth.uid;
+      allow update, delete: if isOwner() && inMyTenant(resource.data)
+        && request.resource.data.daycareId == resource.data.daycareId;
+    }
+
+    // -------------------------------------------------------------------------
+    // announcements/{annId} — daycare-wide broadcasts
+    // -------------------------------------------------------------------------
+    match /announcements/{annId} {
+      allow read: if (isOwner() && inMyTenant(resource.data))
+        || (isTeacher() && inMyTenant(resource.data))
+        || (isParent() && inMyTenant(resource.data));
+
+      allow create: if (isOwner() && request.resource.data.daycareId == request.auth.uid)
+        || (isTeacher() && request.resource.data.daycareId == userDaycare());
+
+      allow update, delete: if isOwner() && inMyTenant(resource.data);
+    }
 
     // -------------------------------------------------------------------------
     // Default deny
     // -------------------------------------------------------------------------
     //
-    // Anything not matched above is denied. This catches typos, new
-    // collections that haven't been explicitly allowed yet, and any
-    // experimental writes from admin scripts.
+    // Anything not matched above is denied. Catches typos, new collections
+    // that haven't been explicitly allowed yet, and experimental writes
+    // from admin scripts.
     //
     match /{document=**} {
       allow read, write: if false;

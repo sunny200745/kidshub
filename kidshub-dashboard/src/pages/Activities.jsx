@@ -16,6 +16,7 @@ import {
   Apple,
   Toilet,
   Palette,
+  Trash2,
 } from 'lucide-react';
 import { Layout } from '../components/layout';
 import {
@@ -32,6 +33,7 @@ import {
   SearchInput,
   LoadingPage,
   EmptyState,
+  ConfirmDialog,
 } from '../components/ui';
 import { ActivityIcon, activityLabels, activityColors } from '../components/icons/ActivityIcons';
 import { useActivitiesData, useChildrenData, useStaffData, useClassroomsData } from '../hooks';
@@ -54,7 +56,7 @@ const activityOptions = [
   { type: 'milestone', icon: Star, label: 'Milestone', color: 'bg-warning-100 text-warning-600' },
 ];
 
-function ActivityCard({ activity, children, staff }) {
+function ActivityCard({ activity, children, staff, onDelete }) {
   const child = children?.find(c => c.id === activity.childId);
   const staffMember = staff?.find(s => s.id === activity.staffId);
   const colors = activityColors[activity.type] || activityColors.note;
@@ -80,7 +82,7 @@ function ActivityCard({ activity, children, staff }) {
   };
 
   return (
-    <div className="flex gap-3 sm:gap-4 p-3 sm:p-4 hover:bg-surface-50 rounded-xl transition-colors">
+    <div className="group flex gap-3 sm:gap-4 p-3 sm:p-4 hover:bg-surface-50 rounded-xl transition-colors">
       <ActivityIcon type={activity.type} size="md" />
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
@@ -98,9 +100,20 @@ function ActivityCard({ activity, children, staff }) {
               by {staffMember?.firstName} {staffMember?.lastName}
             </p>
           </div>
-          <span className="text-xs text-surface-400 whitespace-nowrap flex-shrink-0">
-            {formatTime(activity.timestamp)}
-          </span>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <span className="text-xs text-surface-400 whitespace-nowrap">
+              {formatTime(activity.timestamp)}
+            </span>
+            {onDelete && (
+              <button
+                type="button"
+                onClick={() => onDelete(activity)}
+                className="p-1.5 rounded-lg text-surface-400 hover:text-danger-600 hover:bg-danger-50 opacity-0 group-hover:opacity-100 focus:opacity-100 transition"
+                aria-label="Delete activity">
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -292,6 +305,7 @@ export default function Activities() {
   const [showNewModal, setShowNewModal] = useState(false);
   const [filterType, setFilterType] = useState('all');
   const [filterClassroom, setFilterClassroom] = useState('all');
+  const [deletingActivity, setDeletingActivity] = useState(null);
 
   const loading = activitiesLoading || childrenLoading || staffLoading || classroomsLoading;
 
@@ -392,6 +406,7 @@ export default function Activities() {
                 activity={activity}
                 children={children}
                 staff={staff}
+                onDelete={setDeletingActivity}
               />
             ))}
           </div>
@@ -413,6 +428,29 @@ export default function Activities() {
         isOpen={showNewModal}
         onClose={() => setShowNewModal(false)}
         children={children}
+      />
+
+      <ConfirmDialog
+        isOpen={!!deletingActivity}
+        onClose={() => setDeletingActivity(null)}
+        onConfirm={async () => {
+          await activitiesApi.delete(deletingActivity.id);
+        }}
+        title="Delete activity"
+        message={
+          deletingActivity
+            ? `This will permanently remove the "${
+                activityLabels[deletingActivity.type] || deletingActivity.type
+              }" entry${
+                children?.find((c) => c.id === deletingActivity.childId)
+                  ? ` for ${
+                      children.find((c) => c.id === deletingActivity.childId).firstName
+                    }`
+                  : ''
+              }. This can't be undone.`
+            : ''
+        }
+        confirmLabel="Delete activity"
       />
     </Layout>
   );

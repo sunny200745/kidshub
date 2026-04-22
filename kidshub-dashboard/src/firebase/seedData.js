@@ -1,5 +1,5 @@
-import { collection, doc, setDoc, writeBatch } from 'firebase/firestore';
-import { db } from './config';
+import { doc, writeBatch } from 'firebase/firestore';
+import { auth, db } from './config';
 
 // Helper function to get a date relative to today
 const getDate = (daysAgo, hours = 9, minutes = 0) => {
@@ -514,9 +514,22 @@ const announcementsData = [
 ];
 
 // Seed function
+//
+// NOTE (p3-15): With multi-tenant Firestore rules, every business doc must
+// carry `daycareId == owner.uid` or the write is rejected. Children also need
+// `parentIds`, and activities need `classroomId`. We stamp all of that on the
+// way in below. We intentionally DO NOT prefix doc IDs with the owner uid —
+// the seed is destructive by design (one demo dataset per daycare), and
+// stable IDs make it easy to re-seed without duplicating docs.
 export async function seedDatabase() {
-  console.log('Starting database seed...');
-  
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    throw new Error('You must be signed in as an owner to seed data.');
+  }
+  const daycareId = currentUser.uid;
+
+  console.log('Starting database seed for daycareId =', daycareId);
+
   try {
     const batch = writeBatch(db);
 
@@ -524,49 +537,69 @@ export async function seedDatabase() {
     console.log('Seeding staff...');
     for (const staff of staffData) {
       const docRef = doc(db, 'staff', staff.id);
-      batch.set(docRef, staff);
+      batch.set(docRef, { ...staff, daycareId });
     }
 
     // Seed classrooms
     console.log('Seeding classrooms...');
     for (const classroom of classroomsData) {
       const docRef = doc(db, 'classrooms', classroom.id);
-      batch.set(docRef, classroom);
+      batch.set(docRef, { ...classroom, daycareId });
     }
 
-    // Seed parents
+    // Seed parents (legacy collection, kept for continuity until merged into users)
     console.log('Seeding parents...');
     for (const parent of parentsData) {
       const docRef = doc(db, 'parents', parent.id);
-      batch.set(docRef, parent);
+      batch.set(docRef, { ...parent, daycareId });
     }
 
-    // Seed children
+    // Seed children. Rules require `parentIds` (array) and `daycareId`.
+    // We derive parentIds from the seed's `parents` field so tenant queries
+    // (classrooms → children → parents) can traverse without breaking.
     console.log('Seeding children...');
     for (const child of childrenData) {
       const docRef = doc(db, 'children', child.id);
-      batch.set(docRef, child);
+      batch.set(docRef, {
+        ...child,
+        daycareId,
+        parentIds: Array.isArray(child.parents) ? child.parents : [],
+        // Normalise legacy `classroom` → `classroomId` so rules + queries
+        // don't need a fallback path. Keep `classroom` for any UI still
+        // reading the old field during the migration window.
+        classroomId: child.classroom ?? null,
+      });
     }
 
-    // Seed activities
+    // Seed activities. Rules require `daycareId` + `classroomId` — resolve
+    // classroom from the activity's child.
     console.log('Seeding activities...');
+    const childClassroomMap = Object.fromEntries(
+      childrenData.map((c) => [c.id, c.classroom ?? null])
+    );
     for (const activity of activitiesData) {
       const docRef = doc(db, 'activities', activity.id);
-      batch.set(docRef, activity);
+      batch.set(docRef, {
+        ...activity,
+        daycareId,
+        classroomId: childClassroomMap[activity.childId] ?? null,
+      });
     }
 
-    // Seed messages
+    // Seed messages. These have parent/staff senderIds that don't map to the
+    // signed-in owner's uid — rules allow this via the owner-in-tenant
+    // create branch (see firestore.rules).
     console.log('Seeding messages...');
     for (const message of messagesData) {
       const docRef = doc(db, 'messages', message.id);
-      batch.set(docRef, message);
+      batch.set(docRef, { ...message, daycareId });
     }
 
     // Seed announcements
     console.log('Seeding announcements...');
     for (const announcement of announcementsData) {
       const docRef = doc(db, 'announcements', announcement.id);
-      batch.set(docRef, announcement);
+      batch.set(docRef, { ...announcement, daycareId });
     }
 
     await batch.commit();
