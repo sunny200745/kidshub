@@ -22,12 +22,14 @@
  *     "Firebase: Auth has already been initialized". We wrap it in
  *     try/catch and fall back to getAuth() when that happens.
  *
- *   - getReactNativePersistence isn't re-exported from the public
- *     'firebase/auth' TypeScript surface in v10 (it's marked internal)
- *     so we pull it via a runtime require to sidestep the type error.
- *     This is the documented pattern — see
- *     https://firebase.google.com/docs/auth/web/start#web-namespaced-api_3
- *     and the Expo docs' Firebase guide.
+ *   - getReactNativePersistence is exported from @firebase/auth's RN
+ *     bundle (dist/rn/index.js) but NOT from the TS public surface in
+ *     firebase@10. The static import below is the canonical pattern
+ *     documented by Firebase; the `@ts-expect-error` suppresses the
+ *     missing-type complaint. Metro resolves the actual symbol via the
+ *     `react-native` export condition on native platforms (reinforced
+ *     by the resolver override in metro.config.js).
+ *     See: https://firebase.google.com/docs/auth/web/start
  *
  * Env vars:
  *   - Expo exposes process.env.EXPO_PUBLIC_* to client code at build time.
@@ -38,10 +40,18 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApp, getApps, initializeApp } from 'firebase/app';
-import { type Auth, getAuth, initializeAuth } from 'firebase/auth';
+import * as firebaseAuth from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { Platform } from 'react-native';
+
+// Pull what we need from the namespace import. Going through `firebaseAuth`
+// (instead of named imports) lets us read getReactNativePersistence — which
+// the RN bundle exports but the TS public surface in firebase@10 does not.
+const { getAuth, initializeAuth } = firebaseAuth;
+// @ts-expect-error — RN-bundle-only export, missing from TS surface.
+const { getReactNativePersistence } = firebaseAuth;
+type Auth = ReturnType<typeof getAuth>;
 
 const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
@@ -66,11 +76,6 @@ function initAuthForPlatform(): Auth {
     return getAuth(app);
   }
   try {
-    // getReactNativePersistence is exported at runtime but not in the
-    // public TS surface in firebase@10 — runtime-require to dodge the
-    // type error without disabling typescript checks in this file.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { getReactNativePersistence } = require('firebase/auth');
     return initializeAuth(app, {
       persistence: getReactNativePersistence(AsyncStorage),
     });
