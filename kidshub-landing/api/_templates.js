@@ -220,7 +220,83 @@ function welcomeEmail({
   };
 }
 
+/**
+ * Sales notification email — sent to the internal sales address whenever
+ * someone submits the /pricing contact form or the dashboard /plans flow.
+ *
+ * This is a plain internal "new lead" alert, not a customer-facing message,
+ * so the layout is simpler (labelled rows + copy-paste-friendly reply-to).
+ */
+function salesNotificationEmail({
+  name,
+  email,
+  tier,
+  message,
+  source,
+  feature,
+  centerName,
+  ownerUid,
+}) {
+  const subject = `New KidsHub lead — ${name} (${tier || 'unspecified tier'})`;
+
+  const rows = [
+    ['Name', name],
+    ['Email', email],
+    ['Interested tier', tier || '—'],
+    ['Source', source || 'unknown'],
+    ['Specific feature', feature || '—'],
+    ['Centre name', centerName || '—'],
+    ['Owner UID', ownerUid || '—'],
+  ]
+    .map(
+      ([label, val]) => `
+        <tr>
+          <td style="padding:8px 14px;font-size:13px;color:${TEXT_MUTED};white-space:nowrap;vertical-align:top;">${esc(label)}</td>
+          <td style="padding:8px 14px;font-size:14px;color:${TEXT_DARK};word-break:break-word;">${esc(val)}</td>
+        </tr>`
+    )
+    .join('');
+
+  const messageBlock = message
+    ? `
+    <p style="margin:24px 0 8px 0;font-size:13px;font-weight:700;color:${TEXT_MUTED};text-transform:uppercase;letter-spacing:0.04em;">Message</p>
+    <div style="padding:14px;border:1px solid ${BORDER_LIGHT};border-radius:10px;background:${BG_CREAM};color:${TEXT_DARK};white-space:pre-wrap;font-size:14px;line-height:1.6;">${esc(message)}</div>
+  `
+    : '';
+
+  const content = `
+    <h1 style="margin:0 0 8px 0;font-size:22px;font-weight:700;color:${TEXT_DARK};">New KidsHub lead</h1>
+    <p style="margin:0 0 20px 0;font-size:14px;color:${TEXT_MUTED};line-height:1.6;">
+      Someone just asked to talk to sales. Full details below — hit reply to respond directly.
+    </p>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;border:1px solid ${BORDER_LIGHT};border-radius:10px;overflow:hidden;">
+      ${rows}
+    </table>
+    ${messageBlock}
+  `;
+
+  const text = [
+    `New KidsHub lead: ${name} <${email}>`,
+    `Interested tier: ${tier || '—'}`,
+    `Source: ${source || 'unknown'}`,
+    feature ? `Feature: ${feature}` : null,
+    centerName ? `Centre: ${centerName}` : null,
+    ownerUid ? `Owner UID: ${ownerUid}` : null,
+    '',
+    message ? `Message:\n${message}` : null,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  return {
+    subject,
+    html: layout({ previewText: `New lead: ${name} — ${tier || 'unspecified'}`, contentHtml: content }),
+    text,
+  };
+}
+
 module.exports = {
   inviteEmail,
   welcomeEmail,
+  salesNotificationEmail,
 };

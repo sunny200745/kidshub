@@ -1,29 +1,30 @@
 /**
  * /messages — parent ↔ teacher conversation view.
  *
- * Ported from kidshub-legacy/src/pages/Messages.jsx. Layout:
- *   - Fixed teacher header (avatar + name + online dot)
+ * Layout:
+ *   - Fixed teacher header (avatar + name + classroom)
  *   - Scrolling message list (auto-scrolls to bottom on new send)
- *   - Bottom composer (textarea + send button). KeyboardAvoidingView keeps
+ *   - Bottom composer (TextInput + send button). KeyboardAvoidingView keeps
  *     the composer visible when the soft keyboard opens on iOS.
  *
- * Things that changed from web → RN:
- *   - `textarea` → `<TextInput multiline>`; Enter-to-send was web-only, on
- *     native we just require a tap on the send button (standard chat UX).
- *   - `scrollIntoView` → `ScrollView.scrollToEnd()` via a ref.
- *   - `animate-pulse` (green dot) → a static green dot; adding a native
- *     animation for a 4px indicator is not worth the complexity.
- *   - `bg-gradient-to-r from-brand-500 to-accent-500` → `LinearGradient`
- *     component wrapping the send button + the "from-me" bubble.
+ * Data model (live):
+ *   - The recipient is the *primary teacher* for the parent's child —
+ *     resolved by joining `useStaffForDaycare()` against the child's
+ *     classroom and picking the first staff member whose Auth account
+ *     has linked (`appStatus == 'active'`). This keeps "messages" a
+ *     real exchange between two real Firebase users.
+ *   - Conversation id = `${childId}__${teacherUid}` so both sides of the
+ *     conversation generate the same key without coordinating.
+ *   - The message stream is `useMyMessages()` filtered to this thread.
  *
- * Out of scope for p3-10 (deferred):
- *   - Image/attachment picker (Image + Paperclip icons). Legacy stubs were
- *     no-ops. We'll wire `expo-image-picker` when messaging is backed by
- *     Firestore + Storage in p3-15.
+ * Empty / not-ready cases:
+ *   - No child linked yet: HelpCircle + nudge.
+ *   - Child has no staff with app access yet: Info + nudge to ask the
+ *     daycare to invite a teacher.
  */
 import { LinearGradient } from 'expo-linear-gradient';
-import { ImageIcon, Palette, Send } from 'lucide-react-native';
-import { useEffect, useRef, useState } from 'react';
+import { HelpCircle, Send, UserCheck } from 'lucide-react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -35,12 +36,16 @@ import {
 } from 'react-native';
 
 import { ScreenContainer } from '@/components/layout';
-import { Avatar, Card } from '@/components/ui';
+import { Avatar, Card, EmptyState, LoadingState, Pill } from '@/components/ui';
+import { useAuth } from '@/contexts';
+import { messagesApi } from '@/firebase/api';
+import type { Message, Staff } from '@/firebase/types';
 import {
-  messages as initialMessages,
-  myChildren,
-  type Message,
-} from '@/data/mockData';
+  useClassroom,
+  useMyChildren,
+  useMyMessages,
+  useStaffForDaycare,
+} from '@/hooks';
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('en-US', {
@@ -50,10 +55,25 @@ function formatTime(iso: string): string {
   });
 }
 
-function MessageBubble({ message }: { message: Message }) {
-  const time = formatTime(message.timestamp);
+function formatDayDivider(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const msInDay = 24 * 60 * 60 * 1000;
+  const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diffDays = Math.round((startOfDay(now) - startOfDay(d)) / msInDay);
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return d.toLocaleDateString('en-US', { weekday: 'long' });
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
 
-  if (message.isFromMe) {
+function dayKey(iso: string): string {
+  return new Date(iso).toISOString().slice(0, 10);
+}
+
+function MessageBubble({ message, isMine, senderName }: { message: Message; isMine: boolean; senderName: string }) {
+  const time = formatTime(message.timestamp);
+  if (isMine) {
     return (
       <View className="items-end mb-4">
         <View className="max-w-[85%]">
@@ -79,29 +99,15 @@ function MessageBubble({ message }: { message: Message }) {
 
   return (
     <View className="flex-row gap-3 mb-4">
-      <Avatar name={message.senderName} size="sm" className="mt-1" />
+      <Avatar name={senderName} size="sm" className="mt-1" />
       <View className="max-w-[85%] flex-1">
         <Text className="text-xs text-surface-500 dark:text-surface-400 mb-1.5">
-          {message.senderName}
+          {senderName}
         </Text>
         <View className="bg-white dark:bg-surface-800 border border-surface-100 dark:border-surface-700 rounded-2xl rounded-bl-md px-4 py-3">
           <Text className="text-sm text-surface-900 dark:text-surface-50">
             {message.content}
           </Text>
-          {message.hasAttachment ? (
-            <View className="mt-3 p-2 bg-surface-50 dark:bg-surface-900 rounded-xl">
-              {/* Placeholder attachment preview. Real image preview comes
-                  once messages live in Firestore + Storage (p3-15). */}
-              <View
-                style={{ width: 160, height: 160, borderRadius: 8 }}
-                className="bg-surface-100 dark:bg-surface-700 items-center justify-center">
-                <Palette size={32} color="#94A3B8" />
-              </View>
-              <Text className="text-xs text-surface-500 dark:text-surface-400 mt-2">
-                Art project photo
-              </Text>
-            </View>
-          ) : null}
         </View>
         <Text className="text-[11px] text-surface-400 dark:text-surface-500 mt-1.5">
           {time}
@@ -111,46 +117,150 @@ function MessageBubble({ message }: { message: Message }) {
   );
 }
 
-export default function ParentMessages() {
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
-  const [newMessage, setNewMessage] = useState('');
-  const scrollRef = useRef<ScrollView | null>(null);
-  const child = myChildren[0];
+function pickPrimaryTeacher(
+  staff: Staff[],
+  classroomId: string | undefined,
+): Staff | null {
+  if (!classroomId) return null;
+  const inClassroom = staff.filter(
+    (s) => (s.classroomId ?? s.classroom) === classroomId,
+  );
+  // Prefer an active linked teacher; fall back to any with linkedUserId so
+  // we can still display the staff name even if their app access is pending.
+  return (
+    inClassroom.find((s) => s.appStatus === 'active' && s.linkedUserId) ??
+    inClassroom.find((s) => !!s.linkedUserId) ??
+    inClassroom[0] ??
+    null
+  );
+}
 
-  // Auto-scroll to bottom whenever the message list grows. Using setTimeout
-  // with 0ms lets RN flush the new bubble's layout before we measure the
-  // scroll extent — without it scrollToEnd can miss the last bubble on iOS.
+export default function ParentMessages() {
+  const { profile } = useAuth();
+  const uid = profile?.uid;
+  const daycareId = profile?.daycareId as string | undefined;
+
+  const { data: children, loading: childrenLoading } = useMyChildren();
+  const child = children[0] ?? null;
+  const { data: classroom } = useClassroom(
+    child?.classroomId ?? child?.classroom ?? null,
+  );
+  const { data: staff, loading: staffLoading } = useStaffForDaycare();
+
+  const teacher = useMemo(
+    () => pickPrimaryTeacher(staff, child?.classroomId ?? child?.classroom),
+    [staff, child],
+  );
+  const teacherUid = teacher?.linkedUserId ?? null;
+
+  const { data: allMessages, loading: messagesLoading } = useMyMessages();
+
+  // Conversation id: deterministic key both sides produce. Including the
+  // childId scopes the thread to one child even if a parent has multiple.
+  const conversationId =
+    child && teacherUid ? `${child.id}__${teacherUid}` : null;
+
+  const thread = useMemo(() => {
+    if (!conversationId) return [] as Message[];
+    return allMessages
+      .filter((m) => m.conversationId === conversationId)
+      .sort((a, b) => (a.timestamp < b.timestamp ? -1 : 1));
+  }, [allMessages, conversationId]);
+
+  const [draft, setDraft] = useState('');
+  const [sending, setSending] = useState(false);
+  const scrollRef = useRef<ScrollView | null>(null);
+
+  // Auto-scroll on new messages. setTimeout(0) lets RN flush layout
+  // before scrollToEnd measures — without it iOS occasionally misses
+  // the last bubble.
   useEffect(() => {
     const timer = setTimeout(() => {
       scrollRef.current?.scrollToEnd({ animated: true });
     }, 0);
     return () => clearTimeout(timer);
-  }, [messages]);
+  }, [thread.length]);
 
-  const handleSend = () => {
-    const trimmed = newMessage.trim();
-    if (!trimmed) return;
+  // Mark inbound unread messages as read when they appear. Fire-and-
+  // forget — failures here are non-fatal and the read state will
+  // re-converge on the next render.
+  useEffect(() => {
+    if (!uid) return;
+    for (const m of thread) {
+      if (!m.read && m.recipientId === uid) {
+        messagesApi.markAsRead(m.id).catch((err) => {
+          console.warn('[parent messages] failed to mark read:', err);
+        });
+      }
+    }
+  }, [thread, uid]);
 
-    const message: Message = {
-      id: `msg-${Date.now()}`,
-      senderId: 'parent-1',
-      senderName: 'Me',
-      content: trimmed,
-      timestamp: new Date().toISOString(),
-      isFromMe: true,
-    };
-
-    setMessages((prev) => [...prev, message]);
-    setNewMessage('');
+  const handleSend = async () => {
+    const trimmed = draft.trim();
+    if (!trimmed || !child || !teacherUid || !uid || !daycareId || !conversationId) return;
+    setSending(true);
+    try {
+      await messagesApi.send({
+        conversationId,
+        senderId: uid,
+        senderType: 'parent',
+        recipientId: teacherUid,
+        childId: child.id,
+        content: trimmed,
+        daycareId,
+      });
+      setDraft('');
+    } catch (err) {
+      console.error('[parent messages] send failed:', err);
+    } finally {
+      setSending(false);
+    }
   };
 
-  const canSend = newMessage.trim().length > 0;
+  const canSend = Boolean(
+    draft.trim() && child && teacherUid && uid && daycareId && !sending,
+  );
+
+  // Loading + empty paths
+  if (childrenLoading || staffLoading) {
+    return (
+      <ScreenContainer title="Messages" subtitle="Chat with teachers" scrollable={false}>
+        <LoadingState message="Loading conversation" />
+      </ScreenContainer>
+    );
+  }
+
+  if (!child) {
+    return (
+      <ScreenContainer title="Messages" subtitle="Chat with teachers" scrollable={false}>
+        <EmptyState
+          icon={HelpCircle}
+          title="No child linked yet"
+          description="Once your daycare links your child to your account, you can message their teacher here."
+        />
+      </ScreenContainer>
+    );
+  }
+
+  if (!teacher || !teacherUid) {
+    return (
+      <ScreenContainer title="Messages" subtitle="Chat with teachers" scrollable={false}>
+        <EmptyState
+          icon={UserCheck}
+          title="No teacher available yet"
+          description={`Your child's classroom (${classroom?.name ?? child.classroom ?? 'classroom'}) doesn't have a teacher with app access yet. Once one is invited, your conversation will appear here.`}
+        />
+      </ScreenContainer>
+    );
+  }
+
+  const teacherName = `${teacher.firstName} ${teacher.lastName}`.trim();
+  const teacherSubtitle = teacher.role === 'lead-teacher'
+    ? `Lead Teacher · ${classroom?.name ?? child.classroom ?? ''}`
+    : `Teacher · ${classroom?.name ?? child.classroom ?? ''}`;
 
   return (
     <ScreenContainer title="Messages" subtitle="Chat with teachers" scrollable={false}>
-      {/* Pin composer to the keyboard on iOS; Android handles it natively via
-          windowSoftInputMode. verticalOffset matches the rough height of the
-          custom header block so content doesn't jump. */}
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
@@ -160,19 +270,13 @@ export default function ParentMessages() {
             {/* Teacher header */}
             <View className="bg-white dark:bg-surface-800 border-b border-surface-100 dark:border-surface-700 p-4">
               <View className="flex-row items-center gap-3">
-                <Avatar name="Sarah Mitchell" size="md" />
+                <Avatar name={teacherName} size="md" />
                 <View className="flex-1">
                   <Text className="font-medium text-surface-900 dark:text-surface-50">
-                    Sarah Mitchell
+                    {teacherName}
                   </Text>
                   <Text className="text-xs text-surface-500 dark:text-surface-400">
-                    Lead Teacher • {child.classroom}
-                  </Text>
-                </View>
-                <View className="flex-row items-center gap-1.5">
-                  <View className="w-2 h-2 bg-success-500 rounded-full" />
-                  <Text className="text-xs text-surface-500 dark:text-surface-400">
-                    Online
+                    {teacherSubtitle}
                   </Text>
                 </View>
               </View>
@@ -183,33 +287,55 @@ export default function ParentMessages() {
               ref={scrollRef}
               className="flex-1 bg-surface-50 dark:bg-surface-900"
               contentContainerStyle={{ padding: 16 }}>
-              <View className="items-center mb-6">
-                <View className="bg-white dark:bg-surface-800 px-3 py-1.5 rounded-full">
-                  <Text className="text-xs text-surface-400 dark:text-surface-500">
-                    Today
-                  </Text>
-                </View>
-              </View>
-
-              {messages.map((message) => (
-                <MessageBubble key={message.id} message={message} />
-              ))}
+              {messagesLoading ? (
+                <LoadingState message="Loading messages" />
+              ) : thread.length === 0 ? (
+                <EmptyState
+                  title="Start the conversation"
+                  description={`Say hello to ${teacher.firstName}. They'll see your message in their teacher app.`}
+                />
+              ) : (
+                <>
+                  {thread.map((m, i) => {
+                    const prev = thread[i - 1];
+                    const showDivider = !prev || dayKey(prev.timestamp) !== dayKey(m.timestamp);
+                    return (
+                      <View key={m.id}>
+                        {showDivider ? (
+                          <View className="items-center my-4">
+                            <Pill
+                              tone="neutral"
+                              variant="soft"
+                              size="sm"
+                              label={formatDayDivider(m.timestamp)}
+                            />
+                          </View>
+                        ) : null}
+                        <MessageBubble
+                          message={m}
+                          isMine={m.senderId === uid}
+                          senderName={m.senderId === uid ? 'Me' : teacherName}
+                        />
+                      </View>
+                    );
+                  })}
+                  {sending ? (
+                    <View className="items-end mb-2">
+                      <Text className="text-[11px] text-surface-400 dark:text-surface-500">
+                        Sending…
+                      </Text>
+                    </View>
+                  ) : null}
+                </>
+              )}
             </ScrollView>
 
             {/* Composer */}
             <View className="bg-white dark:bg-surface-800 border-t border-surface-100 dark:border-surface-700 p-3">
               <View className="flex-row items-end gap-2">
-                <Pressable
-                  className="p-2.5 rounded-xl active:bg-surface-100 dark:active:bg-surface-700"
-                  accessibilityLabel="Attach image"
-                  // TODO(p3-15): wire expo-image-picker
-                  onPress={() => undefined}>
-                  <ImageIcon size={20} color="#94A3B8" />
-                </Pressable>
-
                 <TextInput
-                  value={newMessage}
-                  onChangeText={setNewMessage}
+                  value={draft}
+                  onChangeText={setDraft}
                   placeholder="Type a message..."
                   placeholderTextColor="#94A3B8"
                   multiline
@@ -226,10 +352,7 @@ export default function ParentMessages() {
                     colors={['#FF2D8A', '#8B5CF6']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
-                    style={{
-                      padding: 12,
-                      borderRadius: 12,
-                    }}>
+                    style={{ padding: 12, borderRadius: 12 }}>
                     <Send size={20} color="#FFFFFF" />
                   </LinearGradient>
                 </Pressable>

@@ -10,6 +10,7 @@ import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2, User, Phone, Building2, S
 import { auth, db } from '../firebase/config';
 import { useAuth } from '../contexts';
 import { ROLES } from '../constants/roles';
+import { defaultPlanFields } from '../firebase/api/centers';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -188,6 +189,10 @@ export default function Register() {
             sunday: { open: '08:00', close: '14:00', closed: true },
           },
         },
+        // Sprint 1 (PRODUCT_PLAN): stamp plan/trialEndsAt/demoMode so
+        // the entitlements system has something to read. New owners start
+        // on a 14-day Premium trial, then auto-downgrade to Starter.
+        ...defaultPlanFields(),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });

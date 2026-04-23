@@ -39,7 +39,7 @@ import {
 } from 'lucide-react-native';
 import { View } from 'react-native';
 
-import type { ActivityType } from '@/data/mockData';
+import type { ActivityType } from '@/firebase/types';
 
 export const activityIcons: Record<ActivityType, LucideIcon> = {
   meal: Utensils,

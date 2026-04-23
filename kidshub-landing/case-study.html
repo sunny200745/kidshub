@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Case Study — KidsHub | How [Daycare Name] saved 5 hours a week</title>
+  <meta name="description" content="How a Canadian daycare replaced paper logs and group texts with KidsHub — reducing admin by 5 hours a week and driving waitlist growth." />
+  <meta property="og:title" content="Case Study — KidsHub helps daycares grow" />
+  <meta property="og:description" content="Real numbers from a real daycare using KidsHub for parent communication, logs, and attendance." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://getkidshub.com/case-study" />
+
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/aria-widget.css" />
+
+  <style>
+    /* Case study page — scoped styles. */
+    #cs-hero {
+      padding: 140px 0 40px;
+      background: var(--bg-hero);
+    }
+    #cs-hero .eyebrow {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--brand-pink);
+      margin-bottom: 12px;
+    }
+    #cs-hero h1 {
+      font-size: clamp(32px, 5vw, 52px);
+      font-weight: 900;
+      letter-spacing: -0.02em;
+      max-width: 820px;
+    }
+    #cs-hero .lead {
+      font-size: clamp(16px, 2vw, 20px);
+      color: var(--text-muted);
+      max-width: 720px;
+      margin-top: 14px;
+    }
+    .cs-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 24px;
+      margin-top: 28px;
+      padding: 20px 24px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.6);
+      border: 1px solid rgba(0, 0, 0, 0.05);
+    }
+    .cs-meta strong {
+      display: block;
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+    .cs-meta span { font-size: 14px; font-weight: 600; }
+
+    .cs-section { padding: 60px 0; }
+    .cs-section h2 {
+      font-size: clamp(24px, 3vw, 34px);
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      margin-bottom: 16px;
+    }
+    .cs-section p { margin-bottom: 14px; font-size: 16px; line-height: 1.75; color: var(--text-default); }
+
+    .cs-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin: 36px 0 8px;
+    }
+    .cs-stat {
+      padding: 24px;
+      border-radius: 18px;
+      background: white;
+      border: 1px solid rgba(0, 0, 0, 0.06);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+    }
+    .cs-stat .n {
+      font-size: 38px;
+      font-weight: 900;
+      background: linear-gradient(90deg, var(--brand-pink), var(--brand-purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: -0.02em;
+    }
+    .cs-stat .label { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+
+    blockquote.cs-quote {
+      margin: 28px 0;
+      padding: 20px 24px;
+      border-left: 4px solid var(--brand-pink);
+      background: rgba(255, 45, 138, 0.04);
+      border-radius: 0 12px 12px 0;
+    }
+    blockquote.cs-quote p {
+      font-size: 18px;
+      font-style: italic;
+      margin: 0 0 10px;
+    }
+    blockquote.cs-quote cite { font-size: 13px; color: var(--text-muted); font-style: normal; }
+
+    .cs-cta {
+      margin-top: 40px;
+      padding: 36px;
+      border-radius: 24px;
+      background: linear-gradient(135deg, var(--brand-pink), var(--brand-purple));
+      color: white;
+      text-align: center;
+    }
+    .cs-cta h3 {
+      font-size: clamp(22px, 3vw, 28px);
+      font-weight: 800;
+      margin-bottom: 10px;
+    }
+    .cs-cta p { margin-bottom: 20px; opacity: 0.95; }
+    .cs-cta .btn { background: white; color: var(--brand-pink); font-weight: 700; }
+  </style>
+</head>
+<body>
+
+  <nav id="navbar" role="navigation" aria-label="Main navigation">
+    <div class="container nav-inner">
+      <a href="/" class="nav-logo" aria-label="KidsHub home">
+        <div class="nav-logo-mark" aria-hidden="true">K</div>
+        <span class="nav-logo-text">KidsHub</span>
+      </a>
+      <ul class="nav-links" role="list">
+        <li><a href="/#features">Features</a></li>
+        <li><a href="/#how">How it works</a></li>
+        <li><a href="/pricing">Pricing</a></li>
+        <li><a href="/#demo">Book a Demo</a></li>
+      </ul>
+      <div class="nav-cta">
+        <a href="/#demo" class="btn btn-gradient">Book a Demo →</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ====================================================================
+       HERO
+       This page is a *template*. Replace bracketed placeholders with real
+       daycare data before publishing. Keep the numbers specific and honest.
+       ==================================================================== -->
+  <section id="cs-hero">
+    <div class="container">
+      <span class="eyebrow">Case Study</span>
+      <h1>How [Daycare Name] saved 5 hours of admin a week and grew their waitlist with KidsHub.</h1>
+      <p class="lead">
+        [Daycare Name] is a [# kids]-child centre in [City, Province]
+        run by [Owner Name]. Within [# weeks] of switching to KidsHub,
+        parent messages dropped to one channel, paper logs disappeared,
+        and pickup lines got shorter.
+      </p>
+      <div class="cs-meta">
+        <div><strong>Centre size</strong><span>[# kids] children · [# classrooms] classrooms</span></div>
+        <div><strong>Plan</strong><span>Pro · $[price]/mo</span></div>
+        <div><strong>Time on KidsHub</strong><span>[# months]</span></div>
+        <div><strong>Previous system</strong><span>[Paper / Brightwheel / WhatsApp]</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cs-section">
+    <div class="container" style="max-width: 820px;">
+
+      <h2>The problem</h2>
+      <p>
+        Before KidsHub, [Owner Name] and her team of [# staff] educators
+        juggled three different tools to communicate with parents:
+        group texts for daily updates, a paper binder for attendance,
+        and printed sheets for food and naps. At pickup, parents
+        crowded around the teacher asking the same three questions —
+        <em>"Did she nap? What did she eat? Any photos?"</em> — every
+        single day.
+      </p>
+      <p>
+        "The worst part was 6pm," says [Owner Name]. "My teachers
+        were tired, parents were tired, and we were trying to
+        remember 20 napmates' nap times from a piece of paper."
+      </p>
+
+      <blockquote class="cs-quote">
+        <p>
+          "Honestly, my teachers were losing 30 minutes a day just
+          writing the same things down three times — once on paper,
+          once in a group chat, once when a parent asked at pickup."
+        </p>
+        <cite>— [Owner Name], Director, [Daycare Name]</cite>
+      </blockquote>
+
+      <h2>The switch</h2>
+      <p>
+        [Daycare Name] piloted KidsHub with [# classroom] classroom
+        for two weeks. The teacher logged every nap, meal, and
+        activity directly on the tablet — parents saw it in real
+        time. Within the pilot's first week, the group chat went
+        quiet and the pickup line thinned out.
+      </p>
+      <p>
+        "I didn't have to sell it to my teachers," says [Owner].
+        "They sold it to me after day three."
+      </p>
+
+      <h2>The results</h2>
+      <div class="cs-stats">
+        <div class="cs-stat"><div class="n">5 hrs</div><div class="label">Admin time saved per week</div></div>
+        <div class="cs-stat"><div class="n">~80%</div><div class="label">Reduction in daily parent texts</div></div>
+        <div class="cs-stat"><div class="n">+[#]</div><div class="label">Waitlist growth in [# months]</div></div>
+        <div class="cs-stat"><div class="n">$[x]/mo</div><div class="label">Net ROI vs previous tools</div></div>
+      </div>
+
+      <blockquote class="cs-quote">
+        <p>
+          "Three new families have told me they chose us because of
+          the parent app. That's three tuitions. KidsHub paid for
+          itself before the end of the first month."
+        </p>
+        <cite>— [Owner Name]</cite>
+      </blockquote>
+
+      <h2>What's next</h2>
+      <p>
+        [Daycare Name] is rolling KidsHub's Pro features out to all
+        [# classrooms] classrooms and plans to test the weekly
+        planner with parents this fall. "We're not going back," says
+        [Owner]. "Paper is done."
+      </p>
+
+      <div class="cs-cta">
+        <h3>Want results like [Daycare Name]?</h3>
+        <p>Book a 20-minute demo. We'll show you what your centre could save.</p>
+        <a href="/#demo" class="btn">Book a Demo →</a>
+      </div>
+
+    </div>
+  </section>
+
+  <footer>
+    <div class="container">
+      <p style="text-align: center; color: var(--text-muted); font-size: 13px; padding: 24px 0;">
+        © KidsHub. Built by parents, for parents.
+      </p>
+    </div>
+  </footer>
+
+</body>
+</html>

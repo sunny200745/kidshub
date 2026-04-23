@@ -1,47 +1,65 @@
 /**
  * /home — parent landing tab.
  *
- * Ported from kidshub-legacy/src/pages/Home.jsx. Renders (top → bottom):
- *   1. Greeting — mobile-friendly "Good morning, Ava's doing great today"
- *   2. High-priority announcement banner (if any)
- *   3. ChildStatusCard — avatar, classroom, check-in state + quick stats
- *   4. Recent activity preview (4 most-recent timeline items, links to /activity)
- *   5. Quick actions — 2x2 grid linking to Messages / Activity / Photos / Schedule
+ * Sections top → bottom:
+ *   1. Greeting hero  — child-aware "Ava's doing great today" with a
+ *      check-in status pill.
+ *   2. Announcement banner (Firestore live; only high-priority shown)
+ *   3. Child status card (classroom name + today's snapshot — meals,
+ *      nap, photos)
+ *   4. Recent activity preview (4 most-recent, links to /activity)
+ *   5. Primary CTA row — Message teacher / View full day (ActionButton)
+ *   6. Quick actions grid (Photos, Schedule)
  *
- * Legacy used `<Link to>` from react-router-dom; on RN we use expo-router's
- * `<Link href>` which works with Pressable children on both mobile and web.
+ * Sprint 4 / C1 + C2: rebuilt on top of the B5 visual primitives — Pill
+ * for the status chip, ActionButton for the primary CTAs, tighter grid
+ * for secondary quick actions. Parent tone is pink, matching the brand.
  *
- * Data source: mock data for now (data/mockData.ts). Swapped for Firestore
- * live reads in p3-15 once security rules are in place.
+ * Data: live Firestore subscriptions via the `useMyChildren`,
+ * `useAnnouncements`, `useTodaysActivitiesForChildren` and `useClassroom`
+ * hooks. Empty states cover "no children linked" and "no activity yet"
+ * without ever falling back to mock data.
  */
 import { LinearGradient } from 'expo-linear-gradient';
-import { Link } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 import {
   Bell,
   Camera,
-  ChevronRight,
   Clock,
   FileText,
+  HelpCircle,
   MessageSquare,
   Moon,
   Utensils,
   type LucideIcon,
 } from 'lucide-react-native';
+import { useMemo } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { ActivityIcon } from '@/components/icons/activity-icon';
 import { ScreenContainer } from '@/components/layout';
-import { Avatar, Card, CardBody, RoleBadge } from '@/components/ui';
-import { Fonts } from '@/constants/theme';
 import {
-  announcements,
-  myChildren,
-  todaysActivities,
-  type Activity,
-  type Child,
-} from '@/data/mockData';
+  ActionButton,
+  Avatar,
+  Card,
+  CardBody,
+  EmptyState,
+  LoadingState,
+  Pill,
+  RoleBadge,
+} from '@/components/ui';
+import { Fonts } from '@/constants/theme';
+import { useAuth } from '@/contexts';
+import type { Activity, Announcement, Child, Classroom } from '@/firebase/types';
+import {
+  useAnnouncements,
+  useClassroom,
+  useMyChildren,
+  useTodaysActivitiesForChildren,
+} from '@/hooks';
 
-function formatTime(iso: string): string {
+function formatTime(iso: string | null | undefined): string {
+  if (!iso) return '';
   return new Date(iso).toLocaleTimeString('en-US', {
     hour: 'numeric',
     minute: '2-digit',
@@ -49,26 +67,67 @@ function formatTime(iso: string): string {
   });
 }
 
-function ChildStatusCard({ child }: { child: Child }) {
-  // Identity + check-in state already live in the hero above, so this card
-  // is now the "day snapshot" — classroom context + 3 quick stats. Keeps a
-  // visible anchor for the classroom color stripe.
+function activityTitle(activity: Activity): string {
+  const map: Record<string, string> = {
+    meal: 'Meal',
+    snack: 'Snack',
+    nap: 'Nap',
+    diaper: 'Diaper change',
+    potty: 'Potty',
+    activity: 'Activity',
+    outdoor: 'Outdoor play',
+    learning: 'Learning',
+    mood: 'Mood update',
+    incident: 'Incident',
+    medication: 'Medication',
+    milestone: 'Milestone',
+    photo: 'Photo',
+    note: 'Note',
+    checkin: 'Checked in',
+    checkout: 'Checked out',
+    health: 'Health',
+    music: 'Music',
+    play: 'Play',
+  };
+  return map[activity.type] ?? 'Activity';
+}
+
+function ChildStatusCard({
+  child,
+  classroom,
+  todaysActivities,
+}: {
+  child: Child;
+  classroom: Classroom | null;
+  todaysActivities: Activity[];
+}) {
+  const childActivities = todaysActivities.filter((a) => a.childId === child.id);
+  const meals = childActivities.filter(
+    (a) => a.type === 'meal' || a.type === 'snack',
+  ).length;
+  const napEntry = childActivities.find((a) => a.type === 'nap');
+  const napStatus = napEntry
+    ? (napEntry.details as { status?: string } | undefined)?.status ?? 'Logged'
+    : '—';
+  const photos = childActivities.filter((a) => a.type === 'photo').length;
+  const stripeColor = classroom?.color || child.classroomColor || '#FF2D8A';
+
   return (
     <Card className="overflow-hidden">
-      <View style={{ height: 6, backgroundColor: child.classroomColor }} />
+      <View style={{ height: 6, backgroundColor: stripeColor }} />
       <CardBody className="p-4">
         <View className="flex-row items-center justify-between mb-4">
           <Text className="text-sm font-semibold text-surface-700 dark:text-surface-200">
-            {child.classroom}
+            {classroom?.name ?? child.classroom ?? 'Classroom'}
           </Text>
           <Text className="text-[11px] text-surface-400 uppercase tracking-wider font-semibold">
             Today&apos;s snapshot
           </Text>
         </View>
         <View className="flex-row gap-3">
-          <QuickStat icon={Utensils} label="Meals" value="2" color="warning" />
-          <QuickStat icon={Moon} label="Nap" value="Sleeping" color="info" />
-          <QuickStat icon={Camera} label="Photos" value="3" color="brand" />
+          <QuickStat icon={Utensils} label="Meals" value={String(meals)} color="warning" />
+          <QuickStat icon={Moon} label="Nap" value={String(napStatus)} color="info" />
+          <QuickStat icon={Camera} label="Photos" value={String(photos)} color="brand" />
         </View>
       </CardBody>
     </Card>
@@ -104,59 +163,81 @@ function QuickStat({
         <Icon size={22} color={style.icon} />
       </View>
       <Text className="text-xs text-surface-500 dark:text-surface-400">{label}</Text>
-      <Text className="text-sm font-medium text-surface-900 dark:text-surface-50">
+      <Text
+        numberOfLines={1}
+        className="text-sm font-medium text-surface-900 dark:text-surface-50">
         {value}
       </Text>
     </View>
   );
 }
 
-function ActivityPreview() {
-  const recent: Activity[] = todaysActivities.slice(0, 4);
+function ActivityPreview({
+  activities,
+  loading,
+  childId,
+}: {
+  activities: Activity[];
+  loading: boolean;
+  childId: string;
+}) {
+  const recent = activities.filter((a) => a.childId === childId).slice(0, 4);
 
   return (
     <Card>
       <CardBody>
         <View className="flex-row items-center justify-between mb-4">
           <Text className="font-semibold text-surface-900 dark:text-surface-50">
-            Recent Activity
+            Recent activity
           </Text>
           <Link href="/activity" asChild>
-            <Pressable className="flex-row items-center gap-1">
-              <Text className="text-sm text-brand-600 font-medium">View All</Text>
-              <ChevronRight size={16} color="#F0106B" />
+            <Pressable>
+              <Pill tone="pink" variant="soft" size="sm" label="View all" />
             </Pressable>
           </Link>
         </View>
 
-        <View className="gap-3">
-          {recent.map((activity) => (
-            <View key={activity.id} className="flex-row items-start gap-3">
-              <ActivityIcon type={activity.type} size="sm" />
-              <View className="flex-1 min-w-0">
-                <Text className="text-sm font-medium text-surface-900 dark:text-surface-50">
-                  {activity.title}
-                </Text>
-                <Text
-                  numberOfLines={1}
-                  className="text-xs text-surface-500 dark:text-surface-400">
-                  {activity.description}
+        {loading ? (
+          <LoadingState compact message="Loading today's updates" />
+        ) : recent.length === 0 ? (
+          <EmptyState
+            icon={FileText}
+            title="No activity logged yet today"
+            description="Updates from your child's classroom will appear here as they're posted."
+          />
+        ) : (
+          <View className="gap-3">
+            {recent.map((activity) => (
+              <View key={activity.id} className="flex-row items-start gap-3">
+                <ActivityIcon type={activity.type} size="sm" />
+                <View className="flex-1 min-w-0">
+                  <Text className="text-sm font-medium text-surface-900 dark:text-surface-50">
+                    {activityTitle(activity)}
+                  </Text>
+                  {activity.notes ? (
+                    <Text
+                      numberOfLines={1}
+                      className="text-xs text-surface-500 dark:text-surface-400">
+                      {activity.notes}
+                    </Text>
+                  ) : null}
+                </View>
+                <Text className="text-xs text-surface-400 dark:text-surface-500">
+                  {formatTime(activity.timestamp)}
                 </Text>
               </View>
-              <Text className="text-xs text-surface-400 dark:text-surface-500">
-                {formatTime(activity.time)}
-              </Text>
-            </View>
-          ))}
-        </View>
+            ))}
+          </View>
+        )}
       </CardBody>
     </Card>
   );
 }
 
-function AnnouncementBanner() {
+function AnnouncementBanner({ announcements }: { announcements: Announcement[] }) {
   const highPriority = announcements.find((a) => a.priority === 'high');
   if (!highPriority) return null;
+  const body = highPriority.body || highPriority.content || '';
 
   return (
     <View className="bg-warning-50 dark:bg-warning-900/20 border border-warning-200 dark:border-warning-800 rounded-2xl p-4">
@@ -170,42 +251,43 @@ function AnnouncementBanner() {
           <Text className="text-sm font-medium text-warning-800 dark:text-warning-200">
             {highPriority.title}
           </Text>
-          <Text className="text-xs text-warning-700 dark:text-warning-300 mt-0.5">
-            {highPriority.content}
-          </Text>
+          {body ? (
+            <Text className="text-xs text-warning-700 dark:text-warning-300 mt-0.5">
+              {body}
+            </Text>
+          ) : null}
         </View>
       </View>
     </View>
   );
 }
 
+// Secondary quick-actions grid (Photos + Schedule). The primary actions
+// (Message + Daily report) live as ActionButtons above this grid since
+// they're the highest-intent taps on the home screen.
 type QuickAction = {
-  href: '/messages' | '/activity' | '/photos' | '/schedule';
+  href: '/photos' | '/schedule';
   label: string;
   hint: string;
   icon: LucideIcon;
-  tone: 'brand' | 'success' | 'info' | 'accent';
+  tone: 'brand' | 'info';
 };
 
 const QUICK_ACTION_TONES: Record<QuickAction['tone'], { bg: string; icon: string }> = {
   brand: { bg: 'bg-brand-100 dark:bg-brand-900/30', icon: '#E11D74' },
-  success: { bg: 'bg-success-100 dark:bg-success-900/30', icon: '#16A34A' },
   info: { bg: 'bg-info-100 dark:bg-info-900/30', icon: '#0891B2' },
-  accent: { bg: 'bg-accent-100 dark:bg-accent-900/30', icon: '#7C3AED' },
 };
 
 const QUICK_ACTIONS: QuickAction[] = [
-  { href: '/messages', label: 'Message', hint: 'Chat with teacher', icon: MessageSquare, tone: 'brand' },
-  { href: '/activity', label: 'Daily Report', hint: 'View full details', icon: FileText, tone: 'success' },
-  { href: '/photos', label: 'Photos', hint: 'View gallery', icon: Camera, tone: 'info' },
-  { href: '/schedule', label: 'Schedule', hint: 'Daily routine', icon: Clock, tone: 'accent' },
+  { href: '/photos', label: 'Photos', hint: 'View gallery', icon: Camera, tone: 'brand' },
+  { href: '/schedule', label: 'Schedule', hint: 'Daily routine', icon: Clock, tone: 'info' },
 ];
 
 function QuickActions() {
   return (
     <View>
       <Text className="font-semibold text-surface-900 dark:text-surface-50 mb-3">
-        Quick Actions
+        More
       </Text>
       <View className="flex-row flex-wrap -m-1.5">
         {QUICK_ACTIONS.map((action) => {
@@ -251,18 +333,52 @@ function getGreeting(): string {
   return 'Good evening';
 }
 
+function StatusPill({ child }: { child: Child }) {
+  if (child.status === 'checked-in' && child.checkInTime) {
+    return (
+      <Pill
+        tone="success"
+        variant="soft"
+        size="md"
+        label={`Checked in · ${formatTime(child.checkInTime)}`}
+      />
+    );
+  }
+  if (child.status === 'checked-out') {
+    return <Pill tone="info" variant="soft" size="md" label="Checked out for the day" />;
+  }
+  return <Pill tone="neutral" variant="soft" size="md" label="Not checked in yet" />;
+}
+
 export default function ParentHome() {
-  const child = myChildren[0];
+  const router = useRouter();
+  const { profile } = useAuth();
+  const { data: children, loading: childrenLoading } = useMyChildren();
+  // First child = "primary" for the hero. Multi-child parents are a future
+  // feature (see RESTRUCTURE_PLAN.md uiux-polish task) — for now we just
+  // show the first one and let the rest surface in /profile.
+  const child = children[0] ?? null;
+  const childIds = useMemo(() => children.map((c) => c.id), [children]);
+  const { data: todaysActivities, loading: activitiesLoading } =
+    useTodaysActivitiesForChildren(childIds);
+  const { data: announcements } = useAnnouncements();
+  const { data: classroom } = useClassroom(
+    child?.classroomId ?? child?.classroom ?? null,
+  );
+
   const greeting = getGreeting();
+  const parentFirstName =
+    (profile?.firstName as string | undefined) ||
+    (typeof profile?.displayName === 'string'
+      ? profile.displayName.split(' ')[0]
+      : '');
 
   return (
-    // hideHeader so the container doesn't duplicate the greeting we render
-    // below. The parent hero IS the page's title on this screen.
     <ScreenContainer hideHeader showRoleBadge={false}>
       <View className="gap-4 pt-2">
-        {/* Parent hero — warm pink-gradient card, big avatar, personal greeting.
-            Intentionally contrasts with the teacher cockpit (data-first teal
-            band) so a glance tells you whose view you're in. */}
+        {/* Parent hero — pink-gradient card, big avatar, personal greeting.
+            Intentionally contrasts with the teacher cockpit's teal band so
+            a glance tells you whose view you're in. */}
         <View className="overflow-hidden rounded-3xl">
           <LinearGradient
             colors={['#FFE0EF', '#FFF0F7', '#FFFFFF']}
@@ -280,52 +396,92 @@ export default function ParentHome() {
               </Text>
             </View>
 
-            <View className="items-center">
-              <View
-                style={{
-                  shadowColor: '#FF2D8A',
-                  shadowOpacity: 0.18,
-                  shadowRadius: 12,
-                  shadowOffset: { width: 0, height: 4 },
-                  elevation: 4,
-                }}>
-                <Avatar
-                  name={`${child.firstName} ${child.lastName}`}
-                  size="2xl"
-                  className="border-4 border-white"
-                />
-              </View>
-              <Text
-                className="text-surface-500 dark:text-surface-300 text-sm mt-3"
-                style={{ fontFamily: Fonts.rounded }}>
-                {greeting},
-              </Text>
-              <Text
-                className="text-3xl font-bold text-surface-900 dark:text-surface-50 text-center"
-                style={{ fontFamily: Fonts.rounded }}>
-                {child.firstName}&apos;s doing great
-                <Text style={{ color: '#F0106B' }}> today</Text>
-              </Text>
-
-              <View className="flex-row items-center gap-1.5 mt-2 px-3 py-1 rounded-full bg-white/60">
+            {childrenLoading ? (
+              <LoadingState message="Loading your child's day" />
+            ) : child ? (
+              <View className="items-center">
                 <View
-                  className={`w-1.5 h-1.5 rounded-full ${
-                    child.status === 'checked-in' ? 'bg-success-500' : 'bg-surface-300'
-                  }`}
-                />
-                <Text className="text-xs font-semibold text-surface-700">
-                  {child.status === 'checked-in'
-                    ? `Checked in · ${formatTime(child.checkInTime)}`
-                    : 'Not checked in yet'}
+                  style={{
+                    shadowColor: '#FF2D8A',
+                    shadowOpacity: 0.18,
+                    shadowRadius: 12,
+                    shadowOffset: { width: 0, height: 4 },
+                    elevation: 4,
+                  }}>
+                  <Avatar
+                    name={`${child.firstName} ${child.lastName}`}
+                    size="2xl"
+                    className="border-4 border-white"
+                  />
+                </View>
+                <Text
+                  className="text-surface-500 dark:text-surface-300 text-sm mt-3"
+                  style={{ fontFamily: Fonts.rounded }}>
+                  {greeting}
+                  {parentFirstName ? `, ${parentFirstName}` : ''},
                 </Text>
+                <Text
+                  className="text-3xl font-bold text-surface-900 dark:text-surface-50 text-center"
+                  style={{ fontFamily: Fonts.rounded }}>
+                  {child.firstName}&apos;s doing great
+                  <Text style={{ color: '#F0106B' }}> today</Text>
+                </Text>
+
+                <View className="mt-3">
+                  <StatusPill child={child} />
+                </View>
               </View>
-            </View>
+            ) : (
+              <EmptyState
+                icon={HelpCircle}
+                title="No child linked yet"
+                description="Once your daycare links your child to your account, their day will appear here."
+              />
+            )}
           </LinearGradient>
         </View>
 
-        <AnnouncementBanner />
-        <ChildStatusCard child={child} />
-        <ActivityPreview />
+        <AnnouncementBanner announcements={announcements} />
+        {child ? (
+          <>
+            <ChildStatusCard
+              child={child}
+              classroom={classroom}
+              todaysActivities={todaysActivities}
+            />
+            <ActivityPreview
+              activities={todaysActivities}
+              loading={activitiesLoading}
+              childId={child.id}
+            />
+
+            {/* Primary CTAs. Pink tone to match the parent palette.
+                Using onPress + router.push directly because ActionButton
+                already owns its Pressable — wrapping in Link asChild
+                would double up the handler. */}
+            <View className="flex-row gap-3">
+              <View className="flex-1">
+                <ActionButton
+                  label="Message teacher"
+                  icon={MessageSquare}
+                  tone="pink"
+                  size="lg"
+                  onPress={() => router.push('/messages')}
+                />
+              </View>
+              <View className="flex-1">
+                <ActionButton
+                  label="Daily report"
+                  icon={FileText}
+                  tone="pink"
+                  variant="ghost"
+                  size="lg"
+                  onPress={() => router.push('/activity')}
+                />
+              </View>
+            </View>
+          </>
+        ) : null}
         <QuickActions />
       </View>
     </ScreenContainer>

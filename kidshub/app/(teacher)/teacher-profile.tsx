@@ -1,18 +1,15 @@
 /**
  * /teacher-profile — teacher's own profile + settings + sign-out.
  *
- * Parallel to `(parent)/profile.tsx` but scoped to teacher data:
- *   - Hero card shows the teacher (not a child) + their classroom
- *   - No allergy/medical section (that's parent-facing)
- *   - "My classroom" section instead of "Child information"
- *   - Same settings rows (notifications, privacy, help)
- *   - Same sign-out flow via AuthContext.logout()
- *
- * Route name uses `teacher-profile` instead of `profile` because Expo
- * Router's group resolution doesn't fully prevent accidental collisions
- * when two files from different groups map to the same segment; giving
- * this one a distinct name keeps the URL space unambiguous. Tab label is
- * still "Profile".
+ * Live wiring (live-data-14):
+ *   - Classroom name, color, and age range come from `useClassroom`
+ *     using the teacher's `profile.classroomId`.
+ *   - Roster size comes from `useClassroomRoster`.
+ *   - Co-teachers are derived from `useStaffForDaycare` filtered to
+ *     the same classroom and excluding the signed-in teacher (matched
+ *     by `linkedUserId === uid` first, then by email).
+ *   - Settings rows + sign-out flow are unchanged from the mock-data
+ *     version.
  */
 import { useRouter } from 'expo-router';
 import {
@@ -25,13 +22,13 @@ import {
   Users,
   type LucideIcon,
 } from 'lucide-react-native';
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
 import { ScreenContainer } from '@/components/layout';
 import { Avatar, Card, CardBody } from '@/components/ui';
 import { useAuth } from '@/contexts';
-import { classrooms, classroomRoster, staff } from '@/data/mockData';
+import { useClassroom, useClassroomRoster, useStaffForDaycare } from '@/hooks';
 
 type RowProps = {
   icon: LucideIcon;
@@ -79,26 +76,62 @@ export default function TeacherProfile() {
   const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
 
+  const uid = profile?.uid;
+  const email = (profile?.email as string | undefined) ?? '';
+  const classroomId = profile?.classroomId as string | undefined;
+
+  const { data: classroom } = useClassroom(classroomId);
+  const { data: roster } = useClassroomRoster();
+  const { data: allStaff } = useStaffForDaycare();
+
+  // Resolve "me" within the staff roster so we know my role + can
+  // exclude myself from the co-teachers list. Match by linkedUserId
+  // (the canonical link), falling back to email for legacy records.
+  const me = useMemo(
+    () =>
+      allStaff.find((s) => s.linkedUserId === uid) ??
+      allStaff.find((s) => s.email && email && s.email.toLowerCase() === email.toLowerCase()),
+    [allStaff, uid, email],
+  );
+  const coTeachers = useMemo(
+    () =>
+      allStaff.filter(
+        (s) =>
+          (s.classroomId ?? s.classroom) === classroomId &&
+          s.id !== me?.id &&
+          s.linkedUserId !== uid,
+      ),
+    [allStaff, classroomId, me?.id, uid],
+  );
+
   const firstName =
+    me?.firstName ||
     (profile?.firstName as string | undefined) ||
     (typeof profile?.displayName === 'string'
       ? profile.displayName.split(' ')[0]
       : '') ||
     'Teacher';
   const lastName =
+    me?.lastName ||
     (profile?.lastName as string | undefined) ||
     (typeof profile?.displayName === 'string'
       ? profile.displayName.split(' ').slice(1).join(' ')
       : '') ||
     '';
   const fullName = `${firstName} ${lastName}`.trim() || 'Teacher';
-  const email = (profile?.email as string | undefined) ?? '';
 
-  const classroom = classrooms[0];
-  const leadTeacher = staff.find((s) => s.role === 'lead-teacher');
-  const coTeachers = staff.filter(
-    (s) => s.id !== (leadTeacher?.id ?? '') && s.classroom === classroom.id
-  );
+  const roleLabel = (() => {
+    switch (me?.role) {
+      case 'lead-teacher':
+        return 'Lead teacher';
+      case 'assistant-teacher':
+        return 'Assistant teacher';
+      case 'floater':
+        return 'Floater';
+      default:
+        return 'Teacher';
+    }
+  })();
 
   const handleSignOut = async () => {
     if (signingOut) return;
@@ -110,6 +143,12 @@ export default function TeacherProfile() {
       setSigningOut(false);
     }
   };
+
+  const classroomColor = classroom?.color ?? '#14B8A6';
+  const classroomName = classroom?.name ?? 'No classroom assigned';
+  const classroomDetail = classroom?.ageRange
+    ? `${roster.length} enrolled · ${classroom.ageRange}`
+    : `${roster.length} enrolled`;
 
   return (
     <ScreenContainer title="Profile" subtitle="Your teacher account">
@@ -128,10 +167,10 @@ export default function TeacherProfile() {
           <View className="flex-row items-center gap-2 mt-3">
             <View
               className="w-2 h-2 rounded-full"
-              style={{ backgroundColor: classroom.color }}
+              style={{ backgroundColor: classroomColor }}
             />
             <Text className="text-sm font-medium text-surface-700 dark:text-surface-200">
-              {classroom.name} · {leadTeacher?.id === 'staff-1' ? 'Lead teacher' : 'Teacher'}
+              {classroomName} · {roleLabel}
             </Text>
           </View>
         </CardBody>
@@ -145,9 +184,9 @@ export default function TeacherProfile() {
         <CardBody className="p-0">
           <SettingsRow
             icon={Users}
-            iconColor="#14B8A6"
+            iconColor={classroomColor}
             label="Children"
-            detail={`${classroomRoster.length} enrolled · ${classroom.ageRange}`}
+            detail={classroomDetail}
           />
           <View className="h-px bg-surface-100 dark:bg-surface-800 mx-4" />
           <SettingsRow
@@ -165,7 +204,7 @@ export default function TeacherProfile() {
             icon={FileText}
             iconColor="#0891B2"
             label="Classroom documents"
-            detail="Lesson plans, schedules, notes"
+            detail="Coming soon"
           />
         </CardBody>
       </Card>
@@ -180,14 +219,14 @@ export default function TeacherProfile() {
             icon={Bell}
             iconColor="#D97706"
             label="Notifications"
-            detail="New messages, parent updates"
+            detail="Coming soon"
           />
           <View className="h-px bg-surface-100 dark:bg-surface-800 mx-4" />
           <SettingsRow
             icon={Shield}
             iconColor="#16A34A"
             label="Privacy"
-            detail="Who can see your profile"
+            detail="Coming soon"
           />
           <View className="h-px bg-surface-100 dark:bg-surface-800 mx-4" />
           <SettingsRow

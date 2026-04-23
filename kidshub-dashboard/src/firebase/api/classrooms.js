@@ -12,6 +12,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { auth, db } from '../config';
+import { enforceQuota } from './quotas';
 
 const COLLECTION = 'classrooms';
 
@@ -59,8 +60,14 @@ export const classroomsApi = {
     }
   },
 
-  // Create new classroom
+  // Create new classroom.
+  //
+  // Quota check runs first (A6) — if the owner's tier is at its classroom
+  // limit, a QuotaExceededError is thrown BEFORE any write. Modals detect
+  // the typed error via `err.code === 'quota-exceeded'` and surface an
+  // upgrade CTA with the required tier.
   async create(classroomData) {
+    await enforceQuota('classrooms');
     const payload = {
       ...classroomData,
       daycareId: currentDaycareId(),

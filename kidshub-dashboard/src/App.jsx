@@ -18,6 +18,8 @@ import CheckIn from './pages/CheckIn';
 import Activities from './pages/Activities';
 import Announcements from './pages/Announcements';
 import Settings from './pages/Settings';
+import Plans from './pages/Plans';
+import Reports from './pages/Reports';
 
 function App() {
   return (
@@ -61,7 +63,13 @@ function App() {
 
           {/* Settings Route */}
           <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-          
+
+          {/* Reports Route (Sprint 6-7 / D2, D3, D5) */}
+          <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
+
+          {/* Plans / upgrade Route (Sprint 3 / E3) */}
+          <Route path="/plans" element={<ProtectedRoute><Plans /></ProtectedRoute>} />
+
           {/* Catch all - redirect to dashboard */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

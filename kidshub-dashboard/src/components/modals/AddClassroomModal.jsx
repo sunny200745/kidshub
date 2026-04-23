@@ -10,6 +10,7 @@ import React, { useEffect, useState } from 'react';
 import { Plus, X, Clock } from 'lucide-react';
 import { Modal, ModalFooter, Button, Input, Textarea } from '../ui';
 import { classroomsApi } from '../../firebase/api';
+import { QuotaBanner } from '../QuotaBanner';
 
 const colorOptions = [
   { value: '#FF2D8A', label: 'Pink' },
@@ -68,6 +69,7 @@ export function ClassroomFormModal({ isOpen, onClose, onSuccess, classroom }) {
   const [formData, setFormData] = useState(() => buildInitialForm(classroom));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [quotaError, setQuotaError] = useState(null);
   const [newScheduleTime, setNewScheduleTime] = useState('');
   const [newScheduleActivity, setNewScheduleActivity] = useState('');
 
@@ -77,6 +79,7 @@ export function ClassroomFormModal({ isOpen, onClose, onSuccess, classroom }) {
     if (isOpen) {
       setFormData(buildInitialForm(classroom));
       setError('');
+      setQuotaError(null);
     }
   }, [classroom, isOpen]);
 
@@ -110,6 +113,7 @@ export function ClassroomFormModal({ isOpen, onClose, onSuccess, classroom }) {
     }
 
     setError('');
+    setQuotaError(null);
     setLoading(true);
     try {
       const payload = {
@@ -132,11 +136,15 @@ export function ClassroomFormModal({ isOpen, onClose, onSuccess, classroom }) {
       onClose();
     } catch (err) {
       console.error(`Error ${isEdit ? 'updating' : 'adding'} classroom:`, err);
-      setError(
-        err?.code === 'permission-denied'
-          ? "You don't have permission to do that. If this looks wrong, contact support."
-          : `Could not ${isEdit ? 'save changes' : 'add classroom'}. Please try again.`
-      );
+      if (err?.code === 'quota-exceeded') {
+        setQuotaError(err);
+      } else {
+        setError(
+          err?.code === 'permission-denied'
+            ? "You don't have permission to do that. If this looks wrong, contact support."
+            : `Could not ${isEdit ? 'save changes' : 'add classroom'}. Please try again.`
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -156,6 +164,7 @@ export function ClassroomFormModal({ isOpen, onClose, onSuccess, classroom }) {
       title={isEdit ? 'Edit Classroom' : 'Add New Classroom'}
       size="lg">
       <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+        {quotaError ? <QuotaBanner error={quotaError} /> : null}
         {error ? (
           <div className="p-3 bg-danger-50 border border-danger-200 rounded-xl text-sm text-danger-700">
             {error}

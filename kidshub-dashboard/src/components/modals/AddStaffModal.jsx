@@ -10,6 +10,7 @@ import { Plus, X, Award } from 'lucide-react';
 import { Modal, ModalFooter, Button, Input, Select, Textarea, Badge } from '../ui';
 import { staffApi } from '../../firebase/api';
 import { useClassroomsData } from '../../hooks';
+import { QuotaBanner } from '../QuotaBanner';
 
 const roleOptions = [
   { value: 'Director', label: 'Director' },
@@ -63,12 +64,14 @@ export function StaffFormModal({ isOpen, onClose, onSuccess, staffMember }) {
   const [formData, setFormData] = useState(() => buildInitialForm(staffMember));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [quotaError, setQuotaError] = useState(null);
   const [certInput, setCertInput] = useState('');
 
   useEffect(() => {
     if (isOpen) {
       setFormData(buildInitialForm(staffMember));
       setError('');
+      setQuotaError(null);
     }
   }, [staffMember, isOpen]);
 
@@ -106,6 +109,7 @@ export function StaffFormModal({ isOpen, onClose, onSuccess, staffMember }) {
     }
 
     setError('');
+    setQuotaError(null);
     setLoading(true);
     try {
       const payload = {
@@ -128,11 +132,15 @@ export function StaffFormModal({ isOpen, onClose, onSuccess, staffMember }) {
       onClose();
     } catch (err) {
       console.error(`Error ${isEdit ? 'updating' : 'adding'} staff:`, err);
-      setError(
-        err?.code === 'permission-denied'
-          ? "You don't have permission to do that. If this looks wrong, contact support."
-          : `Could not ${isEdit ? 'save changes' : 'add staff member'}. Please try again.`
-      );
+      if (err?.code === 'quota-exceeded') {
+        setQuotaError(err);
+      } else {
+        setError(
+          err?.code === 'permission-denied'
+            ? "You don't have permission to do that. If this looks wrong, contact support."
+            : `Could not ${isEdit ? 'save changes' : 'add staff member'}. Please try again.`
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -152,6 +160,7 @@ export function StaffFormModal({ isOpen, onClose, onSuccess, staffMember }) {
       title={isEdit ? 'Edit Staff Member' : 'Add New Staff Member'}
       size="lg">
       <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+        {quotaError ? <QuotaBanner error={quotaError} /> : null}
         {error ? (
           <div className="p-3 bg-danger-50 border border-danger-200 rounded-xl text-sm text-danger-700">
             {error}

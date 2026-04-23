@@ -78,6 +78,71 @@ async function fetchInviteDoc(token) {
   return parseFirestoreDoc(data);
 }
 
+// ── Firestore REST write: create a doc in a collection ─────────────────────
+//
+// Used by /api/contact-sales to persist a lead without bundling firebase-admin.
+// Firestore security rules (see firestore.rules `/leads` block) authorize
+// this write — it explicitly allows `create` with no auth when the payload
+// shape matches (name/email/source/createdAt present, read/update/delete
+// blocked). `auto-generated ID` works via a POST (no docId in path).
+//
+// `fields` is a plain-JS object; values are auto-wrapped:
+//   - string → stringValue, number → integerValue/doubleValue,
+//   - boolean → booleanValue, Date → timestampValue, null → nullValue,
+//   - anything else is coerced to string.
+async function createFirestoreDoc(collectionPath, fields) {
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  if (!projectId) {
+    throw new Error('FIREBASE_PROJECT_ID env var is not configured');
+  }
+
+  const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/(default)/documents/${collectionPath}`;
+  const body = { fields: encodeFirestoreFields(fields) };
+
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`Firestore REST write failed (${resp.status}): ${text}`);
+  }
+
+  const data = await resp.json();
+  // `data.name` is like "projects/X/databases/(default)/documents/leads/<id>".
+  const id = typeof data.name === 'string' ? data.name.split('/').pop() : null;
+  return { id, raw: data };
+}
+
+function encodeFirestoreFields(obj) {
+  const out = {};
+  for (const [key, raw] of Object.entries(obj || {})) {
+    out[key] = encodeFirestoreValue(raw);
+  }
+  return out;
+}
+
+function encodeFirestoreValue(val) {
+  if (val === null || val === undefined) return { nullValue: null };
+  if (val instanceof Date) return { timestampValue: val.toISOString() };
+  if (typeof val === 'boolean') return { booleanValue: val };
+  if (typeof val === 'number') {
+    return Number.isInteger(val)
+      ? { integerValue: String(val) }
+      : { doubleValue: val };
+  }
+  if (typeof val === 'string') return { stringValue: val };
+  if (Array.isArray(val)) {
+    return { arrayValue: { values: val.map(encodeFirestoreValue) } };
+  }
+  if (typeof val === 'object') {
+    return { mapValue: { fields: encodeFirestoreFields(val) } };
+  }
+  return { stringValue: String(val) };
+}
+
 // Firestore REST returns { name, fields: { key: { stringValue / integerValue / ... } } }.
 // Flatten to a plain object so downstream code doesn't care about the wire format.
 function parseFirestoreDoc(doc) {
@@ -163,6 +228,7 @@ module.exports = {
   isAllowedSource,
   applyCors,
   fetchInviteDoc,
+  createFirestoreDoc,
   sendEmail,
   esc,
 };

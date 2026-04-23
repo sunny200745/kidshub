@@ -13,6 +13,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { auth, db } from '../config';
+import { enforceQuota } from './quotas';
 
 const COLLECTION = 'children';
 
@@ -100,8 +101,12 @@ export const childrenApi = {
     }
   },
 
-  // Create new child
+  // Create new child.
+  //
+  // Quota check (A6) runs before any write. Throws QuotaExceededError on
+  // tiers with a finite children limit; no-op for Pro/Premium/Trial.
   async create(childData) {
+    await enforceQuota('children');
     const daycareId = currentDaycareId();
     const payload = {
       ...childData,

@@ -145,6 +145,95 @@ service cloud.firestore {
       return role in ['owner', 'teacher', 'parent'];
     }
 
+    // -------------------------------------------------------------------------
+    // Plan / entitlements helpers (Sprint 3 / A7)
+    // -------------------------------------------------------------------------
+    //
+    // These mirror `config/product.ts`'s TIER_ORDER + FEATURES maps. When
+    // you add a new paid feature, (a) add the key to FEATURES in config/
+    // product.ts, and (b) add a branch to `planAllows()` below. Rules and
+    // client config must agree — there's no auto-sync.
+    //
+    // `planAllows(feature)` is the server-side defense against a client
+    // compromise calling a paid-feature write. Layer it into the relevant
+    // `allow create`/`allow update` expressions, e.g.:
+    //
+    //   match /photos/{photoId} {
+    //     allow create: if isAuthenticated()
+    //       && inMyTenant(request.resource.data)
+    //       && planAllows('photoJournal');
+    //   }
+    //
+    // Why read centers/{daycareId} every call? Firestore dedupes identical
+    // get() reads inside a single rule evaluation, so `centerDoc()` costs
+    // one extra read per rule — worth it for the safety.
+    //
+    // Tier satisfaction uses numeric ranks (matches TIER_ORDER):
+    //   starter=0 · pro=1 · premium=2 · trial=2 (trial == premium while active)
+    //
+    // Trial expiry: rules do NOT enforce trialEndsAt. The client lazy-
+    // downgrades via `useEntitlements()` (A9), so a compromised client
+    // could theoretically keep writing as trial past its end. That's
+    // acceptable today — first-customer billing enforcement is Track F.
+
+    function centerDoc() {
+      return get(/databases/$(database)/documents/centers/$(userDaycare())).data;
+    }
+
+    function currentPlan() {
+      // Default to 'starter' if plan is missing (legacy / unstamped centers).
+      // `planAllows()` then gates paid features strictly.
+      return centerDoc().get('plan', 'starter');
+    }
+
+    function demoMode() {
+      return centerDoc().get('demoMode', false);
+    }
+
+    // Maps a tier string to its capability rank. Higher == more features.
+    // Keep in sync with TIER_ORDER in config/product.ts.
+    function tierRank(tier) {
+      return tier == 'premium' ? 2
+        : tier == 'trial' ? 2
+        : tier == 'pro' ? 1
+        : 0; // 'starter' or unknown
+    }
+
+    // Effective rank for gating. Demo mode always passes every check.
+    function effectiveTierRank() {
+      return demoMode() ? 2 : tierRank(currentPlan());
+    }
+
+    // Minimum tier rank required for a feature. Mirrors FEATURES in
+    // config/product.ts.
+    function requiredRankFor(feature) {
+      // core.* features unlock at starter (rank 0).
+      return feature == 'photoJournal' ? 1
+        : feature == 'dailyReports' ? 1
+        : feature == 'attendanceReports' ? 1
+        : feature == 'healthReports' ? 1
+        : feature == 'staffClockIn' ? 1
+        : feature == 'morningScreenings' ? 1
+        : feature == 'weeklyPlanner' ? 1
+        : feature == 'activityPlanner' ? 1
+        : feature == 'customBranding' ? 1
+        : feature == 'emailSupport' ? 1
+        : feature == 'multiDaycare' ? 2
+        : feature == 'ariaAiInApp' ? 2
+        : feature == 'apiAccess' ? 2
+        : feature == 'dedicatedSupport' ? 2
+        : 0; // core.* and unknown features default to starter
+    }
+
+    // Server-side feature gate. Use on paid-feature creates/updates.
+    // Requires the requester to have a profile (so userDaycare() resolves)
+    // and a center doc with a known plan. Returns false for un-profiled
+    // or unknown-plan users — fails closed.
+    function planAllows(feature) {
+      return hasProfile()
+        && effectiveTierRank() >= requiredRankFor(feature);
+    }
+
     // Business-doc tenant check. Returns true iff the doc's daycareId
     // matches the requester's daycareId. Legacy docs without daycareId
     // return false → unreadable (intentional clean-slate enforcement).
@@ -319,8 +408,25 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     // centers/{ownerId} — 1:1 tenant metadata keyed by owner uid
     // -------------------------------------------------------------------------
+    //
+    // Read:
+    //   - owner: their own center doc
+    //   - teacher: the center doc of the daycare they belong to (needed so
+    //              useEntitlements() in the kidshub app can read plan /
+    //              demoMode / feature flags on the teacher side)
+    //   - parent:  same rationale as teacher — parents need plan visibility
+    //              to correctly show upgrade CTAs on gated features
+    //
+    // Write: owner only. Parent/teacher cannot modify the center doc
+    //        (including demoMode). Client-side admin-UID gating on the
+    //        Settings toggle is a UX refinement, not a security boundary —
+    //        the boundary is this rule.
+    //
     match /centers/{ownerId} {
-      allow read, write: if isSelf(ownerId) && isOwner();
+      allow read: if (isSelf(ownerId) && isOwner())
+        || (isTeacher() && userDaycare() == ownerId)
+        || (isParent()  && userDaycare() == ownerId);
+      allow write: if isSelf(ownerId) && isOwner();
     }
 
     // -------------------------------------------------------------------------
@@ -545,6 +651,19 @@ service cloud.firestore {
           && inMyTenant(resource.data)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt'])
         )
+        || (
+          // Teacher archiving a thread they participate in (Sprint 4 / B6).
+          // Scoped to staff — parents never touch these keys on their side.
+          // Restricted to participants so one teacher can't re-file another
+          // teacher's conversations.
+          isTeacher()
+          && inMyTenant(resource.data)
+          && (
+            resource.data.senderId == request.auth.uid
+            || resource.data.recipientId == request.auth.uid
+          )
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['archivedByStaff', 'staffArchivedAt'])
+        )
         || (isOwner() && inMyTenant(resource.data));
 
       allow delete: if (resource.data.senderId == request.auth.uid && inMyTenant(resource.data))
@@ -579,6 +698,225 @@ service cloud.firestore {
         || (isTeacher() && request.resource.data.daycareId == userDaycare());
 
       allow update, delete: if isOwner() && inMyTenant(resource.data);
+    }
+
+    // -------------------------------------------------------------------------
+    // photos/{photoId} — photo journal (Sprint 5 / D1)
+    // -------------------------------------------------------------------------
+    //
+    // Pro-and-up feature. Binary content lives in Firebase Storage; this
+    // collection stores metadata + `imageUrl` only. Photos can tag 1..N
+    // children via `childIds[]` so group shots surface on every tagged
+    // parent's gallery without duplicating the upload.
+    //
+    // Rules:
+    //   - read: owner (tenant), teacher (tenant + classroom match), or
+    //           parent whose linked childIds intersect the photo's tags
+    //   - create: owner OR teacher in same tenant AND planAllows('photoJournal');
+    //             uploadedBy must equal requester uid
+    //   - update: uploader or owner — limited to caption / tags edits
+    //   - delete: uploader or owner
+    //
+    match /photos/{photoId} {
+      allow read: if (isOwner() && inMyTenant(resource.data))
+        || (isTeacher() && inMyTenant(resource.data)
+            && resource.data.get('classroomId', '') == userClassroom())
+        || (isParent()
+            && inMyTenant(resource.data)
+            && resource.data.childIds.toSet()
+                .intersection(userChildIds().toSet()).size() > 0);
+
+      allow create: if planAllows('photoJournal')
+        && request.resource.data.daycareId == userDaycare()
+        && request.resource.data.uploadedBy == request.auth.uid
+        && request.resource.data.childIds is list
+        && request.resource.data.childIds.size() > 0
+        && request.resource.data.imageUrl is string
+        && (
+          (isOwner() && request.resource.data.daycareId == request.auth.uid)
+          || (isTeacher() && request.resource.data.classroomId == userClassroom())
+        );
+
+      allow update: if inMyTenant(resource.data)
+        && planAllows('photoJournal')
+        && (
+          isOwner()
+          || resource.data.uploadedBy == request.auth.uid
+        )
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'caption', 'childIds', 'updatedAt'
+        ]);
+
+      allow delete: if inMyTenant(resource.data)
+        && (isOwner() || resource.data.uploadedBy == request.auth.uid);
+    }
+
+    // -------------------------------------------------------------------------
+    // attendance/{attendanceId} — staff clock-in (Sprint 6 / D4)
+    // -------------------------------------------------------------------------
+    //
+    // Pro-and-up. Teachers clock themselves in/out; owners can see the
+    // full daycare timesheet. Teachers can only edit their OWN open shift
+    // (set clockOutAt). Once closed, the row is immutable for teachers.
+    //
+    match /attendance/{attendanceId} {
+      allow read: if (isOwner() && inMyTenant(resource.data))
+        || (isTeacher() && inMyTenant(resource.data)
+            && resource.data.userId == request.auth.uid);
+
+      allow create: if planAllows('staffClockIn')
+        && isTeacher()
+        && request.resource.data.daycareId == userDaycare()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.clockInAt is string
+        && request.resource.data.get('clockOutAt', null) == null;
+
+      allow update: if inMyTenant(resource.data)
+        && planAllows('staffClockIn')
+        && (
+          // Teacher closing their own open shift.
+          (
+            isTeacher()
+            && resource.data.userId == request.auth.uid
+            && resource.data.get('clockOutAt', null) == null
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'clockOutAt', 'minutesWorked', 'notes', 'updatedAt'
+            ])
+          )
+          || isOwner()
+        );
+
+      allow delete: if isOwner() && inMyTenant(resource.data);
+    }
+
+    // -------------------------------------------------------------------------
+    // healthLogs/{logId} — compliance-oriented health log (Sprint 7 / D5)
+    // -------------------------------------------------------------------------
+    match /healthLogs/{logId} {
+      allow read: if (isOwner() && inMyTenant(resource.data))
+        || (isTeacher() && inMyTenant(resource.data)
+            && resource.data.get('classroomId', '') == userClassroom())
+        || (isParent() && resource.data.childId in userChildIds());
+
+      allow create: if planAllows('healthReports')
+        && request.resource.data.daycareId == userDaycare()
+        && request.resource.data.staffId == request.auth.uid
+        && (
+          (isOwner() && request.resource.data.daycareId == request.auth.uid)
+          || (isTeacher() && request.resource.data.classroomId == userClassroom())
+        );
+
+      allow update, delete: if isOwner() && inMyTenant(resource.data);
+    }
+
+    // -------------------------------------------------------------------------
+    // weeklyPlans/{planId} — teacher curriculum plan (Sprint 7 / D6)
+    // -------------------------------------------------------------------------
+    match /weeklyPlans/{planId} {
+      allow read: if inMyTenant(resource.data)
+        && (
+          isOwner()
+          || (isTeacher() && resource.data.classroomId == userClassroom())
+          // Parents see their child's classroom plan, read-only.
+          || isParent()
+        );
+
+      allow create: if planAllows('weeklyPlanner')
+        && request.resource.data.daycareId == userDaycare()
+        && (
+          (isOwner() && request.resource.data.daycareId == request.auth.uid)
+          || (isTeacher() && request.resource.data.classroomId == userClassroom())
+        );
+
+      allow update: if planAllows('weeklyPlanner')
+        && inMyTenant(resource.data)
+        && (
+          (isTeacher() && resource.data.classroomId == userClassroom())
+          || isOwner()
+        );
+
+      allow delete: if isOwner() && inMyTenant(resource.data);
+    }
+
+    // -------------------------------------------------------------------------
+    // activityTemplates/{templateId} — curriculum library (Sprint 7 / D7)
+    // -------------------------------------------------------------------------
+    match /activityTemplates/{templateId} {
+      allow read: if inMyTenant(resource.data)
+        && (isOwner() || isTeacher() || isParent());
+
+      allow create: if planAllows('activityPlanner')
+        && request.resource.data.daycareId == userDaycare()
+        && request.resource.data.ownerId == request.auth.uid
+        && (isOwner() || isTeacher());
+
+      allow update, delete: if planAllows('activityPlanner')
+        && inMyTenant(resource.data)
+        && (isOwner() || resource.data.ownerId == request.auth.uid);
+    }
+
+    // -------------------------------------------------------------------------
+    // screenings/{screeningId} — morning health screenings (Sprint 7 / D8)
+    // -------------------------------------------------------------------------
+    match /screenings/{screeningId} {
+      allow read: if (isOwner() && inMyTenant(resource.data))
+        || (isTeacher() && inMyTenant(resource.data)
+            && resource.data.get('classroomId', '') == userClassroom())
+        || (isParent() && resource.data.childId in userChildIds());
+
+      allow create: if planAllows('morningScreenings')
+        && request.resource.data.daycareId == userDaycare()
+        && request.resource.data.staffId == request.auth.uid
+        && (
+          (isOwner() && request.resource.data.daycareId == request.auth.uid)
+          || (isTeacher() && request.resource.data.classroomId == userClassroom())
+        );
+
+      // Parent can acknowledge their child's screening (digital sign-off).
+      allow update: if inMyTenant(resource.data)
+        && (
+          isOwner()
+          || (isTeacher() && resource.data.classroomId == userClassroom())
+          || (
+            isParent()
+            && resource.data.childId in userChildIds()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'parentAcknowledged', 'acknowledgedAt'
+            ])
+          )
+        );
+
+      allow delete: if isOwner() && inMyTenant(resource.data);
+    }
+
+    // -------------------------------------------------------------------------
+    // leads/{leadId} — inbound sales / pricing-page submissions (Sprint 3 / E2)
+    // -------------------------------------------------------------------------
+    //
+    // Anyone (unauthenticated web visitors on the landing page) can create a
+    // lead via the contact-sales serverless function. To prevent spam /
+    // abuse of rules-based writes, we require a small set of required fields
+    // and cap the message length. The kidshub-landing/api/contact-sales.js
+    // endpoint sits in front of this anyway, but defense-in-depth is cheap.
+    //
+    // Reads, updates, and deletes are completely blocked — only our internal
+    // tooling (Admin SDK / Firestore console) can touch leads once written.
+    // This keeps PII out of reach of any compromised web client.
+    //
+    match /leads/{leadId} {
+      allow create: if request.resource.data.keys().hasAll(['name', 'email', 'source', 'createdAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 200
+        && request.resource.data.email is string
+        && request.resource.data.email.size() > 3
+        && request.resource.data.email.size() <= 320
+        && request.resource.data.source is string
+        && request.resource.data.get('message', '') is string
+        && request.resource.data.get('message', '').size() <= 2000
+        && request.resource.data.get('tier', '') is string;
+
+      allow read, update, delete: if false;
     }
 
     // -------------------------------------------------------------------------

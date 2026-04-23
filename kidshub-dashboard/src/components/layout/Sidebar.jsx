@@ -15,6 +15,7 @@ import {
   UserCheck,
   Activity,
   Megaphone,
+  FileText,
   Loader2,
 } from 'lucide-react';
 import { Avatar } from '../ui';
@@ -30,6 +31,7 @@ const navigation = [
   { name: 'Messages', href: '/messages', icon: MessageSquare, badge: 2 },
   { name: 'Announcements', href: '/announcements', icon: Megaphone },
   { name: 'Schedule', href: '/schedule', icon: Calendar },
+  { name: 'Reports', href: '/reports', icon: FileText },
 ];
 
 const bottomNav = [

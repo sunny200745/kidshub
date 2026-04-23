@@ -1,16 +1,17 @@
 /**
  * /check-in — kid-by-kid attendance management for the classroom.
  *
- * Port of `kidshub-dashboard/src/pages/CheckIn.jsx`. Key adaptations:
- *   - Live `useChildrenData` hook → local `useState` initialized from
- *     `classroomRoster` mock. Lets us exercise the UI (tap "Check in" →
- *     status flips) without Firestore wiring. p3-15 swaps the state
- *     setter for `childrenApi.checkIn(...)`.
- *   - Web `<input>` / `<textarea>` → `<TextInput>`; bottom sheet "modal"
- *     uses React Native's `<Modal>` with slide-up animation.
- *   - Stats strip and filter chips kept; classroom filter removed
- *     (everything already scoped to one classroom).
- *   - Allergy alerts shown inline on the card AND inside the modal.
+ * Live Firestore wiring (live-data-11): the roster comes from the live
+ * subscription `useClassroomRoster` so a check-in done by a co-teacher
+ * shows up immediately on every device. Confirming a check-in / out
+ * fires `childrenApi.checkIn|checkOut` (which writes to the
+ * children/{id} doc using the same field whitelist as the dashboard)
+ * AND logs an `activities` entry of type `checkin`/`checkout` so the
+ * action shows up on the parent's timeline within seconds.
+ *
+ * Failure modes surfaced inline in the modal: any thrown error keeps
+ * the sheet open and renders the message. The optimistic local state
+ * we used previously is gone — Firestore subscription IS the truth.
  */
 import { useMemo, useState } from 'react';
 import {
@@ -35,8 +36,11 @@ import {
 } from 'react-native';
 
 import { ScreenContainer } from '@/components/layout';
-import { Avatar, Badge, Card, CardBody } from '@/components/ui';
-import { classroomRoster, type Child } from '@/data/mockData';
+import { Avatar, Badge, Card, CardBody, EmptyState, LoadingState } from '@/components/ui';
+import { useAuth } from '@/contexts';
+import { activitiesApi, childrenApi } from '@/firebase/api';
+import type { Child } from '@/firebase/types';
+import { useClassroomRoster } from '@/hooks';
 
 type FilterValue = 'all' | 'in' | 'out';
 
@@ -46,6 +50,15 @@ function formatTime(iso: string) {
     minute: '2-digit',
     hour12: true,
   });
+}
+
+function ageOf(child: Child): string {
+  if (child.age) return child.age;
+  if (!child.dateOfBirth) return '';
+  const dob = new Date(child.dateOfBirth);
+  if (Number.isNaN(dob.getTime())) return '';
+  const yrs = Math.floor((Date.now() - dob.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+  return yrs >= 2 ? `${yrs} years` : `${Math.max(1, Math.floor((Date.now() - dob.getTime()) / (30.44 * 24 * 60 * 60 * 1000)))} months`;
 }
 
 type ActionType = 'in' | 'out';
@@ -81,7 +94,9 @@ function ChildCheckRow({ child, onAction }: ChildCardProps) {
               </Text>
             </View>
           ) : (
-            <Text className="text-xs text-surface-400 mt-1">Not yet today</Text>
+            <Text className="text-xs text-surface-400 mt-1">
+              {child.status === 'checked-out' ? 'Checked out' : 'Not yet today'}
+            </Text>
           )}
         </View>
         {isCheckedIn ? (
@@ -112,9 +127,10 @@ type ModalProps = {
   onClose: () => void;
   onConfirm: (data: { person: string; notes: string }) => Promise<void>;
   isProcessing: boolean;
+  errorMessage: string | null;
 };
 
-function CheckInSheet({ child, type, onClose, onConfirm, isProcessing }: ModalProps) {
+function CheckInSheet({ child, type, onClose, onConfirm, isProcessing, errorMessage }: ModalProps) {
   const [person, setPerson] = useState('');
   const [notes, setNotes] = useState('');
 
@@ -129,8 +145,10 @@ function CheckInSheet({ child, type, onClose, onConfirm, isProcessing }: ModalPr
 
   const confirm = async () => {
     await onConfirm({ person, notes });
-    setPerson('');
-    setNotes('');
+    if (!errorMessage) {
+      setPerson('');
+      setNotes('');
+    }
   };
 
   return (
@@ -154,7 +172,7 @@ function CheckInSheet({ child, type, onClose, onConfirm, isProcessing }: ModalPr
                 {child.firstName} {child.lastName}
               </Text>
               <Text className="text-sm text-surface-500 dark:text-surface-400 mt-0.5">
-                {child.age}
+                {ageOf(child)}
               </Text>
             </View>
           </View>
@@ -204,6 +222,12 @@ function CheckInSheet({ child, type, onClose, onConfirm, isProcessing }: ModalPr
             style={{ minHeight: 80, textAlignVertical: 'top' }}
           />
 
+          {errorMessage ? (
+            <Text className="text-sm text-danger-600 dark:text-danger-400 mb-3">
+              {errorMessage}
+            </Text>
+          ) : null}
+
           <View className="flex-row gap-3">
             <Pressable
               onPress={close}
@@ -230,24 +254,30 @@ function CheckInSheet({ child, type, onClose, onConfirm, isProcessing }: ModalPr
 }
 
 export default function TeacherCheckIn() {
-  const [children, setChildren] = useState<Child[]>(classroomRoster);
+  const { profile } = useAuth();
+  const uid = profile?.uid;
+  const daycareId = profile?.daycareId as string | undefined;
+  const classroomId = profile?.classroomId as string | undefined;
+
+  const { data: roster, loading } = useClassroomRoster();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<FilterValue>('all');
   const [active, setActive] = useState<{ child: Child; type: ActionType } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const stats = useMemo(() => {
-    const inCount = children.filter((c) => c.status === 'checked-in').length;
+    const inCount = roster.filter((c) => c.status === 'checked-in').length;
     return {
       in: inCount,
-      out: children.length - inCount,
-      total: children.length,
+      out: roster.length - inCount,
+      total: roster.length,
     };
-  }, [children]);
+  }, [roster]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return children.filter((c) => {
+    return roster.filter((c) => {
       const matchesSearch = `${c.firstName} ${c.lastName}`.toLowerCase().includes(q);
       const matchesFilter =
         filter === 'all' ||
@@ -255,28 +285,41 @@ export default function TeacherCheckIn() {
         (filter === 'out' && c.status !== 'checked-in');
       return matchesSearch && matchesFilter;
     });
-  }, [children, filter, search]);
+  }, [roster, filter, search]);
 
-  const handleConfirm = async ({ person, notes: _notes }: { person: string; notes: string }) => {
-    if (!active) return;
+  const handleConfirm = async ({ person, notes }: { person: string; notes: string }) => {
+    if (!active || !uid || !daycareId || !classroomId) return;
     setIsProcessing(true);
+    setErrorMessage(null);
     try {
-      // Simulate a Firestore round-trip so the spinner is perceptible.
-      await new Promise<void>((r) => setTimeout(r, 450));
-      const nowIso = new Date().toISOString();
-      setChildren((prev) =>
-        prev.map((c) =>
-          c.id === active.child.id
-            ? {
-                ...c,
-                status: active.type === 'in' ? 'checked-in' : 'absent',
-                checkInTime: active.type === 'in' ? nowIso : c.checkInTime,
-                droppedOffBy: active.type === 'in' ? person || c.droppedOffBy : c.droppedOffBy,
-              }
-            : c
-        )
-      );
+      if (active.type === 'in') {
+        await childrenApi.checkIn(active.child.id, person.trim() || 'Guardian', notes.trim());
+      } else {
+        await childrenApi.checkOut(active.child.id, person.trim() || 'Guardian', notes.trim());
+      }
+      // Best-effort activity log so the parent's timeline reflects the
+      // event. Failure here is non-fatal — the children doc is the
+      // source of truth for status; the activity is just the audit row.
+      try {
+        await activitiesApi.create({
+          childId: active.child.id,
+          classroomId,
+          staffId: uid,
+          type: active.type === 'in' ? 'checkin' : 'checkout',
+          notes: notes.trim() || (active.type === 'in' ? `Dropped off by ${person.trim() || 'guardian'}` : `Picked up by ${person.trim() || 'guardian'}`),
+          daycareId,
+        });
+      } catch (logErr) {
+        console.warn('[check-in] activity log failed:', logErr);
+      }
       setActive(null);
+    } catch (err) {
+      console.error('[check-in] write failed:', err);
+      setErrorMessage(
+        err instanceof Error
+          ? err.message
+          : 'Could not save attendance. Please try again.',
+      );
     } finally {
       setIsProcessing(false);
     }
@@ -287,6 +330,18 @@ export default function TeacherCheckIn() {
     { value: 'in', label: 'In', count: stats.in },
     { value: 'out', label: 'Not in', count: stats.out },
   ];
+
+  if (!classroomId) {
+    return (
+      <ScreenContainer title="Check in / out" subtitle="Manage daily attendance">
+        <EmptyState
+          icon={UserCheck}
+          title="No classroom assigned"
+          description="Ask your daycare owner to assign you to a classroom from the dashboard."
+        />
+      </ScreenContainer>
+    );
+  }
 
   return (
     <ScreenContainer title="Check in / out" subtitle="Manage daily attendance">
@@ -376,37 +431,54 @@ export default function TeacherCheckIn() {
       </Card>
 
       {/* List */}
-      <View className="gap-3">
-        {filtered.length === 0 ? (
-          <Card>
-            <CardBody className="p-8 items-center">
-              <UserCheck size={32} color="#9CA3AF" />
-              <Text className="text-base font-semibold text-surface-900 dark:text-surface-50 mt-3">
-                No children found
-              </Text>
-              <Text className="text-sm text-surface-500 dark:text-surface-400 mt-1 text-center">
-                Try adjusting your search or filters
-              </Text>
-            </CardBody>
-          </Card>
-        ) : (
-          filtered.map((child) => (
-            <ChildCheckRow
-              key={child.id}
-              child={child}
-              onAction={(c, type) => setActive({ child: c, type })}
-            />
-          ))
-        )}
-      </View>
+      {loading ? (
+        <LoadingState message="Loading roster" />
+      ) : (
+        <View className="gap-3">
+          {filtered.length === 0 ? (
+            <Card>
+              <CardBody>
+                <EmptyState
+                  icon={UserCheck}
+                  title={
+                    roster.length === 0
+                      ? 'No children enrolled yet'
+                      : 'No children found'
+                  }
+                  description={
+                    roster.length === 0
+                      ? 'Ask your owner to add children to this classroom from the dashboard.'
+                      : 'Try adjusting your search or filters.'
+                  }
+                />
+              </CardBody>
+            </Card>
+          ) : (
+            filtered.map((child) => (
+              <ChildCheckRow
+                key={child.id}
+                child={child}
+                onAction={(c, type) => {
+                  setErrorMessage(null);
+                  setActive({ child: c, type });
+                }}
+              />
+            ))
+          )}
+        </View>
+      )}
 
       {active ? (
         <CheckInSheet
           child={active.child}
           type={active.type}
-          onClose={() => setActive(null)}
+          onClose={() => {
+            setActive(null);
+            setErrorMessage(null);
+          }}
           onConfirm={handleConfirm}
           isProcessing={isProcessing}
+          errorMessage={errorMessage}
         />
       ) : null}
     </ScreenContainer>

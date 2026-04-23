@@ -1,19 +1,23 @@
 /**
  * /profile — child profile + settings + sign-out.
  *
- * Ported from kidshub-legacy/src/pages/Profile.jsx. The screen is a stack of
- * "section" cards:
+ * The screen is a stack of section cards:
  *   1. Hero card — child avatar + name + classroom + allergy badges
  *   2. Child Information — medical, emergency contacts, pickups, schedule, docs
  *   3. Settings — notifications, privacy, help
  *   4. Sign out
  *
- * Most row onPress handlers are intentionally no-ops for now — the detail
- * screens they'd navigate to get built in later tickets. The current release
- * just needs the parity shell so Profile isn't a stub.
+ * Most row onPress handlers are intentionally no-ops for now — the
+ * detail screens they'd navigate to get built in later tickets. The
+ * current release just needs the parity shell so Profile isn't a stub.
  *
- * Sign-out actively uses AuthContext.logout(); the RootRedirect layer (app/
- * index.tsx) handles the navigation after `user` flips to null.
+ * Data: live `useMyChildren` for the child hero + the medical/allergy
+ * summary. Emergency contacts / authorized pickups / schedule remain
+ * placeholder counts (those fields aren't part of the children-doc
+ * schema yet — adding them is a separate ticket on RESTRUCTURE_PLAN).
+ *
+ * Sign-out actively uses AuthContext.logout(); the RootRedirect layer
+ * (app/index.tsx) handles the navigation after `user` flips to null.
  */
 import { useRouter } from 'expo-router';
 import {
@@ -34,9 +38,17 @@ import { useState, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
 import { ScreenContainer } from '@/components/layout';
-import { Avatar, Badge, Card, CardBody } from '@/components/ui';
+import {
+  ActionButton,
+  Avatar,
+  Card,
+  CardBody,
+  EmptyState,
+  LoadingState,
+  Pill,
+} from '@/components/ui';
 import { useAuth } from '@/contexts';
-import { childProfile, myChildren } from '@/data/mockData';
+import { useClassroom, useMyChildren } from '@/hooks';
 
 function ProfileSection({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -111,9 +123,15 @@ function ProfileItem({
 
 export default function ParentProfile() {
   const router = useRouter();
-  const { logout } = useAuth();
+  const { logout, profile } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
-  const child = myChildren[0];
+  const { data: children, loading: childrenLoading } = useMyChildren();
+  const child = children[0] ?? null;
+  const { data: classroom } = useClassroom(
+    child?.classroomId ?? child?.classroom ?? null,
+  );
+
+  const parentEmail = (profile?.email as string | undefined) ?? '';
 
   const handleLogout = async () => {
     setLoggingOut(true);
@@ -121,86 +139,140 @@ export default function ParentProfile() {
       await logout();
       router.replace('/login');
     } catch (error) {
-      // Keep the user on the page so they can retry; log for diagnostics.
       console.error('Logout error:', error);
     } finally {
       setLoggingOut(false);
     }
   };
 
+  if (childrenLoading) {
+    return (
+      <ScreenContainer title="Profile" subtitle="Manage your child's information">
+        <LoadingState message="Loading profile" />
+      </ScreenContainer>
+    );
+  }
+
+  const allergies = child?.allergies ?? [];
+  const dietaryRestrictions = child?.dietaryRestrictions ?? [];
+  const accentColor = classroom?.color ?? child?.classroomColor ?? '#FF2D8A';
+  const ageLabel =
+    child?.age ||
+    (child?.dateOfBirth
+      ? `${Math.max(
+          1,
+          Math.floor(
+            (Date.now() - new Date(child.dateOfBirth).getTime()) /
+              (365.25 * 24 * 60 * 60 * 1000),
+          ),
+        )} years`
+      : '');
+
   return (
     <ScreenContainer title="Profile" subtitle="Manage your child's information">
       {/* Hero card: avatar, name, classroom dot, allergies */}
-      <Card className="mb-6">
-        <CardBody className="p-5">
-          <View className="flex-row items-start gap-4">
-            <Avatar name={`${child.firstName} ${child.lastName}`} size="xl" />
-            <View className="flex-1">
-              <Text className="text-xl font-bold text-surface-900 dark:text-surface-50">
-                {child.firstName} {child.lastName}
-              </Text>
-              <Text className="text-surface-500 dark:text-surface-400">{child.age}</Text>
-              <View className="flex-row items-center gap-2 mt-2">
-                <View
-                  style={{
-                    width: 12,
-                    height: 12,
-                    borderRadius: 6,
-                    backgroundColor: child.classroomColor,
-                  }}
-                />
-                <Text className="text-sm text-surface-600 dark:text-surface-300">
-                  {child.classroom}
+      {child ? (
+        <Card className="mb-6">
+          <CardBody className="p-5">
+            <View className="flex-row items-start gap-4">
+              <Avatar name={`${child.firstName} ${child.lastName}`} size="xl" />
+              <View className="flex-1">
+                <Text className="text-xl font-bold text-surface-900 dark:text-surface-50">
+                  {child.firstName} {child.lastName}
                 </Text>
+                {ageLabel ? (
+                  <Text className="text-surface-500 dark:text-surface-400">{ageLabel}</Text>
+                ) : null}
+                <View className="flex-row items-center gap-2 mt-2">
+                  <View
+                    style={{
+                      width: 12,
+                      height: 12,
+                      borderRadius: 6,
+                      backgroundColor: accentColor,
+                    }}
+                  />
+                  <Text className="text-sm text-surface-600 dark:text-surface-300">
+                    {classroom?.name ?? child.classroom ?? 'Classroom'}
+                  </Text>
+                </View>
               </View>
             </View>
-          </View>
 
-          {childProfile.allergies.length > 0 ? (
-            <View className="mt-5 pt-5 border-t border-surface-100 dark:border-surface-700">
-              <View className="flex-row items-center gap-2 mb-3">
-                <AlertTriangle size={16} color="#EF4444" />
-                <Text className="text-sm font-medium text-surface-700 dark:text-surface-200">
-                  Allergies
-                </Text>
+            {allergies.length > 0 ? (
+              <View className="mt-5 pt-5 border-t border-surface-100 dark:border-surface-700">
+                <View className="flex-row items-center gap-2 mb-3">
+                  <AlertTriangle size={16} color="#EF4444" />
+                  <Text className="text-sm font-medium text-surface-700 dark:text-surface-200">
+                    Allergies
+                  </Text>
+                </View>
+                <View className="flex-row flex-wrap gap-2">
+                  {allergies.map((allergy) => (
+                    <Pill
+                      key={allergy}
+                      tone="danger"
+                      variant="soft"
+                      size="sm"
+                      icon={AlertTriangle}
+                      label={allergy}
+                    />
+                  ))}
+                </View>
               </View>
-              <View className="flex-row flex-wrap gap-2">
-                {childProfile.allergies.map((allergy) => (
-                  <Badge key={allergy} variant="danger">
-                    <AlertTriangle size={12} color="#B91C1C" />
-                    <Text className="text-xs font-medium text-danger-700 dark:text-danger-300">
-                      {allergy}
-                    </Text>
-                  </Badge>
-                ))}
-              </View>
-            </View>
-          ) : null}
-        </CardBody>
-      </Card>
+            ) : null}
+          </CardBody>
+        </Card>
+      ) : (
+        <Card className="mb-6">
+          <CardBody>
+            <EmptyState
+              icon={HelpCircle}
+              title="No child linked yet"
+              description="Once your daycare links your child to your account, their profile will appear here."
+            />
+          </CardBody>
+        </Card>
+      )}
 
-      {/* Child information section — detail routes are TODO for a later ticket */}
-      <ProfileSection title="Child Information">
-        <ProfileItem
-          icon={Heart}
-          label="Medical & Allergies"
-          value={`${childProfile.allergies.length} allergies, ${childProfile.dietaryRestrictions.length} restrictions`}
-        />
+      {/* Child information — counts come from the live child doc; rows
+          without backing fields show "Coming soon" instead of fake data. */}
+      {child ? (
+        <ProfileSection title="Child Information">
+          <ProfileItem
+            icon={Heart}
+            label="Medical & Allergies"
+            value={
+              allergies.length || dietaryRestrictions.length
+                ? `${allergies.length} allergies, ${dietaryRestrictions.length} restrictions`
+                : 'No medical notes on file'
+            }
+          />
+          <ProfileItem
+            icon={Users}
+            label="Emergency Contacts"
+            value="Coming soon"
+          />
+          <ProfileItem
+            icon={Phone}
+            label="Authorized Pickups"
+            value="Coming soon"
+          />
+          <ProfileItem icon={Calendar} label="Schedule" value="Coming soon" />
+          <ProfileItem
+            icon={FileText}
+            label="Documents"
+            value="View enrollment forms"
+            isLast
+          />
+        </ProfileSection>
+      ) : null}
+
+      <ProfileSection title="Account">
         <ProfileItem
           icon={Users}
-          label="Emergency Contacts"
-          value={`${childProfile.emergencyContacts.length} contacts`}
-        />
-        <ProfileItem
-          icon={Phone}
-          label="Authorized Pickups"
-          value={`${childProfile.authorizedPickups.length} people`}
-        />
-        <ProfileItem icon={Calendar} label="Schedule" value="Mon - Fri" />
-        <ProfileItem
-          icon={FileText}
-          label="Documents"
-          value="View enrollment forms"
+          label="Signed in as"
+          value={parentEmail || 'Parent'}
           isLast
         />
       </ProfileSection>
@@ -211,24 +283,15 @@ export default function ParentProfile() {
         <ProfileItem icon={HelpCircle} label="Help & Support" isLast />
       </ProfileSection>
 
-      {/* Sign out card — full-width pressable with spinner on submit */}
-      <Card>
-        <CardBody className="p-0">
-          <Pressable
-            onPress={handleLogout}
-            disabled={loggingOut}
-            className="flex-row items-center justify-center gap-2 p-4 active:bg-danger-50 dark:active:bg-danger-900/20 rounded-2xl">
-            {loggingOut ? (
-              <ActivityIndicator size="small" color="#DC2626" />
-            ) : (
-              <LogOut size={20} color="#DC2626" />
-            )}
-            <Text className="font-medium text-danger-600 dark:text-danger-400">
-              {loggingOut ? 'Signing out...' : 'Sign Out'}
-            </Text>
-          </Pressable>
-        </CardBody>
-      </Card>
+      <ActionButton
+        label={loggingOut ? 'Signing out…' : 'Sign out'}
+        icon={LogOut}
+        variant="ghost"
+        tone="danger"
+        size="lg"
+        loading={loggingOut}
+        onPress={handleLogout}
+      />
 
       <Text className="text-center text-xs text-surface-400 dark:text-surface-500 mt-6">
         KidsHub Parent App v1.0.0

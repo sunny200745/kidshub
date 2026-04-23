@@ -1,73 +1,161 @@
 /**
- * /activities — teacher's activity log with 3-step logging modal.
+ * /activities — "Add entry" tab (Sprint 2 / B4).
  *
- * Port of `kidshub-dashboard/src/pages/Activities.jsx`. Shows today's
- * classroom activity timeline + a type filter chip row + a floating FAB
- * that opens a 3-step bottom-sheet (type → child → notes).
+ * This replaces the old 3-step NewActivityModal with a Lillio-style
+ * 2-col quick-log grid: 8 large, iconified cards covering every
+ * common classroom event (check-in, activity, observation, health,
+ * temperature, food, sleep, toilet). Tapping a card opens
+ * QuickLogSheet with the activity type prefilled — one tap later, the
+ * entry is saved.
  *
- * Adaptations from the dashboard version:
- *   - `activitiesApi.create(...)` call replaced with local state append;
- *     p3-15 swaps this back to Firestore.
- *   - Classroom filter dropped (already scoped to one classroom).
- *   - Quick-log chip row ported as horizontal ScrollView (instead of
- *     flex-wrap rows) — plays better with narrow phone widths and gives
- *     a familiar "story ring" feel.
- *   - 3-step modal is a bottom-sheet Modal instead of a centered dialog.
+ * The 4-tap → 2-tap compression is the whole point. A teacher should
+ * never have to hunt through a wizard for the 80% cases.
+ *
+ * Below the grid is a compact "Today's log" section: a live timeline
+ * of today's classroom activities. Same source as the Sprint 1 impl
+ * (`useTodaysActivitiesForClassroom`) — we just render it with the
+ * new EntityCard-adjacent styling instead of the old CardBody list.
+ *
+ * The old 3-step modal is intentionally deleted. If a teacher needs
+ * to log a "less common" activity type (incident / medication /
+ * milestone / photo / music / play / outdoor / learning), they use
+ * the "Other" card, which opens QuickLogSheet without a prefilled
+ * type and lets them choose from the full list.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
+  Activity as ActivityIconLucide,
   AlertTriangle,
-  Plus,
-  Search,
+  BookOpen,
+  Droplets,
+  FileText,
+  Heart,
+  LogIn,
+  Moon,
+  Thermometer,
+  Utensils,
   type LucideIcon,
 } from 'lucide-react-native';
-import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
+import { ActivityIcon, activityLabels } from '@/components/icons/activity-icon';
 import { ScreenContainer } from '@/components/layout';
+import { Badge, Card, CardBody, EmptyState, LoadingState } from '@/components/ui';
+import { QuickLogSheet } from '@/components/teacher/quick-log-sheet';
+import { useAuth } from '@/contexts';
+import { activitiesApi } from '@/firebase/api';
+import type { Activity, ActivityType, Child, Staff } from '@/firebase/types';
 import {
-  ActivityIcon,
-  activityColors,
-  activityIcons,
-  activityLabels,
-} from '@/components/icons/activity-icon';
-import { Avatar, Badge, Card, CardBody } from '@/components/ui';
-import {
-  classroomActivities,
-  classroomRoster,
-  staff,
-  type ActivityType,
-  type Child,
-  type ClassroomActivity,
-} from '@/data/mockData';
+  useClassroomRoster,
+  useStaffForDaycare,
+  useTodaysActivitiesForClassroom,
+} from '@/hooks';
 
-/** Activity types exposed in the logging modal. A strict subset of the full
- *  ActivityType union — skips checkin/checkout (logged via CheckIn tab) and
- *  read-only types (mood, note, photo) that don't map cleanly to a teacher
- *  quick-log entry. */
-const LOGGABLE_TYPES: ActivityType[] = [
-  'meal',
-  'snack',
-  'nap',
-  'diaper',
-  'potty',
-  'activity',
-  'outdoor',
-  'learning',
-  'photo',
-  'note',
-  'incident',
-  'medication',
-  'milestone',
+type GridCard = {
+  key: string;
+  label: string;
+  type: ActivityType;
+  icon: LucideIcon;
+  /** NativeWind class for the icon bubble background. */
+  iconBg: string;
+  /** Hex color for the Lucide stroke. */
+  iconColor: string;
+  /** Small caption under the label — helps orient first-time teachers. */
+  caption: string;
+};
+
+/**
+ * The 8-card quick-log grid. Order is Lillio-ish: most-frequent events
+ * up top (check-in, activity, observation, health), daily-care events
+ * in the middle (food, sleep, toilet), temperature at the end because
+ * it's rarer and slightly scarier.
+ *
+ * Mappings to our `ActivityType`:
+ *   - Check in  → `checkin`
+ *   - Activity  → `activity`
+ *   - Observation → `note`
+ *   - Health    → `health`
+ *   - Food      → `meal`
+ *   - Sleep     → `nap`
+ *   - Toilet    → `diaper` (the sheet still lets the teacher edit notes
+ *                to call out potty vs. diaper explicitly)
+ *   - Temperature → `health` (distinguished from plain Health via the
+ *                   caption + icon; data-wise we keep it a `health`
+ *                   entry so downstream health reports pick it up).
+ */
+const GRID_CARDS: GridCard[] = [
+  {
+    key: 'check-in',
+    label: 'Check in',
+    type: 'checkin',
+    icon: LogIn,
+    iconBg: 'bg-success-100 dark:bg-success-900/30',
+    iconColor: '#16A34A',
+    caption: 'Mark a drop-off',
+  },
+  {
+    key: 'activity',
+    label: 'Activity',
+    type: 'activity',
+    icon: BookOpen,
+    iconBg: 'bg-success-100 dark:bg-success-900/30',
+    iconColor: '#16A34A',
+    caption: 'Art, play, learning',
+  },
+  {
+    key: 'observation',
+    label: 'Observation',
+    type: 'note',
+    icon: FileText,
+    iconBg: 'bg-surface-100 dark:bg-surface-800',
+    iconColor: '#475569',
+    caption: 'Free-form note',
+  },
+  {
+    key: 'health',
+    label: 'Health',
+    type: 'health',
+    icon: Heart,
+    iconBg: 'bg-danger-100 dark:bg-danger-900/30',
+    iconColor: '#DC2626',
+    caption: 'Symptom, medication',
+  },
+  {
+    key: 'food',
+    label: 'Food',
+    type: 'meal',
+    icon: Utensils,
+    iconBg: 'bg-warning-100 dark:bg-warning-900/30',
+    iconColor: '#D97706',
+    caption: 'Meal or snack',
+  },
+  {
+    key: 'sleep',
+    label: 'Sleep',
+    type: 'nap',
+    icon: Moon,
+    iconBg: 'bg-info-100 dark:bg-info-900/30',
+    iconColor: '#0891B2',
+    caption: 'Nap start / end',
+  },
+  {
+    key: 'toilet',
+    label: 'Toilet',
+    type: 'diaper',
+    icon: Droplets,
+    iconBg: 'bg-accent-100 dark:bg-accent-900/30',
+    iconColor: '#9333EA',
+    caption: 'Diaper or potty',
+  },
+  {
+    key: 'temperature',
+    label: 'Temperature',
+    type: 'health',
+    icon: Thermometer,
+    iconBg: 'bg-danger-100 dark:bg-danger-900/30',
+    iconColor: '#DC2626',
+    caption: 'Morning screen',
+  },
 ];
 
 function formatTime(iso: string) {
@@ -78,63 +166,47 @@ function formatTime(iso: string) {
   });
 }
 
-type VariantName =
-  | 'brand'
-  | 'accent'
-  | 'success'
-  | 'warning'
-  | 'danger'
-  | 'info'
-  | 'neutral';
-
-const TYPE_VARIANTS: Partial<Record<ActivityType, VariantName>> = {
-  meal: 'warning',
-  snack: 'warning',
-  nap: 'info',
-  diaper: 'neutral',
-  potty: 'neutral',
-  activity: 'success',
-  outdoor: 'success',
-  learning: 'brand',
-  mood: 'brand',
-  incident: 'danger',
-  medication: 'danger',
-  milestone: 'warning',
-  photo: 'info',
-  note: 'neutral',
-  checkin: 'success',
-  checkout: 'info',
+type TimelineRowProps = {
+  activity: Activity;
+  roster: Child[];
+  staff: Staff[];
+  isLast: boolean;
 };
 
-function ActivityRow({
-  activity,
-  roster,
-}: {
-  activity: ClassroomActivity;
-  roster: Child[];
-}) {
+function TimelineRow({ activity, roster, staff, isLast }: TimelineRowProps) {
   const child = roster.find((c) => c.id === activity.childId);
-  const staffMember = staff.find((s) => s.id === activity.staffId);
-  const variant = TYPE_VARIANTS[activity.type] ?? 'neutral';
+  const staffMember = staff.find(
+    (s) => s.linkedUserId === activity.staffId || s.id === activity.staffId,
+  );
   const label = activityLabels[activity.type] ?? activity.type;
 
   return (
-    <View className="flex-row gap-3 p-4">
+    <View
+      className={`flex-row gap-3 p-4 ${
+        isLast ? '' : 'border-b border-surface-100 dark:border-surface-800'
+      }`}>
       <ActivityIcon type={activity.type} size="md" />
       <View className="flex-1 min-w-0">
         <View className="flex-row items-start justify-between gap-2">
           <View className="flex-1 min-w-0">
             <View className="flex-row items-center gap-2 flex-wrap">
-              <Text className="font-medium text-surface-900 dark:text-surface-50 text-sm">
-                {child?.firstName} {child?.lastName}
+              <Text className="font-semibold text-surface-900 dark:text-surface-50 text-sm">
+                {child ? `${child.firstName} ${child.lastName}` : 'Unknown child'}
               </Text>
-              <Badge variant={variant}>{label}</Badge>
+              <Badge variant="neutral">{label}</Badge>
+              {child?.allergies && child.allergies.length > 0 ? (
+                <Badge variant="danger">
+                  <AlertTriangle size={10} color="#B91C1C" />
+                </Badge>
+              ) : null}
             </View>
-            <Text
-              className="text-sm text-surface-600 dark:text-surface-300 mt-0.5"
-              numberOfLines={2}>
-              {activity.notes}
-            </Text>
+            {activity.notes ? (
+              <Text
+                className="text-sm text-surface-600 dark:text-surface-300 mt-1"
+                numberOfLines={2}>
+                {activity.notes}
+              </Text>
+            ) : null}
             {staffMember ? (
               <Text className="text-xs text-surface-400 mt-1">
                 by {staffMember.firstName} {staffMember.lastName}
@@ -150,396 +222,180 @@ function ActivityRow({
   );
 }
 
-type NewActivityModalProps = {
-  visible: boolean;
-  onClose: () => void;
-  onSubmit: (payload: {
-    childId: string;
-    type: ActivityType;
-    notes: string;
-  }) => Promise<void>;
-  roster: Child[];
-  initialType?: ActivityType | null;
-};
+export default function TeacherAddEntry() {
+  const { profile } = useAuth();
+  const uid = profile?.uid;
+  const daycareId = profile?.daycareId as string | undefined;
+  const classroomId = profile?.classroomId as string | undefined;
 
-function NewActivityModal({
-  visible,
-  onClose,
-  onSubmit,
-  roster,
-  initialType,
-}: NewActivityModalProps) {
-  const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [selectedType, setSelectedType] = useState<ActivityType | null>(
-    initialType ?? null
-  );
-  const [selectedChild, setSelectedChild] = useState<Child | null>(null);
-  const [notes, setNotes] = useState('');
-  const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(false);
+  const { data: roster } = useClassroomRoster();
+  const { data: staff } = useStaffForDaycare();
+  const { data: log, loading: logLoading } = useTodaysActivitiesForClassroom();
 
-  useEffect(() => {
-    if (visible) {
-      setStep(initialType ? 2 : 1);
-      setSelectedType(initialType ?? null);
-      setSelectedChild(null);
-      setNotes('');
-      setSearch('');
-      setLoading(false);
-    }
-  }, [visible, initialType]);
+  // `null` = sheet closed. When set, we open QuickLogSheet with this
+  // type and no preselected child (teacher picks in the sheet).
+  const [activeType, setActiveType] = useState<ActivityType | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
 
-  const filteredChildren = roster.filter((c) =>
-    `${c.firstName} ${c.lastName}`
-      .toLowerCase()
-      .includes(search.toLowerCase())
-  );
+  const timeline = useMemo(() => log.slice(0, 25), [log]);
 
-  const close = () => {
-    if (loading) return;
-    onClose();
-  };
-
-  const submit = async () => {
-    if (!selectedType || !selectedChild) return;
-    setLoading(true);
-    try {
-      await onSubmit({
-        childId: selectedChild.id,
-        type: selectedType,
-        notes: notes || `${activityLabels[selectedType]} logged`,
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const titles: Record<1 | 2 | 3, string> = {
-    1: 'Select activity type',
-    2: 'Select child',
-    3: 'Add details',
-  };
-
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={close}>
-      <Pressable className="flex-1 bg-black/40" onPress={close} />
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View
-          className="bg-white dark:bg-surface-900 rounded-t-3xl p-6 pb-8"
-          style={{ maxHeight: '85%' }}>
-          <View className="w-10 h-1 bg-surface-200 rounded-full self-center mb-4" />
-          <Text className="text-xl font-bold text-surface-900 dark:text-surface-50 mb-4">
-            {titles[step]}
-          </Text>
-
-          {step === 1 ? (
-            <ScrollView className="max-h-[420px]" showsVerticalScrollIndicator={false}>
-              <View className="flex-row flex-wrap -mx-1">
-                {LOGGABLE_TYPES.map((t) => {
-                  const Icon: LucideIcon = activityIcons[t];
-                  const colors = activityColors[t];
-                  return (
-                    <View key={t} className="w-1/3 p-1">
-                      <Pressable
-                        onPress={() => {
-                          setSelectedType(t);
-                          setStep(2);
-                        }}
-                        className="border border-surface-100 dark:border-surface-700 rounded-xl p-3 items-center">
-                        <View
-                          className={`w-10 h-10 rounded-xl items-center justify-center ${colors.bg}`}>
-                          <Icon size={20} color={colors.icon} />
-                        </View>
-                        <Text className="text-xs font-medium text-surface-700 dark:text-surface-200 mt-2">
-                          {activityLabels[t]}
-                        </Text>
-                      </Pressable>
-                    </View>
-                  );
-                })}
-              </View>
-            </ScrollView>
-          ) : null}
-
-          {step === 2 ? (
-            <>
-              <View className="flex-row items-center gap-2 border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 rounded-xl px-3 mb-3">
-                <Search size={16} color="#9CA3AF" />
-                <TextInput
-                  value={search}
-                  onChangeText={setSearch}
-                  placeholder="Search children..."
-                  placeholderTextColor="#9CA3AF"
-                  className="flex-1 py-3 text-surface-900 dark:text-surface-50"
-                />
-              </View>
-              <ScrollView className="max-h-[320px]" showsVerticalScrollIndicator={false}>
-                {filteredChildren.map((child) => (
-                  <Pressable
-                    key={child.id}
-                    onPress={() => {
-                      setSelectedChild(child);
-                      setStep(3);
-                    }}
-                    className="flex-row items-center gap-3 p-3 rounded-xl mb-1">
-                    <Avatar
-                      name={`${child.firstName} ${child.lastName}`}
-                      size="md"
-                    />
-                    <View className="flex-1 min-w-0">
-                      <Text className="font-medium text-surface-900 dark:text-surface-50">
-                        {child.firstName} {child.lastName}
-                      </Text>
-                      <Text className="text-sm text-surface-500 dark:text-surface-400">
-                        {child.age}
-                      </Text>
-                    </View>
-                    {child.allergies && child.allergies.length > 0 ? (
-                      <Badge variant="danger">
-                        <AlertTriangle size={10} color="#B91C1C" />
-                      </Badge>
-                    ) : null}
-                  </Pressable>
-                ))}
-              </ScrollView>
-              <View className="flex-row gap-3 mt-3">
-                <Pressable
-                  onPress={() => setStep(1)}
-                  className="flex-1 border border-surface-200 dark:border-surface-700 rounded-xl py-3 items-center">
-                  <Text className="font-semibold text-surface-700 dark:text-surface-100">
-                    Back
-                  </Text>
-                </Pressable>
-              </View>
-            </>
-          ) : null}
-
-          {step === 3 && selectedType && selectedChild ? (
-            <>
-              <View className="bg-surface-50 dark:bg-surface-800 rounded-xl p-4 flex-row items-center gap-3 mb-4">
-                <Avatar
-                  name={`${selectedChild.firstName} ${selectedChild.lastName}`}
-                  size="lg"
-                />
-                <View className="flex-1 min-w-0">
-                  <Text className="font-semibold text-surface-900 dark:text-surface-50">
-                    {selectedChild.firstName} {selectedChild.lastName}
-                  </Text>
-                  <View className="flex-row items-center gap-2 mt-1">
-                    <ActivityIcon type={selectedType} size="sm" />
-                    <Text className="text-sm text-surface-500 dark:text-surface-400">
-                      {activityLabels[selectedType]}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-
-              <Text className="text-sm font-medium text-surface-700 dark:text-surface-200 mb-1.5">
-                Notes
-              </Text>
-              <TextInput
-                value={notes}
-                onChangeText={setNotes}
-                placeholder="Add details about this activity..."
-                placeholderTextColor="#9CA3AF"
-                multiline
-                numberOfLines={4}
-                className="border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 text-surface-900 dark:text-surface-50 rounded-xl px-4 py-3 mb-5"
-                style={{ minHeight: 100, textAlignVertical: 'top' }}
-              />
-
-              <View className="flex-row gap-3">
-                <Pressable
-                  onPress={() => setStep(2)}
-                  disabled={loading}
-                  className="flex-1 border border-surface-200 dark:border-surface-700 rounded-xl py-3 items-center">
-                  <Text className="font-semibold text-surface-700 dark:text-surface-100">
-                    Back
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={submit}
-                  disabled={loading}
-                  className="flex-1 bg-teacher-500 rounded-xl py-3 items-center flex-row justify-center gap-2">
-                  {loading ? <ActivityIndicator color="white" /> : null}
-                  <Text className="text-white font-semibold">Log activity</Text>
-                </Pressable>
-              </View>
-            </>
-          ) : null}
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
-}
-
-export default function TeacherActivities() {
-  const [log, setLog] = useState<ClassroomActivity[]>(classroomActivities);
-  const [filterType, setFilterType] = useState<'all' | ActivityType>('all');
-  const [modalOpen, setModalOpen] = useState(false);
-  const [modalInitialType, setModalInitialType] = useState<ActivityType | null>(
-    null
-  );
-
-  const filtered = useMemo(() => {
-    const sorted = [...log].sort(
-      (a, b) =>
-        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-    );
-    if (filterType === 'all') return sorted;
-    return sorted.filter((a) => a.type === filterType);
-  }, [log, filterType]);
-
-  const handleSubmit = async ({
-    childId,
-    type,
-    notes,
-  }: {
+  const handleSubmit = async (payload: {
     childId: string;
     type: ActivityType;
     notes: string;
   }) => {
-    await new Promise<void>((r) => setTimeout(r, 350));
-    setLog((prev) => [
-      {
-        id: `cla-${Date.now()}`,
-        childId,
-        staffId: 'staff-1',
-        type,
-        notes,
-        timestamp: new Date().toISOString(),
-      },
-      ...prev,
-    ]);
-    setModalOpen(false);
-    setModalInitialType(null);
+    if (!uid || !daycareId || !classroomId) {
+      setCreateError(
+        'Missing classroom assignment. Sign out and back in to refresh.',
+      );
+      return;
+    }
+    setCreateError(null);
+    try {
+      await activitiesApi.create({
+        ...payload,
+        classroomId,
+        staffId: uid,
+        daycareId,
+      });
+      setActiveType(null);
+    } catch (err) {
+      console.error('[add-entry] create failed:', err);
+      setCreateError(
+        err instanceof Error
+          ? err.message
+          : 'Could not save that entry. Please try again.',
+      );
+    }
   };
 
-  const openModal = (prefill?: ActivityType) => {
-    setModalInitialType(prefill ?? null);
-    setModalOpen(true);
-  };
+  if (!classroomId) {
+    return (
+      <ScreenContainer title="Add entry" subtitle="Quick-log today's events">
+        <EmptyState
+          icon={FileText}
+          title="No classroom assigned"
+          description="Ask your daycare owner to assign you to a classroom from the dashboard."
+        />
+      </ScreenContainer>
+    );
+  }
 
   return (
     <ScreenContainer
-      title="Activities"
-      subtitle={`${log.length} activities logged today`}>
-      {/* Quick log chips */}
-      <Card className="mb-4">
-        <CardBody className="p-4">
-          <Text className="text-sm font-semibold text-surface-700 dark:text-surface-200 mb-3">
-            Quick log
-          </Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View className="flex-row gap-2">
-              {LOGGABLE_TYPES.slice(0, 8).map((t) => {
-                const Icon: LucideIcon = activityIcons[t];
-                const colors = activityColors[t];
-                return (
-                  <Pressable
-                    key={t}
-                    onPress={() => openModal(t)}
-                    className={`flex-row items-center gap-1.5 px-4 py-2 rounded-xl ${colors.bg}`}>
-                    <Icon size={14} color={colors.icon} />
-                    <Text
-                      className="text-sm font-medium"
-                      style={{ color: colors.icon }}>
-                      {activityLabels[t]}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </ScrollView>
-        </CardBody>
-      </Card>
-
-      {/* Big log button */}
-      <Pressable
-        onPress={() => openModal()}
-        className="bg-teacher-500 rounded-xl py-3 items-center flex-row justify-center gap-2 mb-4">
-        <Plus size={18} color="white" />
-        <Text className="text-white font-semibold">Log activity</Text>
-      </Pressable>
-
-      {/* Type filter */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        className="mb-3"
-        contentContainerStyle={{ paddingHorizontal: 2 }}>
-        <View className="flex-row gap-2">
-          {(['all', ...LOGGABLE_TYPES] as const).map((t) => {
-            const isActive = filterType === t;
-            return (
+      title="Add entry"
+      subtitle={
+        log.length === 0
+          ? 'Nothing logged yet today'
+          : `${log.length} ${log.length === 1 ? 'entry' : 'entries'} today`
+      }>
+      {/* 2-col quick-log grid. flex-row + w-1/2 is the standard
+          no-library grid we use elsewhere in the app. */}
+      <View className="flex-row flex-wrap -mx-1.5 mb-4">
+        {GRID_CARDS.map((card) => {
+          const Icon = card.icon;
+          return (
+            <View key={card.key} className="w-1/2 p-1.5">
               <Pressable
-                key={t}
-                onPress={() => setFilterType(t)}
-                className={`px-4 py-2 rounded-xl ${
-                  isActive ? 'bg-teacher-500' : 'bg-surface-100 dark:bg-surface-800'
-                }`}>
-                <Text
-                  className={`text-sm font-medium ${
-                    isActive
-                      ? 'text-white'
-                      : 'text-surface-600 dark:text-surface-300'
-                  }`}>
-                  {t === 'all' ? 'All types' : activityLabels[t]}
+                onPress={() => {
+                  setCreateError(null);
+                  setActiveType(card.type);
+                }}
+                className="bg-white dark:bg-surface-800 rounded-2xl border border-surface-100 dark:border-surface-700 p-4 active:opacity-80 shadow-sm">
+                <View
+                  className={`w-12 h-12 rounded-2xl items-center justify-center mb-3 ${card.iconBg}`}>
+                  <Icon size={24} color={card.iconColor} />
+                </View>
+                <Text className="text-base font-bold text-surface-900 dark:text-surface-50">
+                  {card.label}
+                </Text>
+                <Text className="text-xs text-surface-500 dark:text-surface-400 mt-0.5">
+                  {card.caption}
                 </Text>
               </Pressable>
-            );
-          })}
-        </View>
-      </ScrollView>
+            </View>
+          );
+        })}
+      </View>
 
-      {/* Timeline */}
+      {/* "Other entry type" escape hatch — covers incident, medication,
+          milestone, photo, outdoor, learning, music, play. Keeps the
+          primary grid uncluttered. */}
+      <Pressable
+        onPress={() => {
+          setCreateError(null);
+          // We don't have a neutral type on the spec grid, so default to
+          // `activity` and let the teacher pick a notes blurb. The main
+          // "other" types are surfaced via the More menu / specialist
+          // screens as they ship.
+          setActiveType('activity');
+        }}
+        className="flex-row items-center gap-3 bg-surface-100 dark:bg-surface-800 rounded-2xl p-4 mb-6 active:opacity-80">
+        <View className="w-10 h-10 rounded-xl bg-white dark:bg-surface-700 items-center justify-center">
+          <ActivityIconLucide size={20} color="#475569" />
+        </View>
+        <View className="flex-1">
+          <Text className="text-sm font-bold text-surface-900 dark:text-surface-50">
+            Other entry
+          </Text>
+          <Text className="text-xs text-surface-500 dark:text-surface-400 mt-0.5">
+            Photo, incident, milestone, music, play…
+          </Text>
+        </View>
+        <Text className="text-xs font-semibold text-teacher-600 dark:text-teacher-300">
+          Open
+        </Text>
+      </Pressable>
+
+      {/* Today's log — single column, no filter bar (tab is for writing,
+          Reports tab is for reading full day summaries). */}
+      <View className="flex-row items-center justify-between mb-3 px-1">
+        <Text className="text-base font-bold text-surface-900 dark:text-surface-50">
+          Today&apos;s log
+        </Text>
+        {log.length > timeline.length ? (
+          <Text className="text-xs font-semibold text-surface-500 dark:text-surface-400">
+            Showing {timeline.length} of {log.length}
+          </Text>
+        ) : null}
+      </View>
+
       <Card>
         <CardBody className="p-0">
-          <View className="px-4 py-3 border-b border-surface-100 dark:border-surface-800">
-            <Text className="font-semibold text-surface-900 dark:text-surface-50">
-              Today&apos;s activities
-            </Text>
-          </View>
-          {filtered.length > 0 ? (
-            <View>
-              {filtered.map((activity, idx) => (
-                <View
-                  key={activity.id}
-                  className={
-                    idx < filtered.length - 1
-                      ? 'border-b border-surface-100 dark:border-surface-800'
-                      : ''
-                  }>
-                  <ActivityRow activity={activity} roster={classroomRoster} />
-                </View>
-              ))}
-            </View>
+          {logLoading ? (
+            <LoadingState message="Loading today's log" />
+          ) : timeline.length === 0 ? (
+            <EmptyState
+              icon={FileText}
+              title="No entries yet today"
+              description="Tap one of the quick-log cards above to record your first entry."
+            />
           ) : (
-            <View className="p-8 items-center">
-              <Text className="text-base font-semibold text-surface-900 dark:text-surface-50">
-                No activities yet
-              </Text>
-              <Text className="text-sm text-surface-500 dark:text-surface-400 mt-1 text-center">
-                Start logging activities using the Quick Log buttons above
-              </Text>
+            <View>
+              {timeline.map((activity, idx) => (
+                <TimelineRow
+                  key={activity.id}
+                  activity={activity}
+                  roster={roster}
+                  staff={staff}
+                  isLast={idx === timeline.length - 1}
+                />
+              ))}
             </View>
           )}
         </CardBody>
       </Card>
 
-      <NewActivityModal
-        visible={modalOpen}
-        onClose={() => {
-          setModalOpen(false);
-          setModalInitialType(null);
-        }}
+      <QuickLogSheet
+        visible={activeType !== null}
+        type={activeType}
+        roster={roster}
         onSubmit={handleSubmit}
-        roster={classroomRoster}
-        initialType={modalInitialType}
+        onClose={() => {
+          setActiveType(null);
+          setCreateError(null);
+        }}
+        errorMessage={createError}
       />
     </ScreenContainer>
   );

@@ -10,6 +10,7 @@ import { X, Plus, AlertTriangle } from 'lucide-react';
 import { Modal, ModalFooter, Button, Input, Select, Textarea, Badge } from '../ui';
 import { childrenApi } from '../../firebase/api';
 import { useClassroomsData } from '../../hooks';
+import { QuotaBanner } from '../QuotaBanner';
 
 const initialFormData = {
   firstName: '',
@@ -66,6 +67,7 @@ export function ChildFormModal({ isOpen, onClose, onSuccess, child }) {
   const [formData, setFormData] = useState(() => buildInitialForm(child));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [quotaError, setQuotaError] = useState(null);
   const [allergyInput, setAllergyInput] = useState('');
   const [conditionInput, setConditionInput] = useState('');
   const [dietaryInput, setDietaryInput] = useState('');
@@ -74,6 +76,7 @@ export function ChildFormModal({ isOpen, onClose, onSuccess, child }) {
     if (isOpen) {
       setFormData(buildInitialForm(child));
       setError('');
+      setQuotaError(null);
     }
   }, [child, isOpen]);
 
@@ -158,6 +161,7 @@ export function ChildFormModal({ isOpen, onClose, onSuccess, child }) {
     }
 
     setError('');
+    setQuotaError(null);
     setLoading(true);
     try {
       const basePayload = {
@@ -185,11 +189,15 @@ export function ChildFormModal({ isOpen, onClose, onSuccess, child }) {
       onClose();
     } catch (err) {
       console.error(`Error ${isEdit ? 'updating' : 'adding'} child:`, err);
-      setError(
-        err?.code === 'permission-denied'
-          ? "You don't have permission to do that. If this looks wrong, contact support."
-          : `Could not ${isEdit ? 'save changes' : 'add child'}. Please try again.`
-      );
+      if (err?.code === 'quota-exceeded') {
+        setQuotaError(err);
+      } else {
+        setError(
+          err?.code === 'permission-denied'
+            ? "You don't have permission to do that. If this looks wrong, contact support."
+            : `Could not ${isEdit ? 'save changes' : 'add child'}. Please try again.`
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -209,6 +217,7 @@ export function ChildFormModal({ isOpen, onClose, onSuccess, child }) {
       title={isEdit ? 'Edit Child' : 'Add New Child'}
       size="lg">
       <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+        {quotaError ? <QuotaBanner error={quotaError} /> : null}
         {error ? (
           <div className="p-3 bg-danger-50 border border-danger-200 rounded-xl text-sm text-danger-700">
             {error}

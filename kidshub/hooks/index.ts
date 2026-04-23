@@ -28,3 +28,47 @@ export type { UseRequireRoleOptions } from './use-require-role';
  */
 export { useRoleTheme, getRoleTheme } from './use-role-theme';
 export type { RoleTheme } from './use-role-theme';
+
+/**
+ * Live Firestore data hooks (added in live-data-2). All tenant-scoped
+ * via the auth profile; see hooks/use-live-data.ts for the full doc.
+ */
+export {
+  useMyChildren,
+  useChild,
+  useClassroomRoster,
+  useClassroom,
+  useTodaysActivitiesForChildren,
+  useTodaysActivitiesForClassroom,
+  useAnnouncements,
+  useStaffForDaycare,
+  useMyMessages,
+  useConversations,
+} from './use-live-data';
+
+/**
+ * Entitlements / feature-gating (Sprint 1 of PRODUCT_PLAN). See
+ * config/product.ts for the tier + feature matrix that drives these.
+ */
+export { useEntitlements } from './use-entitlements';
+export type { EntitlementsState } from './use-entitlements';
+export { useFeature } from './use-feature';
+export type { FeatureState } from './use-feature';
+
+/**
+ * Paid-feature live hooks (Sprints 5-7). Each hook is feature-gated —
+ * returns an empty/loading state when the tier doesn't unlock the
+ * underlying collection, preserving the "insufficient permissions"
+ * silence in Firestore logs.
+ */
+export {
+  useMyChildrenPhotos,
+  useClassroomPhotos,
+  useMyOpenShift,
+  useChildHealthLogs,
+  useClassroomHealthLogs,
+  useClassroomWeeklyPlan,
+  useActivityTemplates,
+  useClassroomScreeningsForDate,
+  useChildScreenings,
+} from './use-paid-features';

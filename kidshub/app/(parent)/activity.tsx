@@ -1,7 +1,7 @@
 /**
  * /activity — today's activity timeline for the current child.
  *
- * Ported from kidshub-legacy/src/pages/Activity.jsx. Three main blocks:
+ * Three main blocks:
  *   1. Child header (colored avatar + name + classroom)
  *   2. NapStatusCard — only when a nap is currently in progress (uses
  *      expo-linear-gradient for the brand "in-progress" feel; RN has no
@@ -10,26 +10,36 @@
  *      Activities / Diaper). Sticky-selected pill fills with brand color.
  *   4. ActivityCard list — one card per filtered entry.
  *
- * Filter implementation detail: the legacy grouped "snack" into the "meal"
- * filter since a snack is effectively a small meal for a parent's purposes.
- * That special case is preserved here.
+ * Filter implementation detail: snacks fall under the "Meals" filter since
+ * a snack is effectively a small meal for a parent's purposes.
+ *
+ * Data: live via `useMyChildren` (primary child) +
+ * `useTodaysActivitiesForChildren` (today's activity log) +
+ * `useClassroom` (classroom name + accent color).
  */
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   Baby,
   Camera,
+  FileText,
+  HelpCircle,
   Moon,
   Palette,
   Utensils,
   type LucideIcon,
 } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 
 import { ActivityIcon } from '@/components/icons/activity-icon';
 import { ScreenContainer } from '@/components/layout';
-import { Badge, Card, CardBody } from '@/components/ui';
-import { myChildren, todaysActivities, type Activity } from '@/data/mockData';
+import { Badge, Card, CardBody, EmptyState, LoadingState, Pill } from '@/components/ui';
+import type { Activity } from '@/firebase/types';
+import {
+  useClassroom,
+  useMyChildren,
+  useTodaysActivitiesForChildren,
+} from '@/hooks';
 
 type FilterId = 'all' | 'meal' | 'nap' | 'activity' | 'diaper';
 
@@ -47,6 +57,28 @@ const FILTER_OPTIONS: FilterOption[] = [
   { id: 'diaper', label: 'Diaper', icon: Baby },
 ];
 
+const ACTIVITY_TITLE: Partial<Record<Activity['type'], string>> = {
+  meal: 'Meal',
+  snack: 'Snack',
+  nap: 'Nap',
+  diaper: 'Diaper change',
+  potty: 'Potty',
+  activity: 'Activity',
+  outdoor: 'Outdoor play',
+  learning: 'Learning',
+  mood: 'Mood update',
+  incident: 'Incident',
+  medication: 'Medication',
+  milestone: 'Milestone',
+  photo: 'Photo',
+  note: 'Note',
+  checkin: 'Checked in',
+  checkout: 'Checked out',
+  health: 'Health',
+  music: 'Music',
+  play: 'Play',
+};
+
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('en-US', {
     hour: 'numeric',
@@ -56,6 +88,9 @@ function formatTime(iso: string): string {
 }
 
 function ActivityCard({ activity }: { activity: Activity }) {
+  const details = activity.details as
+    | { amount?: string; hasPhoto?: boolean }
+    | undefined;
   return (
     <Card>
       <CardBody className="p-4">
@@ -65,24 +100,23 @@ function ActivityCard({ activity }: { activity: Activity }) {
             <View className="flex-row items-start justify-between gap-2">
               <View className="flex-1 min-w-0">
                 <Text className="font-medium text-surface-900 dark:text-surface-50">
-                  {activity.title}
+                  {ACTIVITY_TITLE[activity.type] ?? 'Activity'}
                 </Text>
-                <Text className="text-sm text-surface-500 dark:text-surface-400 mt-0.5">
-                  {activity.description}
-                </Text>
+                {activity.notes ? (
+                  <Text className="text-sm text-surface-500 dark:text-surface-400 mt-0.5">
+                    {activity.notes}
+                  </Text>
+                ) : null}
               </View>
               <View className="bg-surface-100 dark:bg-surface-700 px-2 py-1 rounded-lg">
                 <Text className="text-xs text-surface-400 dark:text-surface-300">
-                  {formatTime(activity.time)}
+                  {formatTime(activity.timestamp)}
                 </Text>
               </View>
             </View>
 
             <View className="flex-row flex-wrap items-center gap-2 mt-3">
-              <Text className="text-xs text-surface-400 dark:text-surface-500">
-                by {activity.staffName}
-              </Text>
-              {activity.hasPhoto ? (
+              {details?.hasPhoto ? (
                 <Badge variant="info">
                   <Camera size={12} color="#0E7490" />
                   <Text className="text-xs font-medium text-info-700 dark:text-info-300">
@@ -90,8 +124,8 @@ function ActivityCard({ activity }: { activity: Activity }) {
                   </Text>
                 </Badge>
               ) : null}
-              {activity.details?.amount ? (
-                <Badge variant="neutral">Ate: {activity.details.amount}</Badge>
+              {details?.amount ? (
+                <Badge variant="neutral">Ate: {details.amount}</Badge>
               ) : null}
             </View>
           </View>
@@ -101,24 +135,24 @@ function ActivityCard({ activity }: { activity: Activity }) {
   );
 }
 
-function NapStatusCard() {
-  const napActivity = todaysActivities.find(
-    (a) => a.type === 'nap' && a.details?.status === 'Sleeping'
+function NapStatusCard({ activities, childId }: { activities: Activity[]; childId: string }) {
+  const napActivity = activities.find(
+    (a) =>
+      a.childId === childId &&
+      a.type === 'nap' &&
+      (a.details as { status?: string } | undefined)?.status === 'Sleeping',
   );
-  if (!napActivity || !napActivity.details?.startTime) return null;
+  const startTimeIso =
+    (napActivity?.details as { startTime?: string } | undefined)?.startTime ??
+    napActivity?.timestamp;
+  if (!napActivity || !startTimeIso) return null;
 
-  const startTime = new Date(napActivity.details.startTime);
+  const startTime = new Date(startTimeIso);
   const now = new Date();
-  const duration = Math.floor((now.getTime() - startTime.getTime()) / (1000 * 60));
-  const startLabel = startTime.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  });
+  const duration = Math.max(0, Math.floor((now.getTime() - startTime.getTime()) / (1000 * 60)));
+  const startLabel = formatTime(startTimeIso);
 
   return (
-    // LinearGradient fills the role of `bg-gradient-to-r from-info-500 to-info-600`
-    // that existed in legacy web. rounded-2xl matches Card's visual weight.
     <LinearGradient
       colors={['#3B82F6', '#2563EB']}
       start={{ x: 0, y: 0 }}
@@ -144,23 +178,53 @@ function NapStatusCard() {
 
 export default function ParentActivity() {
   const [activeFilter, setActiveFilter] = useState<FilterId>('all');
-  const child = myChildren[0];
+  const { data: children, loading: childrenLoading } = useMyChildren();
+  const child = children[0] ?? null;
+  const childIds = useMemo(() => (child ? [child.id] : []), [child]);
+  const { data: activities, loading: activitiesLoading } =
+    useTodaysActivitiesForChildren(childIds);
+  const { data: classroom } = useClassroom(
+    child?.classroomId ?? child?.classroom ?? null,
+  );
 
   const filteredActivities = useMemo<Activity[]>(() => {
-    if (activeFilter === 'all') return todaysActivities;
-    return todaysActivities.filter((a) => {
+    if (!child) return [];
+    const mine = activities.filter((a) => a.childId === child.id);
+    if (activeFilter === 'all') return mine;
+    return mine.filter((a) => {
       if (a.type === activeFilter) return true;
-      // Special case: snacks show up under the "Meals" filter.
       if (activeFilter === 'meal' && a.type === 'snack') return true;
       return false;
     });
-  }, [activeFilter]);
+  }, [activities, activeFilter, child]);
 
   const dateLabel = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
   });
+
+  if (childrenLoading) {
+    return (
+      <ScreenContainer title="Activity Feed" subtitle={dateLabel}>
+        <LoadingState message="Loading your child's day" />
+      </ScreenContainer>
+    );
+  }
+
+  if (!child) {
+    return (
+      <ScreenContainer title="Activity Feed" subtitle={dateLabel}>
+        <EmptyState
+          icon={HelpCircle}
+          title="No child linked yet"
+          description="Once your daycare links your child to your account, today's activities will show up here."
+        />
+      </ScreenContainer>
+    );
+  }
+
+  const accentColor = classroom?.color ?? child.classroomColor ?? '#FF2D8A';
 
   return (
     <ScreenContainer title="Activity Feed" subtitle={dateLabel}>
@@ -171,7 +235,7 @@ export default function ParentActivity() {
             width: 48,
             height: 48,
             borderRadius: 12,
-            backgroundColor: child.classroomColor,
+            backgroundColor: accentColor,
           }}
           className="items-center justify-center">
           <Text className="text-white font-bold">{child.firstName[0]}</Text>
@@ -181,64 +245,64 @@ export default function ParentActivity() {
             {child.firstName}&apos;s Day
           </Text>
           <Text className="text-sm text-surface-500 dark:text-surface-400">
-            {child.classroom}
+            {classroom?.name ?? child.classroom ?? 'Classroom'}
           </Text>
         </View>
       </View>
 
       {/* Nap status — only rendered when there's a live nap */}
       <View className="mb-6">
-        <NapStatusCard />
+        <NapStatusCard activities={activities} childId={child.id} />
       </View>
 
-      {/* Filter chips — horizontal scroll (important on narrow phones) */}
+      {/* Filter chips — horizontal scroll (important on narrow phones).
+          Pill handles the solid/soft tone + icon alignment; we just pick
+          the variant based on which one is selected. */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 8, gap: 8 }}
         className="mb-6">
         {FILTER_OPTIONS.map((filter) => {
-          const Icon = filter.icon;
           const active = activeFilter === filter.id;
           return (
-            <Pressable
+            <Pill
               key={filter.id}
+              tone="pink"
+              variant={active ? 'solid' : 'outline'}
+              size="md"
+              icon={filter.icon ?? undefined}
+              label={filter.label}
               onPress={() => setActiveFilter(filter.id)}
-              className={`flex-row items-center gap-2 px-4 py-2 rounded-xl ${
-                active
-                  ? 'bg-brand-500'
-                  : 'bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700'
-              }`}>
-              {Icon ? (
-                <Icon size={16} color={active ? '#FFFFFF' : '#475569'} />
-              ) : null}
-              <Text
-                className={`text-sm font-medium ${
-                  active ? 'text-white' : 'text-surface-600 dark:text-surface-300'
-                }`}>
-                {filter.label}
-              </Text>
-            </Pressable>
+            />
           );
         })}
       </ScrollView>
 
       {/* Timeline */}
-      <View className="gap-4">
-        {filteredActivities.map((activity) => (
-          <ActivityCard key={activity.id} activity={activity} />
-        ))}
-      </View>
-
-      {filteredActivities.length === 0 ? (
+      {activitiesLoading ? (
+        <LoadingState message="Loading today's activities" />
+      ) : filteredActivities.length === 0 ? (
         <Card>
-          <CardBody className="py-12 items-center">
-            <Text className="text-surface-400 dark:text-surface-500">
-              No activities found
-            </Text>
+          <CardBody>
+            <EmptyState
+              icon={FileText}
+              title={
+                activeFilter === 'all'
+                  ? 'No activities logged today yet'
+                  : `No ${activeFilter} entries today`
+              }
+              description="Updates will appear here as teachers log them throughout the day."
+            />
           </CardBody>
         </Card>
-      ) : null}
+      ) : (
+        <View className="gap-4">
+          {filteredActivities.map((activity) => (
+            <ActivityCard key={activity.id} activity={activity} />
+          ))}
+        </View>
+      )}
     </ScreenContainer>
   );
 }

@@ -15,3 +15,6 @@ export {
   useAnnouncementsData,
   useDashboardStats,
 } from './useFirebase';
+
+export { useEntitlements } from './useEntitlements';
+export { useFeature } from './useFeature';

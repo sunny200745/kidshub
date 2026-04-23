@@ -12,6 +12,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { auth, db } from '../config';
+import { enforceQuota } from './quotas';
 
 const COLLECTION = 'staff';
 
@@ -101,7 +102,14 @@ export const staffApi = {
   // Firestore rule `staff.email == request.auth.token.email` (used when a
   // teacher accepts their invite and self-links the staff record) matches
   // — Firebase Auth always normalizes the token email to lowercase.
+  // Create new staff member.
+  //
+  // Quota check (A6) runs first. Starter limits you to 2 staff, Pro to 15,
+  // Premium unlimited. The owner themselves isn't counted here — this is
+  // the `staff/{id}` roster, not a head-count of daycare employees
+  // (the owner is captured separately in users/{uid}).
   async create(staffData) {
+    await enforceQuota('staff');
     const payload = {
       ...staffData,
       email: (staffData.email || '').trim().toLowerCase(),
