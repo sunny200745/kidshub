@@ -94,12 +94,25 @@ rules_version = '2';
 //      parents.appStatus='none' in the same batch.
 //
 // Parent data access after link:
-//   - users/{uid}.childIds is the ONLY surface that grants a parent access
-//     to any business data. Every downstream read rule (children, activities,
-//     messages, photos, healthLogs, screenings) joins on `childId in
-//     userChildIds()`. That means: a parent can only ever see documents
-//     for children listed on their own users doc. Nothing in this flow
-//     widens that invariant.
+//   - users/{uid}.childIds is the primary surface that gates parent access
+//     to child-scoped business data (activities, messages, photos,
+//     healthLogs, screenings). Each of those rules joins on
+//     `resource.data.childId in userChildIds()` — a FIELD-level check that
+//     Firestore's list-query evaluator can prove from the client's
+//     `where('childId', '==', <id>)` filter.
+//   - For the children collection itself the parent-read check is
+//     `request.auth.uid in resource.data.parentIds` only (no path-id
+//     join). This is an intentional asymmetry and it is required to make
+//     `where('parentIds', 'array-contains', uid)` queries pass Firestore's
+//     rule evaluator. See the long-form comment on
+//     `match /children/{childId}` for the safety argument — TL;DR:
+//     `parentIds` is only ever populated through owner writes or through
+//     the parent-self-link UPDATE rule, and that update rule DOES still
+//     enforce `childId in userChildIds()`, so `uid in parentIds` is a
+//     provably legitimate link.
+//   - Net invariant: a parent can only ever see documents for children
+//     they are actually linked to (via users.childIds and/or
+//     children.parentIds, kept in sync by the accept flow + rules).
 //   - No "parent self-signup" UI is exposed anywhere in the apps; the code
 //     path in AuthContext.registerParent is unreachable from end-user UI
 //     and is kept for future pre-existing-account recovery edge cases.
@@ -475,9 +488,29 @@ service cloud.firestore {
     // Read:
     //   - owner: any child in their tenant
     //   - teacher: children in their classroom (classroomId OR legacy classroom)
-    //   - parent: children whose id is in the parent's childIds AND whose
-    //             parentIds[] includes the parent's uid (both sides of the
-    //             relationship must be in sync — belt-and-suspenders)
+    //   - parent: children whose parentIds[] includes the parent's uid
+    //
+    // Why the parent-read check is ONLY `uid in parentIds` (not ALSO
+    // `childId in userChildIds()`):
+    //   The kidshub parent home subscribes via
+    //     `where('parentIds', 'array-contains', uid)`
+    //   Firestore's list-query rule evaluator requires that the query's
+    //   filters prove the rule is satisfied for every possible returned
+    //   doc — using the doc-id placeholder `childId` on the RHS of a
+    //   condition (as in `childId in userChildIds()`) cannot be proven
+    //   from a non-id filter, so the whole query is rejected with
+    //   `permission-denied` at query time. Dropping the doc-id check
+    //   here fixes listing WITHOUT widening access, because:
+    //     (a) `parentIds` is written only by owner/admin paths, or by
+    //         the parent self-link UPDATE rule below, which still
+    //         enforces `childId in userChildIds()`.
+    //     (b) A parent cannot add themselves to an arbitrary child's
+    //         `parentIds` without first having that childId in their
+    //         own users doc (see the update rule below).
+    //   So if `uid in parentIds` is already true, the link is provably
+    //   legitimate and the read is safe. The former belt-and-suspenders
+    //   check was defending against a scenario the write rules already
+    //   forbid.
     //
     // Create: owner only. Must stamp daycareId == own uid + parentIds[] list.
     //
@@ -485,6 +518,10 @@ service cloud.firestore {
     //   - owner: any field, within tenant
     //   - teacher: ONLY check-in/out fields on children in their classroom,
     //              and may not change daycareId
+    //   - parent: self-link only (parentIds arrayUnion own uid); still
+    //             gated by `childId in userChildIds()` — that check is
+    //             FINE on updates because the client targets a specific
+    //             doc id, not a list query.
     //
     // Delete: owner only.
     //
@@ -493,7 +530,6 @@ service cloud.firestore {
         || (isTeacher() && inMyTenant(resource.data)
             && childClassroom(resource.data) == userClassroom())
         || (isParent()
-            && childId in userChildIds()
             && request.auth.uid in resource.data.get('parentIds', []));
 
       allow create: if isOwner()
