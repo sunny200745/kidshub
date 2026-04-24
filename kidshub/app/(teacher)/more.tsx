@@ -30,7 +30,6 @@ import {
   ClipboardCheck,
   FolderOpen,
   HelpCircle,
-  Lock,
   LogOut,
   MessageCircle,
   Shield,
@@ -43,7 +42,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
 import { ScreenContainer } from '@/components/layout';
-import { Card, CardBody } from '@/components/ui';
+import { Card, CardBody, TierBadge } from '@/components/ui';
 import { useAuth } from '@/contexts';
 import { useFeature } from '@/hooks';
 import type { FeatureKey } from '@/constants/product';
@@ -197,12 +196,6 @@ function GatedRow({
 }) {
   const state = useFeature(row.feature);
   const locked = !state.enabled && !state.loading;
-  const requiredTierLabel = locked
-    ? state.upgradeTo === 'premium'
-      ? 'Premium'
-      : 'Pro'
-    : null;
-  const tintHex = state.upgradeTo === 'premium' ? '#8B5CF6' : '#E11D74';
 
   const handlePress = () => {
     if (locked) {
@@ -227,20 +220,7 @@ function GatedRow({
           <Text className="text-base font-semibold text-surface-900 dark:text-surface-50">
             {row.label}
           </Text>
-          {locked ? (
-            <View
-              className="flex-row items-center gap-1 rounded-full px-1.5 py-0.5"
-              style={{
-                backgroundColor: requiredTierLabel === 'Premium' ? '#EDE9FE' : '#FCE7F3',
-              }}>
-              <Lock size={10} color={tintHex} />
-              <Text
-                className="text-[10px] font-bold uppercase tracking-wide"
-                style={{ color: tintHex }}>
-                {requiredTierLabel}
-              </Text>
-            </View>
-          ) : null}
+          <TierBadge feature={row.feature} />
         </View>
         {row.description ? (
           <Text className="text-xs text-surface-500 dark:text-surface-400 mt-0.5">

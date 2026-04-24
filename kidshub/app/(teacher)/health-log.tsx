@@ -29,6 +29,7 @@ import {
   LoadingState,
   Pill,
   SheetModal,
+  TierBadge,
 } from '@/components/ui';
 import { useAuth } from '@/contexts';
 import { healthLogsApi } from '@/firebase/api';
@@ -345,7 +346,10 @@ export default function TeacherHealthLog() {
 
   if (feature.loading) {
     return (
-      <ScreenContainer title="Health log" subtitle="Symptoms · medication · incidents">
+      <ScreenContainer
+        title="Health log"
+        subtitle="Symptoms · medication · incidents"
+        headerBadge={<TierBadge feature="healthReports" />}>
         <LoadingState message="Checking your plan" />
       </ScreenContainer>
     );
@@ -353,7 +357,10 @@ export default function TeacherHealthLog() {
 
   if (!feature.enabled) {
     return (
-      <ScreenContainer title="Health log" subtitle="Symptoms · medication · incidents">
+      <ScreenContainer
+        title="Health log"
+        subtitle="Symptoms · medication · incidents"
+        headerBadge={<TierBadge feature="healthReports" />}>
         <UpgradeCTA
           feature="healthReports"
           upgradeTo={feature.upgradeTo}
@@ -365,7 +372,10 @@ export default function TeacherHealthLog() {
   }
 
   return (
-    <ScreenContainer title="Health log" subtitle="Symptoms · medication · incidents">
+    <ScreenContainer
+      title="Health log"
+      subtitle="Symptoms · medication · incidents"
+      headerBadge={<TierBadge feature="healthReports" />}>
       <ScrollView showsVerticalScrollIndicator={false}>
         <View className="flex-row items-center justify-between mb-4">
           <View className="flex-row items-center gap-2">

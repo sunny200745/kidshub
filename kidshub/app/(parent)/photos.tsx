@@ -37,6 +37,7 @@ import {
   EmptyState,
   LoadingState,
   Pill,
+  TierBadge,
 } from '@/components/ui';
 import {
   useClassroom,
@@ -184,7 +185,9 @@ export default function ParentPhotos() {
 
   if (childrenLoading) {
     return (
-      <ScreenContainer title="Photos">
+      <ScreenContainer
+        title="Photos"
+        headerBadge={<TierBadge feature="photoJournal" />}>
         <LoadingState message="Loading photos" />
       </ScreenContainer>
     );
@@ -192,7 +195,9 @@ export default function ParentPhotos() {
 
   if (!child) {
     return (
-      <ScreenContainer title="Photos">
+      <ScreenContainer
+        title="Photos"
+        headerBadge={<TierBadge feature="photoJournal" />}>
         <EmptyState
           icon={HelpCircle}
           title="No child linked yet"
@@ -205,7 +210,10 @@ export default function ParentPhotos() {
   const accentColor = classroom?.color ?? child.classroomColor ?? '#FF2D8A';
 
   return (
-    <ScreenContainer title="Photos" subtitle={`${child.firstName}'s gallery`}>
+    <ScreenContainer
+      title="Photos"
+      subtitle={`${child.firstName}'s gallery`}
+      headerBadge={<TierBadge feature="photoJournal" />}>
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View className="flex-row items-center gap-3 mb-5">

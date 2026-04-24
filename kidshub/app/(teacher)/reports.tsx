@@ -37,6 +37,7 @@ import {
   EmptyState,
   LoadingState,
   Pill,
+  TierBadge,
 } from '@/components/ui';
 import { UpgradeCTA } from '@/components/upgrade-cta';
 import { useAuth } from '@/contexts';
@@ -407,6 +408,7 @@ export default function TeacherReports() {
     <ScreenContainer
       title="Reports"
       subtitle="Daily summaries, attendance, and health at a glance."
+      headerBadge={<TierBadge feature="dailyReports" />}
       contentContainerStyle={{ paddingBottom: 48 }}>
       {state.loading ? (
         <LoadingState message="Checking your plan" />

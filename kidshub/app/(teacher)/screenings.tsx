@@ -25,6 +25,7 @@ import {
   LoadingState,
   Pill,
   SheetModal,
+  TierBadge,
 } from '@/components/ui';
 import { useAuth } from '@/contexts';
 import { screeningsApi } from '@/firebase/api';
@@ -220,7 +221,10 @@ export default function TeacherScreenings() {
 
   if (feature.loading) {
     return (
-      <ScreenContainer title="Screenings" subtitle="Drop-off health check">
+      <ScreenContainer
+        title="Screenings"
+        subtitle="Drop-off health check"
+        headerBadge={<TierBadge feature="morningScreenings" />}>
         <LoadingState message="Checking your plan" />
       </ScreenContainer>
     );
@@ -228,7 +232,10 @@ export default function TeacherScreenings() {
 
   if (!feature.enabled) {
     return (
-      <ScreenContainer title="Screenings" subtitle="Drop-off health check">
+      <ScreenContainer
+        title="Screenings"
+        subtitle="Drop-off health check"
+        headerBadge={<TierBadge feature="morningScreenings" />}>
         <UpgradeCTA
           feature="morningScreenings"
           upgradeTo={feature.upgradeTo}
@@ -242,7 +249,10 @@ export default function TeacherScreenings() {
   const progress = `${screenedChildIds.size} of ${roster.length} done`;
 
   return (
-    <ScreenContainer title="Screenings" subtitle="Today · drop-off health check">
+    <ScreenContainer
+      title="Screenings"
+      subtitle="Today · drop-off health check"
+      headerBadge={<TierBadge feature="morningScreenings" />}>
       <ScrollView showsVerticalScrollIndicator={false}>
         <View className="flex-row items-center justify-between mb-4">
           <View className="flex-row items-center gap-2">

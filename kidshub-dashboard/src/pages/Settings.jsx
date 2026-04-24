@@ -19,14 +19,14 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { Layout } from '../components/layout';
-import { Card, CardBody, CardHeader, Avatar, Badge, Button } from '../components/ui';
+import { Card, CardBody, CardHeader, Avatar, Badge, Button, TierBadge } from '../components/ui';
 import { useAuth } from '../contexts';
 import { useEntitlements, useFeature } from '../hooks';
 import { centersApi } from '../firebase/api/centers';
 import { ADMIN_UIDS, TIERS, TIERS_ARRAY } from '../config/product';
 import { UpgradeCTA } from '../components/UpgradeCTA';
 
-function SettingsSection({ icon: Icon, title, description, children }) {
+function SettingsSection({ icon: Icon, title, description, tierFeature, children }) {
   return (
     <Card>
       <CardHeader>
@@ -35,7 +35,10 @@ function SettingsSection({ icon: Icon, title, description, children }) {
             <Icon className="w-5 h-5 text-brand-600" />
           </div>
           <div>
-            <h3 className="font-semibold text-surface-900">{title}</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold text-surface-900">{title}</h3>
+              {tierFeature && <TierBadge feature={tierFeature} />}
+            </div>
             {description && (
               <p className="text-sm text-surface-500">{description}</p>
             )}
@@ -603,6 +606,7 @@ function BrandingSection() {
         icon={Palette}
         title="Branding"
         description="Custom logo + accent color on parent and teacher apps"
+        tierFeature="customBranding"
       >
         <UpgradeCTA
           feature="customBranding"
@@ -636,6 +640,7 @@ function BrandingSection() {
       icon={Palette}
       title="Branding"
       description="Shown in the teacher and parent apps"
+      tierFeature="customBranding"
     >
       {loading ? (
         <div className="py-4 flex items-center gap-2 text-surface-500 text-sm">

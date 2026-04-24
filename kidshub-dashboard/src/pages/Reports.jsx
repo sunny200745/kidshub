@@ -42,7 +42,7 @@ import {
 } from 'firebase/firestore';
 
 import { Layout } from '../components/layout';
-import { Card, CardBody, CardHeader, Button, Badge, EmptyState } from '../components/ui';
+import { Card, CardBody, CardHeader, Button, Badge, EmptyState, TierBadge } from '../components/ui';
 import { UpgradeCTA } from '../components/UpgradeCTA';
 import { useAuth } from '../contexts';
 import { useFeature } from '../hooks';
@@ -319,7 +319,10 @@ function AttendanceReportCard({ daycareId }) {
               <Clock className="w-5 h-5 text-teal-600" />
             </div>
             <div>
-              <h3 className="font-semibold text-surface-900">Staff attendance</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-surface-900">Staff attendance</h3>
+                <TierBadge feature="staffClockIn" />
+              </div>
               <p className="text-sm text-surface-500">
                 Last 7 days of clock-in shifts.
               </p>
@@ -457,7 +460,10 @@ function HealthReportCard({ daycareId }) {
               <Stethoscope className="w-5 h-5 text-danger-600" />
             </div>
             <div>
-              <h3 className="font-semibold text-surface-900">Health log</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-surface-900">Health log</h3>
+                <TierBadge feature="healthReports" />
+              </div>
               <p className="text-sm text-surface-500">
                 Last 14 days of symptoms, medication, incidents.
               </p>

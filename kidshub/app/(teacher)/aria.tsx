@@ -18,7 +18,7 @@ import { Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-na
 
 import { ScreenContainer } from '@/components/layout';
 import { UpgradeCTA } from '@/components/upgrade-cta';
-import { ActionButton, Card, CardBody, LoadingState, Pill } from '@/components/ui';
+import { ActionButton, Card, CardBody, LoadingState, Pill, TierBadge } from '@/components/ui';
 import { useFeature } from '@/hooks';
 
 type Mode = 'parent-message' | 'daily-report' | 'activity';
@@ -90,7 +90,10 @@ export default function TeacherAria() {
 
   if (feature.loading) {
     return (
-      <ScreenContainer title="Aria AI" subtitle="Your writing assistant">
+      <ScreenContainer
+        title="Aria AI"
+        subtitle="Your writing assistant"
+        headerBadge={<TierBadge feature="ariaAiInApp" />}>
         <LoadingState message="Checking your plan" />
       </ScreenContainer>
     );
@@ -98,7 +101,10 @@ export default function TeacherAria() {
 
   if (!feature.enabled) {
     return (
-      <ScreenContainer title="Aria AI" subtitle="Your writing assistant">
+      <ScreenContainer
+        title="Aria AI"
+        subtitle="Your writing assistant"
+        headerBadge={<TierBadge feature="ariaAiInApp" />}>
         <UpgradeCTA
           feature="ariaAiInApp"
           upgradeTo={feature.upgradeTo}
@@ -110,7 +116,10 @@ export default function TeacherAria() {
   }
 
   return (
-    <ScreenContainer title="Aria AI" subtitle="Premium · your writing assistant">
+    <ScreenContainer
+      title="Aria AI"
+      subtitle="Your writing assistant"
+      headerBadge={<TierBadge feature="ariaAiInApp" />}>
       <ScrollView showsVerticalScrollIndicator={false}>
         <View className="flex-row items-center gap-2 mb-4">
           <Sparkles size={18} color="#8b5cf6" />

@@ -18,7 +18,7 @@ import { CalendarRange, Clock, HelpCircle, Sparkles } from 'lucide-react-native'
 import { Text, View } from 'react-native';
 
 import { ScreenContainer } from '@/components/layout';
-import { Card, CardBody, EmptyState, LoadingState, Pill } from '@/components/ui';
+import { Card, CardBody, EmptyState, LoadingState, Pill, TierBadge } from '@/components/ui';
 import {
   useClassroom,
   useClassroomWeeklyPlan,
@@ -219,6 +219,7 @@ export default function ParentSchedule() {
             <Text className="text-sm font-semibold text-surface-900 dark:text-surface-50">
               {DAY_NAMES[todayDow]}&apos;s plan
             </Text>
+            <TierBadge feature="weeklyPlanner" />
           </View>
           <Card>
             <CardBody className="p-4">

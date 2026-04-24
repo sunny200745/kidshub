@@ -7,3 +7,4 @@ export { Modal, ModalFooter } from './Modal';
 export { ConfirmDialog } from './ConfirmDialog';
 export { LoadingSpinner, LoadingPage, LoadingCard, LoadingCards, Skeleton } from './Loading';
 export { EmptyState, ErrorState } from './EmptyState';
+export { TierBadge } from './TierBadge';

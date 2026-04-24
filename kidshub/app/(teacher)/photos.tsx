@@ -61,6 +61,7 @@ import {
   LoadingState,
   Pill,
   SheetModal,
+  TierBadge,
 } from '@/components/ui';
 import { useAuth } from '@/contexts';
 import { photosApi } from '@/firebase/api';
@@ -425,7 +426,10 @@ export default function TeacherPhotos() {
 
   if (feature.loading) {
     return (
-      <ScreenContainer title="Photos" subtitle="Classroom gallery">
+      <ScreenContainer
+        title="Photos"
+        subtitle="Classroom gallery"
+        headerBadge={<TierBadge feature="photoJournal" />}>
         <LoadingState message="Checking your plan" />
       </ScreenContainer>
     );
@@ -433,7 +437,10 @@ export default function TeacherPhotos() {
 
   if (!feature.enabled) {
     return (
-      <ScreenContainer title="Photos" subtitle="Classroom gallery">
+      <ScreenContainer
+        title="Photos"
+        subtitle="Classroom gallery"
+        headerBadge={<TierBadge feature="photoJournal" />}>
         <View className="gap-4">
           <UpgradeCTA
             feature="photoJournal"
@@ -471,7 +478,10 @@ export default function TeacherPhotos() {
   }
 
   return (
-    <ScreenContainer title="Photos" subtitle="Classroom gallery">
+    <ScreenContainer
+      title="Photos"
+      subtitle="Classroom gallery"
+      headerBadge={<TierBadge feature="photoJournal" />}>
       <ScrollView showsVerticalScrollIndicator={false}>
         <View className="flex-row items-center gap-3 mb-5">
           <View className="flex-1">

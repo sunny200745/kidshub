@@ -33,6 +33,7 @@ import {
   LoadingState,
   Pill,
   SheetModal,
+  TierBadge,
 } from '@/components/ui';
 import { useAuth } from '@/contexts';
 import { activityTemplatesApi } from '@/firebase/api';
@@ -347,7 +348,10 @@ export default function TeacherCurriculum() {
 
   if (feature.loading) {
     return (
-      <ScreenContainer title="Curriculum" subtitle="Activity templates">
+      <ScreenContainer
+        title="Curriculum"
+        subtitle="Activity templates"
+        headerBadge={<TierBadge feature="activityPlanner" />}>
         <LoadingState message="Checking your plan" />
       </ScreenContainer>
     );
@@ -355,7 +359,10 @@ export default function TeacherCurriculum() {
 
   if (!feature.enabled) {
     return (
-      <ScreenContainer title="Curriculum" subtitle="Activity templates">
+      <ScreenContainer
+        title="Curriculum"
+        subtitle="Activity templates"
+        headerBadge={<TierBadge feature="activityPlanner" />}>
         <UpgradeCTA
           feature="activityPlanner"
           upgradeTo={feature.upgradeTo}
@@ -367,7 +374,10 @@ export default function TeacherCurriculum() {
   }
 
   return (
-    <ScreenContainer title="Curriculum" subtitle={`${templates.length} templates`}>
+    <ScreenContainer
+      title="Curriculum"
+      subtitle={`${templates.length} templates`}
+      headerBadge={<TierBadge feature="activityPlanner" />}>
       <View className="mb-4">
         <ActionButton
           label="New template"

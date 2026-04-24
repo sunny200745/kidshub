@@ -37,6 +37,13 @@ export type ScreenContainerProps = {
   hideHeader?: boolean;
   /** When true (default) renders the Parent/Teacher role pill next to the title. */
   showRoleBadge?: boolean;
+  /**
+   * Optional pill rendered inline with the title (e.g. `<TierBadge feature="photoJournal" />`).
+   * Sits to the right of the title text, before the role badge. Keeps the
+   * tier signal visible even when the feature is unlocked — a subtle
+   * reminder that the screen advertises a paid capability.
+   */
+  headerBadge?: ReactNode;
   /** Extra classes on the outermost safe-area wrapper. */
   className?: string;
   /** Extra style on the ScrollView content (only when `scrollable`). */
@@ -50,6 +57,7 @@ export function ScreenContainer({
   scrollable = true,
   hideHeader = false,
   showRoleBadge = true,
+  headerBadge,
   className = '',
   contentContainerStyle,
 }: ScreenContainerProps) {
@@ -58,9 +66,12 @@ export function ScreenContainer({
       <View className="flex-row items-start justify-between gap-2">
         <View className="flex-1">
           {title ? (
-            <Text className="text-2xl font-bold text-surface-900 dark:text-surface-50">
-              {title}
-            </Text>
+            <View className="flex-row items-center gap-2 flex-wrap">
+              <Text className="text-2xl font-bold text-surface-900 dark:text-surface-50">
+                {title}
+              </Text>
+              {headerBadge}
+            </View>
           ) : null}
           {subtitle ? (
             <Text className="text-sm text-surface-500 dark:text-surface-400 mt-0.5">

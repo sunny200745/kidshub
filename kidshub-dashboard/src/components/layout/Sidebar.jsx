@@ -19,9 +19,15 @@ import {
   Heart,
   Loader2,
 } from 'lucide-react';
-import { Avatar } from '../ui';
+import { Avatar, TierBadge } from '../ui';
 import { useAuth } from '../../contexts';
 
+// `tierFeature` ties a nav item to a representative paid feature so the
+// sidebar can surface a Pro/Premium pill next to the label. We pick the
+// "anchor" feature most users associate with the section (e.g. reports
+// landing shows Attendance + Health, both Pro — so `attendanceReports`
+// is a fine anchor). Items with no paid surfaces omit the field and
+// `<TierBadge>` renders nothing.
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Children', href: '/children', icon: Baby },
@@ -33,7 +39,7 @@ const navigation = [
   { name: 'Messages', href: '/messages', icon: MessageSquare, badge: 2 },
   { name: 'Announcements', href: '/announcements', icon: Megaphone },
   { name: 'Schedule', href: '/schedule', icon: Calendar },
-  { name: 'Reports', href: '/reports', icon: FileText },
+  { name: 'Reports', href: '/reports', icon: FileText, tierFeature: 'attendanceReports' },
 ];
 
 const bottomNav = [
@@ -132,6 +138,9 @@ export function Sidebar({ collapsed, onToggle, isMobile = false, onClose }) {
               {(!collapsed || isMobile) && (
                 <>
                   <span className="flex-1 text-sm sm:text-base">{item.name}</span>
+                  {item.tierFeature && (
+                    <TierBadge feature={item.tierFeature} />
+                  )}
                   {item.badge && (
                     <span className="flex items-center justify-center w-5 h-5 text-xs font-medium bg-brand-500 text-white rounded-full">
                       {item.badge}
@@ -141,6 +150,9 @@ export function Sidebar({ collapsed, onToggle, isMobile = false, onClose }) {
               )}
               {collapsed && !isMobile && item.badge && (
                 <span className="absolute top-1 right-1 w-2 h-2 bg-brand-500 rounded-full" />
+              )}
+              {collapsed && !isMobile && item.tierFeature && (
+                <span className="absolute top-1 left-1 w-2 h-2 bg-brand-500 rounded-full" />
               )}
             </NavLink>
           );

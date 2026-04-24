@@ -35,3 +35,5 @@ export { EntityCard } from './entity-card';
 export type { EntityCardProps } from './entity-card';
 export { SheetModal } from './sheet-modal';
 export type { SheetModalProps } from './sheet-modal';
+export { TierBadge } from './tier-badge';
+export type { TierBadgeProps } from './tier-badge';

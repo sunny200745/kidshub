@@ -24,6 +24,7 @@ import {
   LoadingState,
   Pill,
   SheetModal,
+  TierBadge,
 } from '@/components/ui';
 import { useAuth } from '@/contexts';
 import { isoWeekStart, weeklyPlansApi } from '@/firebase/api';
@@ -235,7 +236,10 @@ export default function TeacherWeeklyPlanner() {
 
   if (feature.loading) {
     return (
-      <ScreenContainer title="Weekly planner" subtitle="Plan the week">
+      <ScreenContainer
+        title="Weekly planner"
+        subtitle="Plan the week"
+        headerBadge={<TierBadge feature="weeklyPlanner" />}>
         <LoadingState message="Checking your plan" />
       </ScreenContainer>
     );
@@ -243,7 +247,10 @@ export default function TeacherWeeklyPlanner() {
 
   if (!feature.enabled) {
     return (
-      <ScreenContainer title="Weekly planner" subtitle="Plan the week">
+      <ScreenContainer
+        title="Weekly planner"
+        subtitle="Plan the week"
+        headerBadge={<TierBadge feature="weeklyPlanner" />}>
         <UpgradeCTA
           feature="weeklyPlanner"
           upgradeTo={feature.upgradeTo}
@@ -255,7 +262,10 @@ export default function TeacherWeeklyPlanner() {
   }
 
   return (
-    <ScreenContainer title="Weekly planner" subtitle={formatWeekRange(weekStart)}>
+    <ScreenContainer
+      title="Weekly planner"
+      subtitle={formatWeekRange(weekStart)}
+      headerBadge={<TierBadge feature="weeklyPlanner" />}>
       <View className="flex-row items-center justify-between mb-4">
         <Pressable
           onPress={() => setWeekStart(shiftWeek(weekStart, -7))}
