@@ -23,7 +23,7 @@ import { Card, CardBody, CardHeader, Avatar, Badge, Button } from '../components
 import { useAuth } from '../contexts';
 import { useEntitlements, useFeature } from '../hooks';
 import { centersApi } from '../firebase/api/centers';
-import { ADMIN_UIDS, TIERS } from '../config/product';
+import { ADMIN_UIDS, TIERS, TIERS_ARRAY } from '../config/product';
 import { UpgradeCTA } from '../components/UpgradeCTA';
 
 function SettingsSection({ icon: Icon, title, description, children }) {
@@ -414,13 +414,25 @@ function BillingSection() {
  * ADMIN_UIDS (config/product.ts). The Firestore rule on centers/{ownerId}
  * is the actual security boundary — this is a UX filter so random
  * production owners don't see an "enable demo mode" toggle.
+ *
+ * Houses two tools:
+ *   1. Demo mode — one-click "unlock everything" for sales demos.
+ *   2. Plan override (QA) — one-click switch between Starter / Pro /
+ *      Premium / Trial to verify that FeatureGate + UpgradeCTA banners
+ *      render correctly on every paid surface. Trial ranks == Premium by
+ *      design, so without this tool you'd have to edit Firestore by hand
+ *      every time you wanted to see a gate fire.
  */
 function AdminSection() {
   const { user } = useAuth();
-  const { loading, demoMode } = useEntitlements();
+  const { loading, demoMode, tier, effectiveTier } = useEntitlements();
   const [pending, setPending] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   const [error, setError] = useState(null);
+
+  const [planPending, setPlanPending] = useState(null);
+  const [planJustSaved, setPlanJustSaved] = useState(null);
+  const [planError, setPlanError] = useState(null);
 
   const isAdmin = !!user && ADMIN_UIDS.includes(user.uid);
   if (!isAdmin) return null;
@@ -437,6 +449,22 @@ function AdminSection() {
       setError(err?.message ?? 'Failed to toggle demo mode.');
     } finally {
       setPending(false);
+    }
+  };
+
+  const handleSetPlan = async (nextPlan) => {
+    if (planPending) return;
+    setPlanPending(nextPlan);
+    setPlanError(null);
+    try {
+      await centersApi.setPlan(nextPlan);
+      setPlanJustSaved(nextPlan);
+      setTimeout(() => setPlanJustSaved(null), 2500);
+    } catch (err) {
+      console.error('[AdminSection] setPlan failed:', err);
+      setPlanError(err?.message ?? `Failed to switch to ${nextPlan}.`);
+    } finally {
+      setPlanPending(null);
     }
   };
 
@@ -462,6 +490,64 @@ function AdminSection() {
       {error && (
         <p className="text-sm text-danger-600 mt-2">{error}</p>
       )}
+
+      <SettingsItem
+        label="Plan override (QA)"
+        description="One-click switch for verifying paywalls. Clicking Trial also resets the 14-day clock — useful if it expired mid-test."
+      >
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {TIERS_ARRAY.map((planKey) => {
+            const isCurrent = tier === planKey;
+            const isPending = planPending === planKey;
+            const wasJustSaved = planJustSaved === planKey;
+            // Trial stays clickable when current because the click also
+            // refreshes trialEndsAt — useful for QA once the clock expires.
+            const disabled = !!planPending || (isCurrent && planKey !== 'trial');
+            return (
+              <button
+                key={planKey}
+                type="button"
+                onClick={() => handleSetPlan(planKey)}
+                disabled={disabled}
+                title={
+                  isCurrent && planKey === 'trial'
+                    ? 'Reset the 14-day trial clock'
+                    : isCurrent
+                      ? 'Current plan'
+                      : `Switch to ${TIERS[planKey].name}`
+                }
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+                  isCurrent
+                    ? 'bg-brand-500 border-brand-500 text-white'
+                    : 'bg-white border-surface-200 text-surface-700 hover:border-brand-300 hover:text-brand-700'
+                } ${planPending && !isPending ? 'opacity-50' : ''} ${disabled && !isCurrent ? 'cursor-not-allowed' : ''}`}
+              >
+                {isPending && <Loader2 className="w-3 h-3 animate-spin" />}
+                {wasJustSaved && <CheckCircle2 className="w-3 h-3 text-success-500" />}
+                {TIERS[planKey].name}
+              </button>
+            );
+          })}
+        </div>
+      </SettingsItem>
+      <div className="text-xs text-surface-500 -mt-2">
+        Current plan:{' '}
+        <code className="bg-surface-100 px-1.5 py-0.5 rounded text-surface-700">
+          {tier}
+        </code>
+        {effectiveTier !== tier && (
+          <>
+            {' · effective: '}
+            <code className="bg-surface-100 px-1.5 py-0.5 rounded text-surface-700">
+              {effectiveTier}
+            </code>
+          </>
+        )}
+      </div>
+      {planError && (
+        <p className="text-sm text-danger-600 mt-2">{planError}</p>
+      )}
+
       <div className="mt-2 text-xs text-surface-500">
         Your admin UID:{' '}
         <code className="bg-surface-100 px-1.5 py-0.5 rounded text-surface-700">

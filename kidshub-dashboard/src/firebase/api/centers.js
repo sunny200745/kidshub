@@ -186,6 +186,40 @@ export async function setDemoMode(enabled) {
 }
 
 /**
+ * Admin-only plan override — writes `centers/{ownerId}.plan` to the given
+ * tier so every FeatureGate in the app re-evaluates immediately. Used by
+ * the "Plan override" section on Settings for QA / sales testing, where
+ * one-click tier changes are much faster than editing Firestore by hand.
+ *
+ * Semantics:
+ *   - When `plan === 'trial'`, we ALSO refresh `trialEndsAt` to a fresh
+ *     14-day window (otherwise flipping back to trial with a past
+ *     `trialEndsAt` would immediately downgrade via `downgradeExpiredTrial`
+ *     and negate the whole point of the test).
+ *   - For any other tier, `trialEndsAt` is left untouched — harmless
+ *     since `useEntitlements` only consults it when plan === 'trial'.
+ *
+ * Security: this uses the same `centers/{ownerId}` self-owner write rule
+ * as every other field on the center doc. Once billing (Stripe) lands in
+ * Track F, plan writes should move server-side (Cloud Function + webhook)
+ * and the client path should become read-only.
+ */
+export async function setPlan(plan) {
+  if (!TIERS_ARRAY.includes(plan)) {
+    throw new Error(`centersApi.setPlan: invalid plan "${plan}"`);
+  }
+  const ownerId = currentOwnerId();
+  const patch = {
+    plan,
+    updatedAt: serverTimestamp(),
+  };
+  if (plan === 'trial') {
+    patch.trialEndsAt = trialEndsFromNow();
+  }
+  await updateDoc(doc(db, 'centers', ownerId), patch);
+}
+
+/**
  * One-shot read of the current owner's center doc. Used in flows that don't
  * need a live subscription (admin tools, billing callbacks).
  */
@@ -219,6 +253,7 @@ export const centersApi = {
   ensurePlanStamped,
   downgradeExpiredTrial,
   setDemoMode,
+  setPlan,
   getSelfCenter,
   updateBranding,
   defaultPlanFields,
