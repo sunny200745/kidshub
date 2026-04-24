@@ -25,7 +25,7 @@ Four tiers, with Trial being a time-limited full-access state rather than a sepa
 | Tier | Price (strawman) | Limits | Positioning |
 |---|---|---|---|
 | **Trial** | Free, 14 days | Full Premium access | New signups land here, auto-downgrade to Starter when trial ends unless upgraded |
-| **Starter** | Free forever | 1 classroom · 15 children · 2 staff | Small home daycares — gets them hooked, they evangelize |
+| **Starter** | Free for first 2 months | 1 classroom · 15 children · 2 staff | Small home daycares — a 2-month on-ramp past the trial so they get hooked before the paywall lands |
 | **Pro** | ~$39/mo (placeholder) | 5 classrooms · 75 children · 15 staff | Standard center — the bread-and-butter tier |
 | **Premium** | ~$99/mo (placeholder) | Unlimited classrooms/children/staff · multi-daycare | Multi-location operators, franchise owners |
 
@@ -47,7 +47,7 @@ Legend: `✅` included · `—` locked behind upgrade CTA · `∞` unlimited.
 | Classrooms | 1 | 5 | ∞ | Quota check on classroom create |
 | Children | 15 | 75 | ∞ | Quota check on child create |
 | Staff | 2 | 15 | ∞ | Quota check on staff create + invite |
-| **Core (free forever)** | | | | |
+| **Core (included on every plan)** | | | | |
 | Parent self-register + sign-in | ✅ | ✅ | ✅ | |
 | Teacher invite flow | ✅ | ✅ | ✅ | |
 | Parent invite flow | ✅ | ✅ | ✅ | |

@@ -23,7 +23,7 @@ import { Card, CardBody, CardHeader, Avatar, Badge, Button, TierBadge } from '..
 import { useAuth } from '../contexts';
 import { useEntitlements, useFeature } from '../hooks';
 import { centersApi } from '../firebase/api/centers';
-import { ADMIN_UIDS, TIERS, TIERS_ARRAY } from '../config/product';
+import { ADMIN_UIDS, STARTER_FREE_MONTHS, TIERS, TIERS_ARRAY } from '../config/product';
 import { UpgradeCTA } from '../components/UpgradeCTA';
 
 function SettingsSection({ icon: Icon, title, description, tierFeature, children }) {
@@ -354,7 +354,7 @@ function BillingSection() {
     tierInfo.monthlyPriceUsd === null
       ? 'Free during trial'
       : tierInfo.monthlyPriceUsd === 0
-      ? 'Free forever'
+      ? `Free for ${STARTER_FREE_MONTHS} months`
       : `$${tierInfo.monthlyPriceUsd}/month`;
 
   return (

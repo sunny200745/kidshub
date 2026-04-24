@@ -68,8 +68,12 @@ export const TIERS: Record<Tier, {
   },
   starter: {
     key: 'starter',
+    // Starter is a 2-month free on-ramp, NOT free forever. The promo
+    // window is `STARTER_FREE_MONTHS` below. After the window expires,
+    // owners must upgrade to Pro/Premium (enforcement ships with
+    // billing — see TODO at `STARTER_FREE_MONTHS`).
     name: 'Starter',
-    tagline: 'Free forever for tiny daycares',
+    tagline: 'Free for your first 2 months',
     monthlyPriceUsd: 0,
     accentColor: '#64748B', // slate
   },
@@ -93,6 +97,33 @@ export const TIERS: Record<Tier, {
 
 /** TODO(trial): confirm 14 days vs 30 before GA. */
 export const TRIAL_DURATION_DAYS = 14;
+
+// ─── Starter promo window ─────────────────────────────────────────────
+
+/**
+ * Starter is offered free for the first `STARTER_FREE_MONTHS` months
+ * of a center's life, then requires a paid plan. This constant is the
+ * SINGLE source of truth for the promo window — copy everywhere
+ * (pricing page, Settings → Plan & billing, in-app CTAs) renders from
+ * here so tweaks are a one-file edit.
+ *
+ * TODO(billing): enforcement is not yet wired. To close the loop:
+ *   1. Stamp `centers/{ownerId}.starterStartedAt` (serverTimestamp) the
+ *      moment a center transitions into Starter — either on trial
+ *      expiry or on direct Starter signup.
+ *   2. Add a helper `starterPromoExpired(center)` that returns true
+ *      when `now > starterStartedAt + STARTER_FREE_MONTHS months`.
+ *   3. When true, treat the tier as "starter_expired": block writes
+ *      to paid-tier surfaces AND flip the center into a read-only
+ *      grace state with a prominent upgrade banner.
+ *   4. Stripe integration (Track F) hooks subscription activation to
+ *      clear the expiry flag.
+ *
+ * Until that lands, `STARTER_FREE_MONTHS` is COPY-ONLY — owners on
+ * Starter keep their current access regardless of how long they've
+ * been on it. That's fine for the small population we have pre-GA.
+ */
+export const STARTER_FREE_MONTHS = 2;
 
 // ─── Quotas (per-tier numeric limits) ─────────────────────────────────
 

@@ -31,6 +31,7 @@ import {
   FEATURE_LABELS,
   PURCHASABLE_TIERS,
   QUOTAS,
+  STARTER_FREE_MONTHS,
   TIERS,
   TIER_ORDER,
   tierSatisfies,
@@ -48,7 +49,7 @@ const CONTACT_SALES_URL =
 // (with QUOTAS rendered as numbers instead of checkmarks).
 const FEATURE_GROUPS = [
   {
-    title: 'Core (included free forever)',
+    title: 'Core (included on every plan)',
     rows: [
       {
         key: 'core.classrooms',
@@ -96,7 +97,7 @@ const FEATURE_GROUPS = [
 function formatPrice(tier) {
   const info = TIERS[tier];
   if (info.monthlyPriceUsd == null) return 'Free during trial';
-  if (info.monthlyPriceUsd === 0) return 'Free forever';
+  if (info.monthlyPriceUsd === 0) return `Free for ${STARTER_FREE_MONTHS} months`;
   return `$${info.monthlyPriceUsd}`;
 }
 
