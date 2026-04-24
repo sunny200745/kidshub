@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
+import { PlanStateBanner } from './PlanStateBanner';
 
 export function Layout({ children, title, subtitle, actions }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -44,6 +45,11 @@ export function Layout({ children, title, subtitle, actions }) {
           sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'
         }`}
       >
+        {/* Plan state strip (trial countdown / starter grace / etc.) —
+           stops 3-4 of the owner onboarding journey. Renders above the
+           header so it's always the first thing in the page flow, and
+           returns null on its own for unaffected tiers & suppressed routes. */}
+        <PlanStateBanner />
         <Header
           title={title}
           subtitle={subtitle}
