@@ -759,7 +759,20 @@
       var tierSelect = document.getElementById('cs-tier');
       if (!modal || !form) return;
 
+      // Tracks the post-success auto-dismiss timer so we can cancel it
+      // if the user closes the modal manually or reopens it before the
+      // timer fires. Without this guard, a stale timer could slam a
+      // freshly opened modal shut 20s later.
+      var successTimer = null;
+      function clearSuccessTimer() {
+        if (successTimer) {
+          clearTimeout(successTimer);
+          successTimer = null;
+        }
+      }
+
       function openModal(preferredTier) {
+        clearSuccessTimer();
         if (preferredTier && tierSelect.querySelector('option[value="' + preferredTier + '"]')) {
           tierSelect.value = preferredTier;
         }
@@ -769,6 +782,7 @@
       }
 
       function closeModal() {
+        clearSuccessTimer();
         modal.classList.remove('open');
       }
 
@@ -835,8 +849,14 @@
             return res.json();
           })
           .then(function () {
-            showSuccess("Thanks — we're on it. We'll reach out within one business day.");
+            showSuccess('Thanks for contacting us, We will reach out to you shortly.');
             form.reset();
+            clearSuccessTimer();
+            successTimer = setTimeout(function () {
+              closeModal();
+              resetStatus();
+              successTimer = null;
+            }, 20000);
           })
           .catch(function (err) {
             console.error('[contact-sales] failed:', err);
