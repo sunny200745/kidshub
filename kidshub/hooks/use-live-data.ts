@@ -259,10 +259,11 @@ export function useMyMessages(): AsyncState<Message[]> {
   const [state, setState] = useState<AsyncState<Message[]>>(emptyState([]));
 
   useEffect(() => {
-    if (isParent && uid) {
+    if (isParent && uid && daycareId) {
       setState((s) => ({ ...s, loading: true, error: null }));
       const unsub = messagesApi.subscribeForParent(
         uid,
+        daycareId,
         (msgs) => setState({ data: msgs, loading: false, error: null }),
         (error) => setState((s) => ({ ...s, loading: false, error })),
       );

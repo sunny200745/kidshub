@@ -600,8 +600,18 @@ service cloud.firestore {
     // teachers can see their co-workers in the same daycare.
     //
     match /staff/{staffId} {
+      // Parents may list staff within their own tenant — the kidshub
+      // parent Messages tab needs this to resolve the classroom teacher
+      // to chat with. The list query is
+      //   `where('daycareId', '==', profile.daycareId)`
+      // which proves `inMyTenant` to the rule evaluator. UI filters
+      // down to the parent's child's classroom. Staff docs hold
+      // employment metadata (name, email, role, classroom) — no SSN /
+      // payroll fields live here, so tenant-scoped parent visibility
+      // is the intended product behavior.
       allow read: if (isOwner() && inMyTenant(resource.data))
-        || (isTeacher() && inMyTenant(resource.data));
+        || (isTeacher() && inMyTenant(resource.data))
+        || (isParent() && inMyTenant(resource.data));
 
       allow create: if isOwner()
         && request.resource.data.daycareId == request.auth.uid;

@@ -39,11 +39,20 @@ export const messagesApi = {
   /**
    * Subscribe to all messages for a parent. We run two queries
    * (sender + recipient) and merge client-side because Firestore can't
-   * `OR` across fields without an aggregate index. Both queries are
-   * indexed by single-field defaults.
+   * `OR` across fields without an aggregate index.
+   *
+   * Both queries MUST include a `daycareId == profile.daycareId`
+   * equality filter. The firestore rules for messages require
+   * `inMyTenant(resource.data)` on the participant branch, and
+   * Firestore's list-query evaluator can only prove that constraint
+   * when the client filter explicitly pins daycareId. Without it, the
+   * whole query is rejected with `permission-denied` at query time,
+   * even though individual participant reads would succeed. This is
+   * the same class of issue that bit the children-read rule.
    */
   subscribeForParent(
     parentUid: string,
+    daycareId: string,
     callback: (messages: Message[]) => void,
     onError?: (err: Error) => void,
   ): Unsubscribe {
@@ -59,7 +68,11 @@ export const messagesApi = {
     };
 
     const unsubSent = onSnapshot(
-      query(collection(db, COLLECTION), where('senderId', '==', parentUid)),
+      query(
+        collection(db, COLLECTION),
+        where('daycareId', '==', daycareId),
+        where('senderId', '==', parentUid),
+      ),
       (snap) => {
         buckets.sent = snap.docs.map(snapToMessage);
         emit();
@@ -70,7 +83,11 @@ export const messagesApi = {
       },
     );
     const unsubRecv = onSnapshot(
-      query(collection(db, COLLECTION), where('recipientId', '==', parentUid)),
+      query(
+        collection(db, COLLECTION),
+        where('daycareId', '==', daycareId),
+        where('recipientId', '==', parentUid),
+      ),
       (snap) => {
         buckets.received = snap.docs.map(snapToMessage);
         emit();
