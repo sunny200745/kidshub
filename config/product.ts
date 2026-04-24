@@ -219,6 +219,37 @@ export const FEATURE_LABELS: Record<FeatureKey, string> = {
   dedicatedSupport: 'Dedicated support',
 };
 
+// ─── Infrastructure holds (temporary cross-tier locks) ───────────────
+
+/**
+ * Features that are TEMPORARILY locked for every tier because the
+ * underlying infrastructure isn't provisioned yet. `useFeature()` checks
+ * this set FIRST — if the key is present, it returns `enabled: false`
+ * with `reason: 'infra-locked'` regardless of the current tier. The
+ * existing `<FeatureGate>` / `<UpgradeCTA>` plumbing then renders the
+ * standard upgrade banner, so to the user it simply reads as "this is a
+ * paid feature" — no broken upload attempts, no cryptic Storage errors.
+ *
+ * Currently holding:
+ *   - `photoJournal` — photo/video uploads require Firebase Storage,
+ *     which in turn requires the Blaze plan. We defer that billing
+ *     decision until first paid customer; until then every tier sees the
+ *     upgrade CTA instead of an uploader that would fail at the network
+ *     layer.
+ *
+ * TODO(infra): remove `photoJournal` from this set the MOMENT Firebase
+ * Storage is enabled (Blaze plan) AND `storage.rules` is published. That
+ * one-line change restores the normal tier gate
+ * (FEATURES.photoJournal = 'pro'). No other code needs to change.
+ */
+export const INFRA_LOCKED_FEATURES: ReadonlySet<FeatureKey> = new Set<FeatureKey>([
+  'photoJournal',
+]);
+
+export function isFeatureInfraLocked(key: FeatureKey): boolean {
+  return INFRA_LOCKED_FEATURES.has(key);
+}
+
 // ─── Admin allowlist ──────────────────────────────────────────────────
 
 /**

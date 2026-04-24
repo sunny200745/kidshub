@@ -14,7 +14,7 @@
  */
 import { useMemo } from 'react';
 
-import { FEATURES, tierSatisfies } from '../config/product';
+import { FEATURES, INFRA_LOCKED_FEATURES, tierSatisfies } from '../config/product';
 import { useEntitlements } from './useEntitlements';
 
 /** @returns {{ enabled: boolean, loading: boolean, reason: string|null, upgradeTo: string|null, currentTier: string }} */
@@ -39,12 +39,18 @@ export function useFeature(key) {
       };
     }
 
-    const enabled = tierSatisfies(effectiveTier, requiredTier);
+    // Infra holds take precedence over the tier check. Features in
+    // INFRA_LOCKED_FEATURES are locked for every tier (even trial /
+    // premium) because backing infrastructure isn't provisioned yet —
+    // see config/product.ts for the current list and the flip rules.
+    const infraLocked = INFRA_LOCKED_FEATURES.has(key);
+    const enabled = !infraLocked && tierSatisfies(effectiveTier, requiredTier);
 
     let reason = null;
     if (!enabled) {
-      // Explain WHY the gate is closed so upgrade CTAs can be specific.
-      if (tier === 'trial' && trialExpired) {
+      if (infraLocked) {
+        reason = 'infra-locked';
+      } else if (tier === 'trial' && trialExpired) {
         reason = 'trial-expired';
       } else {
         reason = 'tier';

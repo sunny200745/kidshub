@@ -15,6 +15,13 @@
  * We do NOT wrap the whole screen in <FeatureGate> — the empty-state
  * hero (avatar + classroom stripe) still renders so the screen never
  * looks broken for Starter users.
+ *
+ * NOTE(infra-lock): while `photoJournal` lives in INFRA_LOCKED_FEATURES
+ * (config/product.ts), `useFeature('photoJournal').enabled` is false for
+ * every tier — so every parent currently sees the UpgradeCTA path
+ * regardless of their daycare's plan. Removing the key from that set
+ * (once Firebase Storage is enabled + storage.rules is published)
+ * restores the standard tier-based behavior above.
  */
 import { Image } from 'expo-image';
 import { Camera, HelpCircle, X } from 'lucide-react-native';
@@ -153,8 +160,8 @@ function StarterPreview() {
           ))}
         </View>
         <Text className="text-xs text-surface-500 dark:text-surface-400 mt-3">
-          Real photos from your daycare will appear here once they&apos;re on the
-          Pro plan.
+          Real photos from your daycare will appear here once they upgrade
+          their membership plan.
         </Text>
       </CardBody>
     </Card>
@@ -237,7 +244,7 @@ export default function ParentPhotos() {
               feature="photoJournal"
               upgradeTo={feature.upgradeTo}
               variant="card"
-              description="Unlock a daily gallery of photos your daycare uploads of your child."
+              description="Daily photo galleries from your daycare are part of our paid membership plans. Ask your daycare to upgrade to unlock photos of your child."
             />
             <StarterPreview />
           </View>

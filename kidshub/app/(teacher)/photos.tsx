@@ -18,6 +18,15 @@
  * in Firestore rules. Reads are not gated (teachers still see existing
  * photos even if the daycare downgrades) so nothing disappears from the
  * UI unexpectedly.
+ *
+ * NOTE(infra-lock): `photoJournal` currently lives in
+ * `INFRA_LOCKED_FEATURES` (see config/product.ts) because Firebase
+ * Storage requires the Blaze plan, which we haven't enabled. This forces
+ * `useFeature('photoJournal').enabled === false` for every tier, so this
+ * page always renders the upgrade CTA today — no user hits the actual
+ * uploader (which would fail at the Storage layer). When infra is ready,
+ * removing the key from that set instantly re-enables Pro+ uploads with
+ * zero other changes.
  */
 import { Image } from 'expo-image';
 import {
@@ -430,7 +439,7 @@ export default function TeacherPhotos() {
             feature="photoJournal"
             upgradeTo={feature.upgradeTo}
             variant="card"
-            description="Share daily photos with parents — a top-3 reason parents choose digital daycares."
+            description="Photo and video sharing with parents is part of our paid membership plans. Ask your daycare to upgrade to unlock daily photo journals."
           />
           <Card>
             <CardBody>
