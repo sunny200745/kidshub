@@ -128,8 +128,14 @@ export default function Welcome() {
 
   const greeting = profile?.firstName ? `Welcome, ${profile.firstName}` : 'Welcome to KidsHub';
 
+  // Stamp `?from=welcome` so the destination page (Settings, Classrooms,
+  // Children, Staff) can render a "← Back to setup" return banner via
+  // <WizardReturnBanner> in Layout. Without this the user has no obvious
+  // path back to the wizard once they leave it — exactly the friction
+  // first-time owners hit during sales-demo testing.
   const handleCardClick = (href) => {
-    navigate(href);
+    const sep = href.includes('?') ? '&' : '?';
+    navigate(`${href}${sep}from=welcome`);
   };
 
   const handleDismiss = async () => {

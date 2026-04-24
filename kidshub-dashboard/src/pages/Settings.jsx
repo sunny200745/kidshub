@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { updateProfile as updateAuthProfile } from 'firebase/auth';
 import {
   User,
   Bell,
@@ -19,10 +21,23 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { Layout } from '../components/layout';
-import { Card, CardBody, CardHeader, Avatar, Badge, Button, TierBadge } from '../components/ui';
+import {
+  Card,
+  CardBody,
+  CardHeader,
+  Avatar,
+  Badge,
+  Button,
+  TierBadge,
+  Modal,
+  ModalFooter,
+  Input,
+} from '../components/ui';
 import { useAuth } from '../contexts';
 import { useEntitlements, useFeature } from '../hooks';
 import { centersApi } from '../firebase/api/centers';
+import { auth, db } from '../firebase/config';
+import { ROLE_LABELS } from '../constants/roles';
 import { ADMIN_UIDS, STARTER_FREE_DAYS, TIERS, TIERS_ARRAY } from '../config/product';
 import { UpgradeCTA } from '../components/UpgradeCTA';
 
@@ -96,22 +111,12 @@ export default function Settings() {
   return (
     <Layout title="Settings" subtitle="Manage your preferences">
       <div className="max-w-3xl mx-auto space-y-6">
-        {/* Profile Section */}
-        <Card>
-          <CardBody>
-            <div className="flex items-center gap-4">
-              <Avatar name="David Kim" size="xl" />
-              <div className="flex-1">
-                <h2 className="text-lg font-semibold text-surface-900">
-                  David Kim
-                </h2>
-                <p className="text-surface-500">Director</p>
-                <p className="text-sm text-surface-400">david.kim@example.com</p>
-              </div>
-              <Button variant="secondary">Edit Profile</Button>
-            </div>
-          </CardBody>
-        </Card>
+        {/* Profile Section — live data from the registered owner. The
+            Edit Profile button opens a self-service form that updates
+            both users/{uid} and centers/{uid} so the owner's name, the
+            center display name, and the contact phone stay in sync
+            across the dashboard, parent invites, and emails. */}
+        <ProfileCard />
 
         {/* Notifications */}
         <SettingsSection
@@ -318,6 +323,267 @@ export default function Settings() {
         </div>
       </div>
     </Layout>
+  );
+}
+
+/**
+ * Live profile card. Reads the registered owner's name, role, and
+ * contact details from useAuth() (user + users/{uid} profile doc) and
+ * the daycare display name from the centers/{uid} doc.
+ *
+ * Falls back gracefully while the profile snapshot is still loading
+ * (right after first sign-in / register) so we never render the old
+ * dummy "David Kim" placeholder again.
+ *
+ * The center subscription is local rather than going through
+ * useEntitlements() because we want the most up-to-date `name` field
+ * for the daycare line — and we want it even on rare paths where
+ * useEntitlements isn't mounted (e.g. brand-new center mid-stamp).
+ */
+function ProfileCard() {
+  const { user, profile, role } = useAuth();
+  const [center, setCenter] = useState(null);
+  const [editOpen, setEditOpen] = useState(false);
+
+  useEffect(() => {
+    if (!user?.uid) return undefined;
+    const unsub = centersApi.subscribeToSelfCenter(
+      (data) => setCenter(data),
+      () => setCenter(null)
+    );
+    return unsub;
+  }, [user?.uid]);
+
+  // Composite display name with three fallbacks (in priority order):
+  //   1. Profile firstName+lastName — the source of truth set at register.
+  //   2. user.displayName — set by Firebase Auth via updateProfile() at
+  //      register; survives even if the users doc snapshot hasn't loaded.
+  //   3. The local-part of the email — last-resort so we never render
+  //      an empty card while data is in-flight.
+  const fullName = (() => {
+    const first = profile?.firstName?.trim();
+    const last = profile?.lastName?.trim();
+    if (first || last) return [first, last].filter(Boolean).join(' ');
+    if (user?.displayName) return user.displayName;
+    if (user?.email) {
+      const localPart = user.email.split('@')[0];
+      return localPart.charAt(0).toUpperCase() + localPart.slice(1);
+    }
+    return 'Your account';
+  })();
+
+  const roleLabel = ROLE_LABELS[role] || (role ? role : 'Owner');
+  const email = profile?.email || user?.email || '—';
+  const centerName = center?.name || profile?.centerName || '';
+
+  return (
+    <>
+      <Card>
+        <CardBody>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            <Avatar name={fullName} size="xl" />
+            <div className="flex-1 min-w-0">
+              <h2 className="text-lg font-semibold text-surface-900 truncate">
+                {fullName}
+              </h2>
+              <p className="text-surface-500">{roleLabel}</p>
+              <p className="text-sm text-surface-400 truncate">{email}</p>
+              {centerName && (
+                <p className="text-sm text-surface-500 mt-1 truncate">
+                  <span className="text-surface-400">Center: </span>
+                  <span className="font-medium text-surface-700">{centerName}</span>
+                </p>
+              )}
+            </div>
+            <Button
+              variant="secondary"
+              onClick={() => setEditOpen(true)}
+              disabled={!profile && !user}
+            >
+              Edit Profile
+            </Button>
+          </div>
+        </CardBody>
+      </Card>
+
+      {editOpen && (
+        <EditProfileModal
+          user={user}
+          profile={profile}
+          center={center}
+          onClose={() => setEditOpen(false)}
+        />
+      )}
+    </>
+  );
+}
+
+/**
+ * EditProfileModal — owner self-service edit for the four fields the
+ * owner actually controls themselves:
+ *
+ *   - First / Last name (users/{uid}.firstName / lastName)
+ *   - Phone           (users/{uid}.phone AND centers/{uid}.phone)
+ *   - Daycare name    (users/{uid}.centerName AND centers/{uid}.name)
+ *
+ * NOT editable here:
+ *   - Email — the auth identity. Changing it requires re-authentication
+ *     and Firebase Auth's updateEmail(); we surface a hint instead so
+ *     the owner knows where to go.
+ *   - Role / daycareId / uid — frozen by the firestore rule on users/.
+ *
+ * Writes happen in this order:
+ *   1. users/{uid} update (name + phone + centerName).
+ *   2. centers/{uid} update (name + phone) via centersApi.
+ *   3. auth.currentUser.displayName via updateProfile().
+ *
+ * If step 1 succeeds but step 2 fails, we surface the error and leave
+ * the user/center docs in a partially-updated state. The next save
+ * attempt is idempotent and will reconcile — same pattern we use in
+ * other multi-doc flows in the dashboard.
+ */
+function EditProfileModal({ user, profile, center, onClose }) {
+  const [firstName, setFirstName] = useState(profile?.firstName || '');
+  const [lastName, setLastName] = useState(profile?.lastName || '');
+  const [phone, setPhone] = useState(profile?.phone || center?.phone || '');
+  const [centerName, setCenterName] = useState(
+    center?.name || profile?.centerName || ''
+  );
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    setError(null);
+    if (!firstName.trim() || !lastName.trim()) {
+      setError('First name and last name are required.');
+      return;
+    }
+    if (!centerName.trim()) {
+      setError('Daycare name is required.');
+      return;
+    }
+    if (!user?.uid) {
+      setError('Not signed in.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const trimmedPhone = phone.trim();
+      await updateDoc(doc(db, 'users', user.uid), {
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        phone: trimmedPhone || null,
+        centerName: centerName.trim(),
+        updatedAt: serverTimestamp(),
+      });
+
+      await centersApi.updateOwnerProfile({
+        name: centerName.trim(),
+        phone: trimmedPhone || null,
+      });
+
+      try {
+        if (auth.currentUser) {
+          await updateAuthProfile(auth.currentUser, {
+            displayName: `${firstName.trim()} ${lastName.trim()}`.trim(),
+          });
+        }
+      } catch (authErr) {
+        // Non-fatal: displayName is a UX nicety, the source of truth
+        // for the dashboard is the users doc we already updated above.
+        console.warn('[EditProfileModal] updateAuthProfile failed:', authErr);
+      }
+
+      onClose();
+    } catch (err) {
+      console.error('[EditProfileModal] save failed:', err);
+      setError(err?.message || 'Could not save changes. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal
+      isOpen={true}
+      onClose={saving ? () => {} : onClose}
+      title="Edit profile"
+      size="md"
+    >
+      <form onSubmit={handleSave} className="space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Input
+            label="First name"
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+            required
+            autoFocus
+          />
+          <Input
+            label="Last name"
+            value={lastName}
+            onChange={(e) => setLastName(e.target.value)}
+            required
+          />
+        </div>
+
+        <Input
+          label="Daycare name"
+          value={centerName}
+          onChange={(e) => setCenterName(e.target.value)}
+          required
+        />
+
+        <Input
+          label="Phone"
+          type="tel"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          placeholder="(555) 123-4567"
+        />
+
+        <div className="rounded-xl bg-surface-50 border border-surface-100 px-3 py-2.5">
+          <p className="text-xs text-surface-500">
+            Sign-in email
+          </p>
+          <p className="text-sm font-medium text-surface-700 truncate">
+            {user?.email || profile?.email || '—'}
+          </p>
+          <p className="text-xs text-surface-400 mt-1">
+            Email changes require re-authentication. Email{' '}
+            <a
+              href="mailto:support@nuvaro.ca"
+              className="text-brand-600 font-medium"
+            >
+              support@nuvaro.ca
+            </a>{' '}
+            if you need to update it.
+          </p>
+        </div>
+
+        {error && (
+          <div className="rounded-xl border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-700">
+            {error}
+          </div>
+        )}
+
+        <ModalFooter>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={onClose}
+            disabled={saving}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" disabled={saving} loading={saving}>
+            Save changes
+          </Button>
+        </ModalFooter>
+      </form>
+    </Modal>
   );
 }
 

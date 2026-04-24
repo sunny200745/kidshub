@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -20,9 +20,12 @@ import {
   Video,
   Sparkles,
   Loader2,
+  Rocket,
 } from 'lucide-react';
 import { Avatar, TierBadge } from '../ui';
 import { useAuth } from '../../contexts';
+import { centersApi } from '../../firebase/api/centers';
+import { ROLE_LABELS } from '../../constants/roles';
 
 // `tierFeature` ties a nav item to a representative paid feature so the
 // sidebar can surface a Pro/Premium pill next to the label. We pick the
@@ -60,8 +63,33 @@ const bottomNav = [
 export function Sidebar({ collapsed, onToggle, isMobile = false, onClose }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, profile, role, isOwner, logout } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
+
+  // Local subscription so the "Continue setup" item appears for owners
+  // who haven't dismissed the welcome wizard yet, and disappears the
+  // moment they do (or as soon as it's first stamped on a fresh signup).
+  // We deliberately use the centersApi snapshot instead of useEntitlements
+  // here to avoid pulling the entitlements hook into Sidebar — it would
+  // recompute on every plan/demoMode change and re-render the nav.
+  const [setupOpen, setSetupOpen] = useState(false);
+  useEffect(() => {
+    if (!user?.uid || !isOwner) {
+      setSetupOpen(false);
+      return undefined;
+    }
+    const unsub = centersApi.subscribeToSelfCenter(
+      (data) => {
+        // Show the link until onboarding is explicitly dismissed.
+        // We treat "no center doc yet" as "definitely not dismissed"
+        // so brand-new owners see Setup immediately.
+        const dismissed = !!data?.onboarding?.dismissedAt;
+        setSetupOpen(!dismissed);
+      },
+      () => setSetupOpen(false)
+    );
+    return unsub;
+  }, [user?.uid, isOwner]);
 
   const handleNavClick = () => {
     if (isMobile && onClose) {
@@ -82,16 +110,21 @@ export function Sidebar({ collapsed, onToggle, isMobile = false, onClose }) {
   };
 
   const getUserDisplayName = () => {
+    const first = profile?.firstName?.trim();
+    const last = profile?.lastName?.trim();
+    if (first || last) return [first, last].filter(Boolean).join(' ');
     if (user?.displayName) return user.displayName;
     if (user?.email) {
       const name = user.email.split('@')[0];
       return name.charAt(0).toUpperCase() + name.slice(1);
     }
-    return 'Manager';
+    return 'Your account';
   };
 
   const getUserRole = () => {
-    return 'Manager';
+    if (role && ROLE_LABELS[role]) return ROLE_LABELS[role];
+    if (profile?.centerName) return profile.centerName;
+    return 'Owner';
   };
 
   return (
@@ -196,6 +229,39 @@ export function Sidebar({ collapsed, onToggle, isMobile = false, onClose }) {
           );
         })}
       </div>
+
+      {/* Continue setup — surfaced for owners who haven't dismissed
+         the welcome wizard. Disappears the moment they click "I'll
+         finish later" on /welcome (markOnboardingDismissed stamps
+         centers/{ownerId}.onboarding.dismissedAt). Lives just above
+         Settings so it's the last thing the eye lands on after a scan,
+         right where new owners are most likely to look for "what's next". */}
+      {setupOpen && (
+        <div className="px-3 pt-3 pb-1 border-t border-surface-100">
+          <NavLink
+            to="/welcome"
+            onClick={handleNavClick}
+            title={collapsed && !isMobile ? 'Continue setup' : undefined}
+            className={({ isActive }) =>
+              `relative flex items-center gap-3 rounded-xl px-3 py-2 transition-all ${
+                isActive
+                  ? 'bg-success-100 text-success-800'
+                  : 'text-surface-700 hover:bg-success-50 hover:text-success-800'
+              } ${collapsed && !isMobile ? 'justify-center' : ''}`
+            }
+          >
+            <Rocket className="w-5 h-5 flex-shrink-0" />
+            {(!collapsed || isMobile) && (
+              <span className="text-sm sm:text-base font-semibold">
+                Continue setup
+              </span>
+            )}
+            {(!collapsed || isMobile) && (
+              <span className="ml-auto inline-flex h-2 w-2 rounded-full bg-success-500" />
+            )}
+          </NavLink>
+        </div>
+      )}
 
       {/* Bottom Navigation */}
       <div className="px-3 py-4 border-t border-surface-100 space-y-1">

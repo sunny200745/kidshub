@@ -276,6 +276,30 @@ export async function updateBranding({ logoUrl, accentColor }) {
 }
 
 /**
+ * Update owner-facing center metadata: display name + contact phone.
+ *
+ * Used by Settings → Edit Profile so editing the owner's profile keeps
+ * the center doc in sync with what the owner sees on their dashboard,
+ * parent invite emails, etc.
+ *
+ * Note on what this does NOT touch:
+ *   - `email` — the center contact email is intentionally derived from
+ *     the owner's auth email and not editable here. Changing the auth
+ *     email requires re-authentication and Firebase Auth's updateEmail()
+ *     flow, which is out of scope for this self-service form.
+ *   - `ownerId` / billing fields — hard-frozen by the firestore rule
+ *     for `centers/{ownerId}` (self-owner-only writes), so even if we
+ *     tried they'd be rejected.
+ */
+export async function updateOwnerProfile({ name, phone }) {
+  const ownerId = currentOwnerId();
+  const patch = { updatedAt: serverTimestamp() };
+  if (name !== undefined) patch.name = name || '';
+  if (phone !== undefined) patch.phone = phone || null;
+  await updateDoc(doc(db, 'centers', ownerId), patch);
+}
+
+/**
  * Mark the /welcome onboarding wizard as dismissed. Writes a timestamp to
  * `centers/{ownerId}.onboarding.dismissedAt` so we can (a) skip auto-
  * redirecting returning owners to /welcome and (b) eventually report on
@@ -304,6 +328,7 @@ export const centersApi = {
   setPlan,
   getSelfCenter,
   updateBranding,
+  updateOwnerProfile,
   markOnboardingDismissed,
   defaultPlanFields,
 };

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { PlanStateBanner } from './PlanStateBanner';
+import { WizardReturnBanner } from './WizardReturnBanner';
 
 export function Layout({ children, title, subtitle, actions }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -53,6 +54,10 @@ export function Layout({ children, title, subtitle, actions }) {
            <ProtectedRoute> redirects non-admin owners to /paywall once
            the 60-day window closes. */}
         <PlanStateBanner />
+        {/* Renders only when ?from=welcome is in the URL — gives owners
+           a one-click "Back to setup" path while they're inside a wizard
+           card flow. Self-suppresses on /welcome and /paywall. */}
+        <WizardReturnBanner />
         <Header
           title={title}
           subtitle={subtitle}
