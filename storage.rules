@@ -1,0 +1,129 @@
+rules_version = '2';
+
+// =============================================================================
+// Firebase Storage rules — kidshub bucket
+// =============================================================================
+//
+// Parity with firestore.rules: tenancy by `users/{uid}.daycareId`, role
+// enforced via `users/{uid}.role`. Storage rules can call
+// `firestore.get()` since v2 — we use that so the Storage bucket's
+// access model stays in lockstep with the Firestore one (no drift, one
+// source of truth for "who's in tenant X").
+//
+// Path layout (matches photosApi.uploadBlob in kidshub/firebase/api/photos.ts):
+//   daycares/{daycareId}/photos/{yyyy-mm-dd}/{uuid}-{filename}
+//   daycares/{daycareId}/avatars/{allPaths=**}      (child / staff avatars)
+//
+// Write caps:
+//   - Images only   (contentType matches image/.*)
+//   - ≤ 20 MB       (request.resource.size < 20 * 1024 * 1024)
+//
+// Deploy:
+//   Firebase Console → Storage → Rules tab → paste this file → Publish.
+//   (Same publishing workflow you already use for firestore.rules.)
+//
+// Why this file exists at the repo root (not under kidshub/):
+//   Firebase CLI convention + it applies to every app in this workspace
+//   (kidshub mobile, kidshub-dashboard, kidshub-landing) that shares the
+//   same Firebase project / bucket.
+// =============================================================================
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // -------------------------------------------------------------------------
+    // Helpers — read the requester's users/{uid} doc once and derive everything
+    // -------------------------------------------------------------------------
+
+    function userDoc() {
+      return firestore.get(
+        /databases/(default)/documents/users/$(request.auth.uid)
+      ).data;
+    }
+
+    function hasProfile() {
+      return request.auth != null
+        && firestore.exists(
+          /databases/(default)/documents/users/$(request.auth.uid)
+        );
+    }
+
+    function userRole()     { return hasProfile() ? userDoc().role       : ''; }
+    function userDaycare()  { return hasProfile() ? userDoc().daycareId  : ''; }
+    function userChildIds() { return hasProfile() ? userDoc().get('childIds', []) : []; }
+
+    function isOwner()   { return hasProfile() && userRole() == 'owner'; }
+    function isTeacher() { return hasProfile() && userRole() == 'teacher'; }
+    function isParent()  { return hasProfile() && userRole() == 'parent'; }
+
+    function inTenant(daycareId) {
+      return hasProfile() && userDaycare() == daycareId;
+    }
+
+    function isImageUnder20MB() {
+      return request.resource.contentType.matches('image/.*')
+        && request.resource.size < 20 * 1024 * 1024;
+    }
+
+    // -------------------------------------------------------------------------
+    // daycares/{daycareId}/photos/**
+    // -------------------------------------------------------------------------
+    // Read:  anyone in the tenant. (The tagged-child access limit is
+    //        enforced on the Firestore photos doc; once a user can read
+    //        the doc they get the imageUrl, so storage-side we only
+    //        need tenancy.)
+    // Write: owner OR teacher in the tenant. Parents don't upload from
+    //        either app surface.
+    // Delete: owner OR the original uploader — but Storage rules don't
+    //         carry "uploadedBy" metadata, so we restrict delete to
+    //         owner + teacher and rely on the Firestore doc delete rule
+    //         (which DOES check uploadedBy) to gate removal.
+    match /daycares/{daycareId}/photos/{allPaths=**} {
+      allow read: if inTenant(daycareId);
+      allow create, update: if inTenant(daycareId)
+        && (isOwner() || isTeacher())
+        && isImageUnder20MB();
+      allow delete: if inTenant(daycareId) && (isOwner() || isTeacher());
+    }
+
+    // -------------------------------------------------------------------------
+    // daycares/{daycareId}/avatars/**
+    // -------------------------------------------------------------------------
+    // Child avatars, staff avatars, daycare logo etc. Uploaded from the
+    // dashboard (owner) and occasionally from the teacher app. Parents
+    // may read to display their own kids and the classroom teacher, but
+    // may not upload.
+    match /daycares/{daycareId}/avatars/{allPaths=**} {
+      allow read: if inTenant(daycareId);
+      allow create, update: if inTenant(daycareId)
+        && (isOwner() || isTeacher())
+        && isImageUnder20MB();
+      allow delete: if inTenant(daycareId) && (isOwner() || isTeacher());
+    }
+
+    // -------------------------------------------------------------------------
+    // Parents may upload child-related images (e.g. incident photos submitted
+    // with a health-log entry) under their OWN children's folders. Scoped
+    // to `childIds` on the parent's users doc.
+    // -------------------------------------------------------------------------
+    match /daycares/{daycareId}/children/{childId}/uploads/{allPaths=**} {
+      allow read: if inTenant(daycareId)
+        && (isOwner() || isTeacher() || (isParent() && childId in userChildIds()));
+      allow create, update: if inTenant(daycareId)
+        && (
+          isOwner()
+          || isTeacher()
+          || (isParent() && childId in userChildIds())
+        )
+        && isImageUnder20MB();
+      allow delete: if inTenant(daycareId) && (isOwner() || isTeacher());
+    }
+
+    // -------------------------------------------------------------------------
+    // Default deny — any path not explicitly allowed above is forbidden.
+    // -------------------------------------------------------------------------
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
