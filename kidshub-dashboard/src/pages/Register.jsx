@@ -6,11 +6,12 @@ import {
   updateProfile,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2, User, Phone, Building2, Shield, Clock, Users } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2, User, Phone, Building2, Shield, Clock, Users, Sparkles } from 'lucide-react';
 import { auth, db } from '../firebase/config';
 import { useAuth } from '../contexts';
 import { ROLES } from '../constants/roles';
 import { defaultPlanFields } from '../firebase/api/centers';
+import { STARTER_FREE_MONTHS, TRIAL_DURATION_DAYS } from '../config/product';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -252,8 +253,11 @@ export default function Register() {
             Start Managing<br />
             <span className="text-gradient">Your Center Today</span>
           </h2>
-          <p className="text-lg text-surface-400 mb-12 max-w-md">
+          <p className="text-lg text-surface-400 mb-4 max-w-md">
             Join hundreds of daycare owners who trust KidsHub to streamline their operations.
+          </p>
+          <p className="text-sm text-brand-400/90 mb-12 max-w-md">
+            {TRIAL_DURATION_DAYS} days of Premium on us. No card required.
           </p>
 
           {/* Benefits */}
@@ -288,6 +292,23 @@ export default function Register() {
           </div>
 
           <div className="bg-white rounded-3xl shadow-soft-xl p-8 sm:p-10 border border-surface-100">
+            {/* Trial-starts-today strip — honest upfront framing of the 14-day
+               Premium trial + Starter grace so owners aren't surprised by a
+               silent downgrade later (Stop 1 of the onboarding journey). */}
+            <div className="mb-7 flex items-start gap-3 rounded-2xl border border-brand-100 bg-brand-50/60 px-4 py-3">
+              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-accent-500 to-brand-500 text-white">
+                <Sparkles className="h-4 w-4" />
+              </div>
+              <div className="text-sm">
+                <p className="font-semibold text-surface-900">
+                  Your {TRIAL_DURATION_DAYS}-day Premium trial starts today
+                </p>
+                <p className="text-surface-500">
+                  No card required. Keep going free on Starter for {STARTER_FREE_MONTHS} more months after the trial ends.
+                </p>
+              </div>
+            </div>
+
             <div className="text-center mb-8">
               <h2 className="text-2xl font-bold text-surface-900">Create your account</h2>
               <p className="text-surface-500 mt-2">
