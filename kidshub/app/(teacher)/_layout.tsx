@@ -41,7 +41,7 @@ import { View } from 'react-native';
 import { HapticTab } from '@/components/haptic-tab';
 import { RouteSplash } from '@/components/route-splash';
 import { ROLES } from '@/constants/roles';
-import { getRoleTheme, useRequireRole } from '@/hooks';
+import { getRoleTheme, useRequireRole, useUnreadMessageCount } from '@/hooks';
 
 const TEACHER_THEME = getRoleTheme(ROLES.TEACHER);
 
@@ -82,6 +82,19 @@ export default function TeacherLayout() {
 
   if (status !== 'allowed') return <RouteSplash />;
 
+  return <TeacherTabs />;
+}
+
+/**
+ * Inner tabs component — split out so the unread-message subscription
+ * (which hits Firestore) only spins up AFTER the role guard has cleared.
+ * Mirrors the parent-layout pattern.
+ */
+function TeacherTabs() {
+  const { data: unreadCount } = useUnreadMessageCount();
+  const messagesBadge: string | undefined =
+    unreadCount > 0 ? (unreadCount > 99 ? '99+' : String(unreadCount)) : undefined;
+
   return (
     <Tabs
       screenOptions={{
@@ -105,6 +118,8 @@ export default function TeacherLayout() {
         options={{
           title: 'Messages',
           tabBarIcon: ({ color, size }) => <MessageSquare size={size} color={color} />,
+          tabBarBadge: messagesBadge,
+          tabBarBadgeStyle: { backgroundColor: '#E11D74', color: '#ffffff' },
         }}
       />
       <Tabs.Screen

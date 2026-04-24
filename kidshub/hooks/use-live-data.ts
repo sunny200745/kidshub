@@ -287,6 +287,42 @@ export function useMyMessages(): AsyncState<Message[]> {
 }
 
 /**
+ * Count of inbound messages addressed to the current user that haven't
+ * been marked `read` yet. Powers the Messages tab-bar badge AND the
+ * "you have N new messages" banner on the parent / teacher home
+ * screens.
+ *
+ * Why derive instead of subscribing to a counter doc:
+ *   - The data is already streaming in via `useMyMessages()` for both
+ *     roles (parent: own threads; teacher: tenant + recipientId scoped).
+ *     Reading the count off that same stream costs nothing extra (no
+ *     new Firestore subscription) and stays perfectly in sync — when
+ *     the user opens /messages and the screen calls `markAsRead`, the
+ *     badge drops to 0 in the same Firestore snapshot tick.
+ *
+ *   - It also means roles that haven't loaded yet get `count: 0` — the
+ *     badge stays hidden during sign-in / role-resolution rather than
+ *     flashing a stale number.
+ *
+ * Returns `{ count, loading, error }`. Single source of truth — never
+ * read `messages.filter(...)` for a badge in the UI; call this hook.
+ */
+export function useUnreadMessageCount(): AsyncState<number> {
+  const { profile } = useAuth();
+  const uid = profile?.uid;
+  const messages = useMyMessages();
+
+  const count = useMemo(() => {
+    if (!uid) return 0;
+    return messages.data.filter(
+      (m) => m.recipientId === uid && !m.read,
+    ).length;
+  }, [messages.data, uid]);
+
+  return { data: count, loading: messages.loading, error: messages.error };
+}
+
+/**
  * Group messages into conversations (client-side derivation, see
  * messagesApi). `nameLookup` lets the caller resolve participant names
  * without a separate users-collection read — pass in a map built from

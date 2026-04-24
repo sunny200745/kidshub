@@ -53,6 +53,7 @@ import { useRouter } from 'expo-router';
 
 import { ActivityIcon, activityLabels } from '@/components/icons/activity-icon';
 import { ScreenContainer } from '@/components/layout';
+import { UnreadMessagesBanner } from '@/components/messages';
 import {
   ActionButton,
   Card,
@@ -348,6 +349,15 @@ export default function TeacherHome() {
         hideHeader
         showRoleBadge={false}
         contentContainerStyle={{ paddingBottom: 32, paddingTop: 16 }}>
+        {/* Unread parent messages — renders nothing at 0 so this is a
+            no-op on quiet mornings. Sits above the primary quick actions
+            so a teacher who walks in to a stack of overnight messages
+            sees them before they pick "Take attendance" or "Add entry".
+            One snapshot tick after they tap into /messages and the
+            inbox marks each thread read, this disappears. */}
+        <View className="mb-4">
+          <UnreadMessagesBanner />
+        </View>
         {/* Primary quick actions */}
         <View className="flex-row gap-3 mb-6">
           <ActionButton

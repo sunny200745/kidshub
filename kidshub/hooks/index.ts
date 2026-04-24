@@ -43,6 +43,7 @@ export {
   useAnnouncements,
   useStaffForDaycare,
   useMyMessages,
+  useUnreadMessageCount,
   useConversations,
 } from './use-live-data';
 

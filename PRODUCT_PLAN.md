@@ -325,6 +325,71 @@ public-facing PR push).
       improves with both.
 - [ ] **Google Search Console + Bing Webmaster Tools** verification.
 
+### Notifications (in-app shipped 2026-04-24, native push pending)
+
+In-app indicators for unread parent ↔ teacher messages are live: a
+live tab-bar badge on the Messages tab and a tappable banner on both
+the parent home (`/home`) and the teacher home (`/classroom`). Both
+share `useUnreadMessageCount()` (`kidshub/hooks/use-live-data.ts`),
+which derives off the existing `useMyMessages()` Firestore stream —
+zero extra reads, drops to 0 the same snapshot tick that
+`messagesApi.markAsRead()` writes inside `/messages`.
+
+What's still missing for the mobile experience: native push that
+fires when the app is backgrounded or killed. Without it, a parent
+who closes the app gets nothing until they re-open it. To finish:
+
+- [ ] **Pick a transport.** Two reasonable options:
+      1. **Expo Push Service** (simplest; no server-side FCM/APNs
+         credentials needed). Pros: literally one `expo-notifications`
+         install + a Cloud Function that POSTs to
+         `https://exp.host/--/api/v2/push/send`. Cons: locks us to
+         Expo's relay; not great if we ever eject.
+      2. **Firebase Cloud Messaging direct** (FCM for Android/web,
+         APNs for iOS via FCM). Pros: no third-party hop, plays
+         well with the Firestore-everything stack we already own.
+         Cons: APNs cert/key setup, Android google-services.json,
+         more moving pieces.
+      Recommend Expo Push to ship; revisit if/when we eject.
+- [ ] **Client side (kidshub).**
+      - `npx expo install expo-notifications expo-device`
+      - On first sign-in, call `Notifications.getExpoPushTokenAsync()`
+        (after `Notifications.requestPermissionsAsync()`) and
+        write the resulting token to a new
+        `users/{uid}.expoPushToken` field — also requires adding
+        the field to `UserProfile` in
+        `kidshub/firebase/types.ts` and a Firestore rule update so
+        a user can write only their own token. If we want
+        multi-device later, switch to a sub-collection
+        `users/{uid}/devices/{installationId}`.
+      - Set `Notifications.setNotificationHandler` so foreground
+        notifications still surface (otherwise iOS swallows them
+        silently while the app is open).
+      - On notification tap, route to `/messages` (parent) or the
+        relevant thread (teacher) — payload should carry
+        `{ type: 'message', messageId, conversationId }`.
+- [ ] **Server side (Cloud Function).**
+      - Add `functions/src/notifyOnMessage.ts`: Firestore
+        `onCreate` trigger on `messages/{messageId}`. Look up
+        `users/{recipientId}.expoPushToken`, POST to Expo Push
+        with `{ to, title: senderName, body: snippet, data: {...} }`.
+      - Skip if `recipientId === senderId` or token missing.
+      - Batch + retry on Expo's chunk responses (max 100 per call).
+- [ ] **Permission UX.** Don't auto-prompt on app open — gate the
+      OS prompt behind a soft in-app pre-prompt ("Get notified when
+      Ms. Sarah sends an update?") on the Messages tab. Standard
+      mobile pattern, ~3× higher opt-in vs cold prompt.
+- [ ] **Web fallback.** Web has no Expo push; the in-app banner +
+      tab badge already shipped today are the entire experience.
+      Document this in TEST_PLAN so testers don't expect web push.
+- [ ] **Quiet hours / digest** (later). Right now every message
+      pings instantly. Daycares operate 7am–6pm; consider a
+      per-user "do not disturb after 7pm" setting before any
+      paying parent complains.
+- [ ] **Test matrix.** Cover (a) app foregrounded, (b) backgrounded,
+      (c) killed, (d) iOS, (e) Android, (f) web (no push). Add to
+      TEST_PLAN under a new Phase 11.x once the function ships.
+
 ### Operational
 
 - [ ] **Status page** (probably `status.getkidshub.com`, hosted via
@@ -346,3 +411,4 @@ _Append dated notes as sprints complete._
 - **2026-04-22** — Plan drafted. Tier structure + feature matrix + 7-sprint execution plan laid out. Created `config/product.ts` as single source of truth for all tier/pricing/feature decisions; placeholders in place so Sprint 1 is unblocked. User deferred decisions on tier names, pricing, limits, trial duration — all tracked via `TODO(` markers in the config file.
 - **2026-04-24** — **Monetization pivot (Sprint 3.5).** Removed the 14-day Premium trial entirely. New owners now sign up directly on Starter with a 60-day free window (`STARTER_FREE_DAYS = 60`, stamped via `starterStartedAt`). When the window closes, non-admin owners hit a full-screen `/paywall` on every protected route — no silent downgrade, no free-forever Starter. Paywall page has "Contact sales" modal + plan snapshot; `ProtectedRoute` redirects to it, exempting `/paywall` and `/plans`. Legacy `plan: 'trial'` docs are lazy-migrated to Starter with a fresh 60-day clock via `migrateLegacyTrialToStarter()` on next login. Removed `PlanGateInterstitial`, `TrialBanner`, `downgradeExpiredTrial`, `acknowledgeTrialExpiry`, `STARTER_FREE_MONTHS`, `TRIAL_DURATION_DAYS`, `trialEndsAt`, `trialEndedAt`, `trialExpiryAcknowledgedAt`. `ContactSalesModal` extracted to a shared component for reuse across `/plans` and `/paywall`. Landing pricing copy + PRODUCT_PLAN + BILLING + config README aligned.
 - **2026-04-23** — Sprints 5, 6, 7 shipped in one push. Added `photos`, `attendance`, `healthLogs`, `weeklyPlans`, `activityTemplates`, `screenings` collections with types + Firestore rules + API modules + live hooks. New teacher pages: `/photos`, `/weekly-planner`, `/health-log`, `/curriculum`, `/screenings`, `/aria`. New owner dashboard page: `/reports` (Daily + Attendance CSV + Health CSV). Parent app updates: photo journal, weekly plan on schedule, messaging day dividers. Branding Settings section (D11). Scaffolded Stripe checkout + webhook endpoints and documented go-live flow in `BILLING.md`. Documented multi-daycare migration plan in `MULTI_DAYCARE.md`. Authored `SALES_DEMO_GUIDE.md`, `KIDSHUB_ONE_PAGER.md`, and a case-study template page on the landing site.
+- **2026-04-24** — **Multi-sibling parent + in-app message notifications.** Parent app now correctly surfaces every linked child (was hard-coded to `children[0]` everywhere). New `SelectedChildContext` with AsyncStorage persistence + `<ChildSwitcher />` chip strip across home/activity/schedule/messages/photos/profile; single-sibling parents see no switcher. Starter classroom quota raised from 1 → 2 (`config/product.ts`); landing pricing, PRODUCT_PLAN tier table, KIDSHUB_ONE_PAGER, SALES_DEMO_GUIDE, and TEST_PLAN Phase 10.1 all updated to match. Shipped in-app unread-message indicators: `useUnreadMessageCount()` hook (derives from existing `useMyMessages` stream — zero extra Firestore reads), `<UnreadMessagesBanner />` component, live `tabBarBadge` on the Messages tab in both `(parent)/_layout.tsx` and `(teacher)/_layout.tsx`, and the banner rendered on parent `/home` and teacher `/classroom`. Native push (background/killed delivery) is documented under "Notifications" loose ends with the full Expo-push integration plan; web stays banner-only since browsers don't get push here.

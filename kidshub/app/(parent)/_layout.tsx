@@ -32,7 +32,7 @@ import { RouteSplash } from '@/components/route-splash';
 import { Colors } from '@/constants/theme';
 import { ROLES } from '@/constants/roles';
 import { SelectedChildProvider, useTheme } from '@/contexts';
-import { useRequireRole } from '@/hooks';
+import { useRequireRole, useUnreadMessageCount } from '@/hooks';
 
 export default function ParentLayout() {
   const { status } = useRequireRole({ allowedRoles: [ROLES.PARENT] });
@@ -57,6 +57,14 @@ export default function ParentLayout() {
 }
 
 function ParentTabs({ effective }: { effective: ReturnType<typeof useTheme>['effective'] }) {
+  // Live unread count drives the Messages tab badge. We collapse 99+
+  // here (rather than relying on the OS) so iOS / Android / web all
+  // render the same string. Falsy values are passed as `undefined` so
+  // expo-router omits the badge entirely (vs showing "0").
+  const { data: unreadCount } = useUnreadMessageCount();
+  const messagesBadge: string | undefined =
+    unreadCount > 0 ? (unreadCount > 99 ? '99+' : String(unreadCount)) : undefined;
+
   return (
     <Tabs
       screenOptions={{
@@ -90,6 +98,8 @@ function ParentTabs({ effective }: { effective: ReturnType<typeof useTheme>['eff
         options={{
           title: 'Messages',
           tabBarIcon: ({ color, size }) => <MessageSquare size={size} color={color} />,
+          tabBarBadge: messagesBadge,
+          tabBarBadgeStyle: { backgroundColor: '#E11D74', color: '#ffffff' },
         }}
       />
       <Tabs.Screen
