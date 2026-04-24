@@ -17,6 +17,7 @@ import {
   Megaphone,
   FileText,
   Heart,
+  Video,
   Loader2,
 } from 'lucide-react';
 import { Avatar, TierBadge } from '../ui';
@@ -40,6 +41,7 @@ const navigation = [
   { name: 'Announcements', href: '/announcements', icon: Megaphone },
   { name: 'Schedule', href: '/schedule', icon: Calendar },
   { name: 'Reports', href: '/reports', icon: FileText, tierFeature: 'attendanceReports' },
+  { name: 'Video surveillance', href: '/video-surveillance', icon: Video, tierFeature: 'videoSurveillance' },
 ];
 
 const bottomNav = [
@@ -150,9 +152,6 @@ export function Sidebar({ collapsed, onToggle, isMobile = false, onClose }) {
               )}
               {collapsed && !isMobile && item.badge && (
                 <span className="absolute top-1 right-1 w-2 h-2 bg-brand-500 rounded-full" />
-              )}
-              {collapsed && !isMobile && item.tierFeature && (
-                <span className="absolute top-1 left-1 w-2 h-2 bg-brand-500 rounded-full" />
               )}
             </NavLink>
           );

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Send, Search, MoreVertical, Phone, Video, MessageSquare, ArrowLeft, Trash2 } from 'lucide-react';
+import { Send, Search, MoreVertical, MessageSquare, ArrowLeft, Trash2 } from 'lucide-react';
 import { Layout } from '../components/layout';
 import { Card, CardBody, Avatar, Button, IconButton, Input, LoadingPage, EmptyState, ConfirmDialog } from '../components/ui';
 import { useMessagesData, useChildrenData, useParentsData, useStaffData } from '../hooks';
@@ -190,8 +190,6 @@ function ChatView({ conversation, children, parents, staff, onBack, onDeleteMess
           </div>
         </div>
         <div className="flex items-center gap-1 sm:gap-2">
-          <IconButton icon={Phone} variant="ghost" className="hidden sm:flex" />
-          <IconButton icon={Video} variant="ghost" className="hidden sm:flex" />
           <IconButton icon={MoreVertical} variant="ghost" />
         </div>
       </div>

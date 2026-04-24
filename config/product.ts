@@ -153,7 +153,8 @@ export type FeatureKey =
   | 'multiDaycare'
   | 'ariaAiInApp'
   | 'apiAccess'
-  | 'dedicatedSupport';
+  | 'dedicatedSupport'
+  | 'videoSurveillance';
 
 /**
  * Minimum tier required to unlock each feature. `useFeature(key)` checks
@@ -185,6 +186,7 @@ export const FEATURES: Record<FeatureKey, Tier> = {
   ariaAiInApp: 'premium',
   apiAccess: 'premium',
   dedicatedSupport: 'premium',
+  videoSurveillance: 'premium',
 };
 
 /**
@@ -217,6 +219,7 @@ export const FEATURE_LABELS: Record<FeatureKey, string> = {
   ariaAiInApp: 'Aria AI assistant',
   apiAccess: 'API access',
   dedicatedSupport: 'Dedicated support',
+  videoSurveillance: 'Live video surveillance',
 };
 
 // ─── Infrastructure holds (temporary cross-tier locks) ───────────────
@@ -236,14 +239,24 @@ export const FEATURE_LABELS: Record<FeatureKey, string> = {
  *     decision until first paid customer; until then every tier sees the
  *     upgrade CTA instead of an uploader that would fail at the network
  *     layer.
+ *   - `videoSurveillance` — live camera feeds require a third-party
+ *     camera partner + streaming infra we haven't built yet. Shipped as
+ *     a visible-but-locked tab so owners can see it on the roadmap and
+ *     we can measure demand via `/plans` contact-sales traffic. Flip to
+ *     a real integration (or drop from this set + raise FEATURES tier)
+ *     once a partner is signed.
  *
  * TODO(infra): remove `photoJournal` from this set the MOMENT Firebase
  * Storage is enabled (Blaze plan) AND `storage.rules` is published. That
  * one-line change restores the normal tier gate
  * (FEATURES.photoJournal = 'pro'). No other code needs to change.
+ * TODO(infra): remove `videoSurveillance` once the camera partner
+ * integration ships; the tier gate (FEATURES.videoSurveillance = 'premium')
+ * then takes over and Premium owners see the real feature.
  */
 export const INFRA_LOCKED_FEATURES: ReadonlySet<FeatureKey> = new Set<FeatureKey>([
   'photoJournal',
+  'videoSurveillance',
 ]);
 
 export function isFeatureInfraLocked(key: FeatureKey): boolean {

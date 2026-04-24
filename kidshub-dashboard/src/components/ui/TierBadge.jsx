@@ -1,55 +1,37 @@
 /**
- * TierBadge — a tiny pill that advertises which paid plan unlocks a given
- * feature. Drop it next to a link, menu row, or card header that points
- * at a paid feature so users see "Pro" / "Premium" at a glance.
+ * TierBadge — a small "Unlock" pill used to advertise locked paid
+ * features. Drop it next to any link, menu row, or card header that
+ * points at a paid feature so users see which screens they'd gain by
+ * upgrading.
  *
- * Two visual states, automatically derived from `useFeature()`:
- *   - Unlocked (`state.enabled === true`) → muted neutral pill. Acts as a
- *     reminder ("this is a paid feature") without competing with the real
- *     content the user is about to interact with.
- *   - Locked (gated) → brand / accent colored pill with a Crown icon for
- *     Premium and Sparkles for Pro. Gives an at-a-glance read of what the
- *     user would unlock by upgrading, paired with the full UpgradeCTA
- *     banner on the destination page.
+ * Visual: purple → pink gradient with a white Crown icon and bold
+ * uppercase "Unlock" text. The gradient maps to `from-accent-500
+ * to-brand-500` so it matches the mobile `LinearGradient` and reads as
+ * one product.
+ *
+ * Only renders when the feature is actually locked for the current
+ * tenant. Unlocked, starter/trial-tier, unknown-key, and loading cases
+ * all return `null` — callers can drop one in unconditionally without
+ * gating the render themselves.
  *
  * Usage:
- *   <TierBadge feature="photoJournal" />               // picks "Pro"
- *   <TierBadge feature="customBranding" />             // picks "Pro"
- *   <TierBadge feature="ariaAiInApp" />                // picks "Premium"
- *   <TierBadge feature="core.messaging" />             // renders null
- *   <TierBadge feature="photoJournal" hideWhenUnlocked />
- *
- * Returns `null` for free-tier features and unknown keys — callers can
- * drop one in unconditionally without gating the render themselves. The
- * `size` prop defaults to "sm" (nav rows, card chips); use "md" when the
- * badge sits next to a page title.
+ *   <TierBadge feature="photoJournal" />
+ *   <TierBadge feature="customBranding" />
+ *   <TierBadge feature="ariaAiInApp" />
+ *   <TierBadge feature="core.messaging" />      // never renders (free)
  */
 import React from 'react';
-import { Crown, Sparkles } from 'lucide-react';
+import { Crown } from 'lucide-react';
 
-import { FEATURES, TIERS } from '../../config/product';
+import { FEATURES } from '../../config/product';
 import { useFeature } from '../../hooks';
-
-const SIZE_CLASSES = {
-  sm: 'px-1.5 py-0.5 text-[10px] gap-1',
-  md: 'px-2 py-0.5 text-xs gap-1',
-};
-
-const ICON_PX = { sm: 10, md: 12 };
 
 /**
  * @param {object} props
  * @param {string} props.feature - A FeatureKey from config/product.
- * @param {boolean} [props.hideWhenUnlocked=false]
- * @param {'sm'|'md'} [props.size='sm']
  * @param {string} [props.className='']
  */
-export function TierBadge({
-  feature,
-  hideWhenUnlocked = false,
-  size = 'sm',
-  className = '',
-}) {
+export function TierBadge({ feature, className = '' }) {
   const requiredTier = FEATURES[feature];
   const state = useFeature(feature);
 
@@ -57,37 +39,17 @@ export function TierBadge({
     return null;
   }
 
-  // Don't flash the brand/accent "locked" style while entitlements are still
-  // resolving — render nothing until we know the real state.
+  // Only advertise locked features. Users with access don't need a pill
+  // telling them the feature is paid — they're already enjoying it.
   if (state.loading) return null;
-
-  if (state.enabled && hideWhenUnlocked) return null;
-
-  const tierInfo = TIERS[requiredTier];
-  if (!tierInfo) return null;
-  const tierName = tierInfo.name;
-
-  const Icon = requiredTier === 'premium' ? Crown : Sparkles;
-
-  let pillClasses;
-  let iconColor;
-  if (state.enabled) {
-    pillClasses = 'bg-surface-100 text-surface-600 border border-surface-200';
-    iconColor = '#64748B';
-  } else if (requiredTier === 'premium') {
-    pillClasses = 'bg-violet-50 text-violet-700 border border-violet-200';
-    iconColor = '#8B5CF6';
-  } else {
-    pillClasses = 'bg-brand-50 text-brand-700 border border-brand-200';
-    iconColor = '#E11D74';
-  }
+  if (state.enabled) return null;
 
   return (
     <span
-      className={`inline-flex items-center rounded-full font-bold uppercase tracking-wide ${SIZE_CLASSES[size]} ${pillClasses} ${className}`}
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white bg-gradient-to-br from-accent-500 to-brand-500 ${className}`}
     >
-      <Icon size={ICON_PX[size]} color={iconColor} />
-      {tierName}
+      <Crown size={11} />
+      Unlock
     </span>
   );
 }

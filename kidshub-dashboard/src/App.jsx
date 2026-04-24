@@ -21,6 +21,7 @@ import Announcements from './pages/Announcements';
 import Settings from './pages/Settings';
 import Plans from './pages/Plans';
 import Reports from './pages/Reports';
+import VideoSurveillance from './pages/VideoSurveillance';
 
 function App() {
   return (
@@ -70,6 +71,8 @@ function App() {
 
           {/* Reports Route (Sprint 6-7 / D2, D3, D5) */}
           <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
+
+          <Route path="/video-surveillance" element={<ProtectedRoute><VideoSurveillance /></ProtectedRoute>} />
 
           {/* Plans / upgrade Route (Sprint 3 / E3) */}
           <Route path="/plans" element={<ProtectedRoute><Plans /></ProtectedRoute>} />

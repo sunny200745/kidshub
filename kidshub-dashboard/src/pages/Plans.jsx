@@ -86,6 +86,7 @@ const FEATURE_GROUPS = [
     rows: [
       { key: 'multiDaycare', kind: 'feature' },
       { key: 'ariaAiInApp', kind: 'feature' },
+      { key: 'videoSurveillance', kind: 'feature' },
       { key: 'apiAccess', kind: 'feature' },
       { key: 'dedicatedSupport', kind: 'feature' },
     ],
