@@ -41,7 +41,7 @@ const navigation = [
   { name: 'Classrooms', href: '/classrooms', icon: School },
   { name: 'Staff', href: '/staff', icon: Users },
   { name: 'Parents', href: '/parents', icon: Heart },
-  { name: 'Messages', href: '/messages', icon: MessageSquare, badge: 2 },
+  { name: 'Messages', href: '/messages', icon: MessageSquare },
   { name: 'Announcements', href: '/announcements', icon: Megaphone },
   { name: 'Schedule', href: '/schedule', icon: Calendar },
   { name: 'Reports', href: '/reports', icon: FileText, tierFeature: 'attendanceReports' },

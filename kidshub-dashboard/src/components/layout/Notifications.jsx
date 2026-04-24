@@ -1,54 +1,35 @@
+/**
+ * Notifications dropdown — bell icon in the dashboard header.
+ *
+ * State of play: the real notifications backend (per-owner notification
+ * collection, fan-out from check-ins / messages / announcements / staff
+ * clock-in events) hasn't been built yet. Until it lands, this dropdown:
+ *
+ *   - Renders an empty list with a friendly "You're all caught up" empty
+ *     state, instead of dummy "Liam Chen checked in" / "Sarah Mitchell
+ *     clocked in" rows that would mislead a real owner about whether
+ *     their center is actually active.
+ *   - Suppresses the unread red badge on the bell entirely (the badge
+ *     was previously hardcoded to 2 from the mock array).
+ *
+ * When the real notifications system is wired in (Track G — `notifications/`
+ * collection scoped to `daycareId`), replace the empty `[]` below with
+ * the live snapshot subscription and the badge logic will start working
+ * automatically (it already keys off `unreadCount`).
+ */
 import React, { useState, useRef, useEffect } from 'react';
-import { Bell, X, Check, MessageSquare, AlertTriangle, Calendar, Users, CheckCircle } from 'lucide-react';
-import { Avatar, Badge, Button } from '../ui';
+import { Bell, X, MessageSquare, AlertTriangle, Calendar, Users, CheckCircle } from 'lucide-react';
 
-const mockNotifications = [
-  {
-    id: '1',
-    type: 'message',
-    title: 'New message from Jennifer Singh',
-    description: 'Regarding Ava\'s pickup today...',
-    time: '5 min ago',
-    read: false,
-    icon: MessageSquare,
-  },
-  {
-    id: '2',
-    type: 'checkin',
-    title: 'Liam Chen checked in',
-    description: 'Dropped off by Kevin Chen at 8:45 AM',
-    time: '15 min ago',
-    read: false,
-    icon: CheckCircle,
-  },
-  {
-    id: '3',
-    type: 'alert',
-    title: 'Allergy reminder',
-    description: 'Sofia Garcia - Dairy allergy (lunch time)',
-    time: '30 min ago',
-    read: true,
-    icon: AlertTriangle,
-  },
-  {
-    id: '4',
-    type: 'event',
-    title: 'Staff meeting in 1 hour',
-    description: 'Conference room at 2:00 PM',
-    time: '1 hour ago',
-    read: true,
-    icon: Calendar,
-  },
-  {
-    id: '5',
-    type: 'staff',
-    title: 'Sarah Mitchell clocked in',
-    description: 'Sunshine Room - Lead Teacher',
-    time: '2 hours ago',
-    read: true,
-    icon: Users,
-  },
-];
+// Type → icon mapping kept ready for when the real notifications snapshot
+// hydrates this list. Empty `notifications` state means none of these
+// render today; this is a future-proofing convenience for the next PR.
+const TYPE_ICONS = {
+  message: MessageSquare,
+  checkin: CheckCircle,
+  alert: AlertTriangle,
+  event: Calendar,
+  staff: Users,
+};
 
 const typeColors = {
   message: 'bg-brand-100 text-brand-600',
@@ -60,7 +41,9 @@ const typeColors = {
 
 export function Notifications() {
   const [isOpen, setIsOpen] = useState(false);
-  const [notifications, setNotifications] = useState(mockNotifications);
+  // Live notifications subscription goes here. Until then we render an
+  // honest empty state instead of dummy fixtures.
+  const [notifications, setNotifications] = useState([]);
   const dropdownRef = useRef(null);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -100,6 +83,11 @@ export function Notifications() {
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="relative p-2 rounded-lg hover:bg-surface-100 text-surface-600 hover:text-surface-900 transition-colors"
+        aria-label={
+          unreadCount > 0
+            ? `Notifications, ${unreadCount} unread`
+            : 'Notifications'
+        }
       >
         <Bell className="w-5 h-5" />
         {unreadCount > 0 && (
@@ -116,9 +104,9 @@ export function Notifications() {
           <div className="px-4 py-3 border-b border-surface-100 flex items-center justify-between">
             <div>
               <h3 className="font-semibold text-surface-900">Notifications</h3>
-              {unreadCount > 0 && (
+              {unreadCount > 0 ? (
                 <p className="text-xs text-surface-500">{unreadCount} unread</p>
-              )}
+              ) : null}
             </div>
             <div className="flex items-center gap-2">
               {unreadCount > 0 && (
@@ -135,57 +123,75 @@ export function Notifications() {
           {/* Notifications List */}
           <div className="max-h-96 overflow-y-auto">
             {notifications.length > 0 ? (
-              notifications.map((notification) => (
-                <div
-                  key={notification.id}
-                  className={`px-4 py-3 hover:bg-surface-50 transition-colors border-b border-surface-50 last:border-0 ${
-                    !notification.read ? 'bg-brand-50/30' : ''
-                  }`}
-                >
-                  <div className="flex gap-3">
-                    <div
-                      className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                        typeColors[notification.type]
-                      }`}
-                    >
-                      <notification.icon className="w-4 h-4" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className={`text-sm ${!notification.read ? 'font-medium' : ''} text-surface-900`}>
-                            {notification.title}
-                          </p>
-                          <p className="text-xs text-surface-500 mt-0.5 line-clamp-1">
-                            {notification.description}
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => removeNotification(notification.id)}
-                          className="p-1 hover:bg-surface-200 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <X className="w-3 h-3 text-surface-400" />
-                        </button>
+              notifications.map((notification) => {
+                const Icon = TYPE_ICONS[notification.type] || Bell;
+                return (
+                  <div
+                    key={notification.id}
+                    className={`px-4 py-3 hover:bg-surface-50 transition-colors border-b border-surface-50 last:border-0 ${
+                      !notification.read ? 'bg-brand-50/30' : ''
+                    }`}
+                  >
+                    <div className="flex gap-3">
+                      <div
+                        className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                          typeColors[notification.type] ||
+                          'bg-surface-100 text-surface-600'
+                        }`}
+                      >
+                        <Icon className="w-4 h-4" />
                       </div>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs text-surface-400">{notification.time}</span>
-                        {!notification.read && (
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className={`text-sm ${!notification.read ? 'font-medium' : ''} text-surface-900`}>
+                              {notification.title}
+                            </p>
+                            {notification.description && (
+                              <p className="text-xs text-surface-500 mt-0.5 line-clamp-1">
+                                {notification.description}
+                              </p>
+                            )}
+                          </div>
                           <button
-                            onClick={() => markAsRead(notification.id)}
-                            className="text-xs text-brand-600 hover:text-brand-700"
+                            onClick={() => removeNotification(notification.id)}
+                            className="p-1 hover:bg-surface-200 rounded opacity-0 group-hover:opacity-100 transition-opacity"
                           >
-                            Mark as read
+                            <X className="w-3 h-3 text-surface-400" />
                           </button>
-                        )}
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                          {notification.time && (
+                            <span className="text-xs text-surface-400">
+                              {notification.time}
+                            </span>
+                          )}
+                          {!notification.read && (
+                            <button
+                              onClick={() => markAsRead(notification.id)}
+                              className="text-xs text-brand-600 hover:text-brand-700"
+                            >
+                              Mark as read
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             ) : (
-              <div className="py-12 text-center">
-                <Bell className="w-10 h-10 text-surface-300 mx-auto mb-2" />
-                <p className="text-surface-500 text-sm">No notifications</p>
+              <div className="py-12 px-6 text-center">
+                <div className="mx-auto w-12 h-12 rounded-2xl bg-surface-100 flex items-center justify-center mb-3">
+                  <Bell className="w-5 h-5 text-surface-400" />
+                </div>
+                <p className="text-sm font-medium text-surface-700">
+                  You're all caught up
+                </p>
+                <p className="text-xs text-surface-500 mt-1">
+                  Notifications about check-ins, messages, and staff
+                  activity will appear here.
+                </p>
               </div>
             )}
           </div>

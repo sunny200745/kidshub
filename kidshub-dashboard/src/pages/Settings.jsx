@@ -213,36 +213,13 @@ export default function Settings() {
           </SettingsItem>
         </SettingsSection>
 
-        {/* Security */}
-        <SettingsSection
-          icon={Shield}
-          title="Security"
-          description="Manage your security settings"
-        >
-          <SettingsItem
-            label="Password"
-            description="Last changed 30 days ago"
-          >
-            <Button variant="secondary" size="sm">
-              Change
-            </Button>
-          </SettingsItem>
-          <SettingsItem
-            label="Two-Factor Authentication"
-            description="Add an extra layer of security"
-          >
-            <Badge variant="success">Enabled</Badge>
-          </SettingsItem>
-          <SettingsItem
-            label="Active Sessions"
-            description="Manage your active sessions"
-          >
-            <Button variant="ghost" size="sm">
-              View All
-              <ChevronRight className="w-4 h-4" />
-            </Button>
-          </SettingsItem>
-        </SettingsSection>
+        {/* Security — only the items actually backed by working code today.
+            The previous version showed "Last changed 30 days ago" and a
+            green "2FA: Enabled" badge that were both lies (no audit log,
+            no 2FA enrollment), plus an "Active Sessions" row that did
+            nothing. Replaced with a real password-reset-by-email action
+            and an honest "coming soon" pill for 2FA. */}
+        <SecuritySection />
 
         {/* Center Settings */}
         <SettingsSection
@@ -293,28 +270,11 @@ export default function Settings() {
             not this client guard — it's a UX refinement. */}
         <AdminSection />
 
-        {/* Help */}
-        <SettingsSection
-          icon={HelpCircle}
-          title="Help & Support"
-          description="Get help with KidsHub"
-        >
-          <SettingsItem label="Help Center">
-            <ChevronRight className="w-4 h-4 text-surface-400" />
-          </SettingsItem>
-          <SettingsItem label="Contact Support">
-            <ChevronRight className="w-4 h-4 text-surface-400" />
-          </SettingsItem>
-          <SettingsItem label="What's New">
-            <Badge variant="brand">3 updates</Badge>
-          </SettingsItem>
-          <SettingsItem label="Privacy Policy">
-            <ChevronRight className="w-4 h-4 text-surface-400" />
-          </SettingsItem>
-          <SettingsItem label="Terms of Service">
-            <ChevronRight className="w-4 h-4 text-surface-400" />
-          </SettingsItem>
-        </SettingsSection>
+        {/* Help — every row here goes somewhere real (or is honestly marked
+            "Coming soon"). The old version had a fake "What's New: 3 updates"
+            badge and dead-link Privacy / Terms rows; both are removed until
+            those pages exist (PRODUCT_PLAN.md → Pre-launch TODOs → Legal). */}
+        <HelpSection />
 
         {/* App Version */}
         <div className="text-center py-4 text-sm text-surface-400">
@@ -584,6 +544,140 @@ function EditProfileModal({ user, profile, center, onClose }) {
         </ModalFooter>
       </form>
     </Modal>
+  );
+}
+
+/**
+ * Security section — only the controls we can actually honor today.
+ *
+ * Password "Change" sends a password-reset email via Firebase Auth to the
+ * signed-in user's email; we surface the success/failure inline so the
+ * owner knows to check their inbox and doesn't think the button did
+ * nothing. We never claim "last changed N days ago" because we don't
+ * track that — Firebase doesn't expose it.
+ *
+ * 2FA is intentionally rendered as an honest "Coming soon" pill instead
+ * of the previous green "Enabled" badge that was a flat-out lie (no
+ * second factor is enrolled and the auth flow doesn't ask for one).
+ *
+ * Active Sessions used to live here too; removed because it implied a
+ * session-management surface we don't have. Easier to add back when the
+ * feature actually exists than to keep an empty-on-click dead row.
+ */
+function SecuritySection() {
+  const { user, resetPassword } = useAuth();
+  const [status, setStatus] = useState({ kind: 'idle', message: '' });
+
+  const handleResetPassword = async () => {
+    if (!user?.email) {
+      setStatus({
+        kind: 'error',
+        message:
+          "We couldn't find an email on your account — please sign out and back in, then try again.",
+      });
+      return;
+    }
+    setStatus({ kind: 'sending', message: '' });
+    try {
+      await resetPassword(user.email);
+      setStatus({
+        kind: 'success',
+        message: `We sent a password reset link to ${user.email}. Check your inbox (and spam folder).`,
+      });
+    } catch (err) {
+      setStatus({
+        kind: 'error',
+        message:
+          err?.message ||
+          "Couldn't send the reset email right now. Please try again in a minute.",
+      });
+    }
+  };
+
+  return (
+    <SettingsSection
+      icon={Shield}
+      title="Security"
+      description="Manage your sign-in security"
+    >
+      <SettingsItem
+        label="Password"
+        description={
+          user?.email
+            ? `We'll email a reset link to ${user.email}`
+            : 'Sign in to manage your password'
+        }
+      >
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={handleResetPassword}
+          disabled={status.kind === 'sending' || !user?.email}
+        >
+          {status.kind === 'sending' ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Sending…
+            </>
+          ) : status.kind === 'success' ? (
+            <>
+              <CheckCircle2 className="w-4 h-4" />
+              Sent
+            </>
+          ) : (
+            'Send reset link'
+          )}
+        </Button>
+      </SettingsItem>
+      {status.kind === 'success' && (
+        <p className="text-xs text-success-600 -mt-2">{status.message}</p>
+      )}
+      {status.kind === 'error' && (
+        <p className="text-xs text-danger-600 -mt-2">{status.message}</p>
+      )}
+      <SettingsItem
+        label="Two-factor authentication"
+        description="Extra sign-in protection. Available in a future update."
+      >
+        <Badge variant="neutral">Coming soon</Badge>
+      </SettingsItem>
+    </SettingsSection>
+  );
+}
+
+/**
+ * Help & Support — only links that point somewhere real today.
+ *
+ * Contact Support opens the user's mail client to support@nuvaro.ca so
+ * we don't pretend to have an in-app ticket system we haven't built.
+ *
+ * Help Center, "What's New", Privacy Policy, and Terms of Service rows
+ * are intentionally omitted because:
+ *   - There's no help center or changelog yet.
+ *   - The legal pages don't exist (PRODUCT_PLAN.md → Pre-launch TODOs).
+ * We'll add them back as proper rows the moment the destinations exist.
+ */
+function HelpSection() {
+  const supportEmail = 'support@nuvaro.ca';
+  return (
+    <SettingsSection
+      icon={HelpCircle}
+      title="Help & Support"
+      description="Get help with KidsHub"
+    >
+      <SettingsItem
+        label="Contact support"
+        description="Email our team — we usually reply within one business day."
+      >
+        <a
+          href={`mailto:${supportEmail}?subject=KidsHub%20support%20request`}
+          className="inline-flex items-center gap-1 text-sm font-medium text-brand-600 hover:text-brand-700"
+        >
+          {supportEmail}
+          <ChevronRight className="w-4 h-4" />
+        </a>
+      </SettingsItem>
+    </SettingsSection>
   );
 }
 
