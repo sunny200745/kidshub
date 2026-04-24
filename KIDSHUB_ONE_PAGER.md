@@ -66,8 +66,9 @@ KidsHub is a 3-in-1 platform:
 
 1. **20-minute demo call** — I'll show you every screen in the order
    your day actually happens.
-2. **60 days free on Starter** — one classroom, I do all the setup,
-   you decide before the 60-day window closes.
+2. **60 days free on Starter** — two classrooms (infants + toddlers
+   covers most small centers), I do all the setup, you decide before
+   the 60-day window closes.
 3. **No credit card up front.** After 60 days you pick a plan or the
    account locks — no silent charges, no surprise bills.
 

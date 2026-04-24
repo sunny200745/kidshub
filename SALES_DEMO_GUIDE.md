@@ -111,9 +111,9 @@ Pick **one** of:
 ## Common objections + the one-line answer
 
 - **"My teachers won't use it."**
-  → "Let's pilot with one classroom. You're on Starter free for 60
-  days — if the teacher doesn't love it by then, you never paid
-  anything and the account just locks. Zero risk."
+  → "Let's pilot with one or two classrooms — Starter covers up to
+  two rooms free for 60 days. If your teachers don't love it by then,
+  you never paid anything and the account just locks. Zero risk."
 
 - **"I already use [Brightwheel / Procare / Lillio]."**
   → "Great — they're solid. What's one thing you wish they did that

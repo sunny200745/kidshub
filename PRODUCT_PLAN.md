@@ -24,14 +24,14 @@ Three tiers. New signups land directly on **Starter** with a 60-day free window.
 
 | Tier | Price (strawman) | Limits | Positioning |
 |---|---|---|---|
-| **Starter** | Free for first 60 days, then paywalled | 1 classroom · 15 children · 2 staff | Default landing tier — 60-day runway to evaluate, then you pick a plan or the account locks |
+| **Starter** | Free for first 60 days, then paywalled | 2 classrooms · 15 children · 2 staff | Default landing tier — 60-day runway to evaluate, then you pick a plan or the account locks |
 | **Pro** | ~$39/mo (placeholder) | 5 classrooms · 75 children · 15 staff | Standard center — the bread-and-butter tier |
 | **Premium** | ~$99/mo (placeholder) | Unlimited classrooms/children/staff · multi-daycare | Multi-location operators, franchise owners |
 
 **Decision points for you:**
 1. **Tier count**: 3 tiers today (Starter/Pro/Premium) — add a 4th "Enterprise" / "Custom" tier later for the biggest accounts if needed.
 2. **Tier names**: `Starter` / `Pro` / `Premium` (generic, clear) vs something branded (`Sprout` / `Bloom` / `Canopy`)? I lean generic — easier for customers to map against competitors.
-3. **Starter limits**: generous enough to actually be useful (so people use it) but tight enough to drive upgrades. 1 classroom / 15 kids is my recommendation — 1 classroom kills multi-classroom centers immediately.
+3. **Starter limits**: generous enough to actually be useful (so people use it) but tight enough to drive upgrades. Two classrooms / 15 kids is the current recommendation — two rooms covers the infants + toddlers split that even tiny mom-and-pop centers run, while keeping 3+ room daycares on the upgrade path.
 4. **Pricing**: placeholders above. We don't need final numbers until just before first sale, but we need ranges to shape the upgrade CTA copy.
 5. **Paywall enforcement**: day-61 hard redirect to `/paywall` is in place (nav-layer lock). Actual billing / Stripe activation that clears the block lives in Track F.
 
@@ -44,7 +44,7 @@ Legend: `✅` included · `—` locked behind upgrade CTA · `∞` unlimited.
 | Feature | Starter | Pro | Premium | Notes |
 |---|:---:|:---:|:---:|---|
 | **Quotas** | | | | |
-| Classrooms | 1 | 5 | ∞ | Quota check on classroom create |
+| Classrooms | 2 | 5 | ∞ | Quota check on classroom create |
 | Children | 15 | 75 | ∞ | Quota check on child create |
 | Staff | 2 | 15 | ∞ | Quota check on staff create + invite |
 | **Core (included on every plan)** | | | | |
@@ -250,7 +250,7 @@ That gives you a checklist of every open decision and the exact line to edit. No
 |---|---|---|
 | Tier names | `Starter` / `Pro` / `Premium` (+ legacy `Trial` for migration only) | `TIERS[tier].name` |
 | Pricing | $0 / $39 / $99 | `TIERS[tier].monthlyPriceUsd` |
-| Starter limits | 1 classroom · 15 children · 2 staff | `QUOTAS` |
+| Starter limits | 2 classrooms · 15 children · 2 staff | `QUOTAS` |
 | Pro limits | 5 classrooms · 75 children · 15 staff | `QUOTAS` |
 | Premium limits | unlimited (-1) | `QUOTAS` |
 | Starter free window | 60 days | `STARTER_FREE_DAYS` |

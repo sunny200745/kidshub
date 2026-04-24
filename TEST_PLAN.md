@@ -706,12 +706,17 @@ shipped. (When it ships, add a 9.2 sub-step here.)
 
 ## Phase 10 — Quotas (~10 min)
 
-### 10.1 Classroom quota (Starter cap = 1)
+### 10.1 Classroom quota (Starter cap = 2)
 
-**Steps:** Try to add a 2nd classroom.
+**Setup:** Add a 2nd classroom so you're at the 2-cap (`Sidebar →
+Classrooms → + Add Classroom`). Starter explicitly allows two rooms so
+that infants + toddlers can both be set up during the free window.
+
+**Steps:** Try to add a 3rd classroom.
 
 **Expected:** ✅ Form submission fails with `quota-exceeded`.
-`<QuotaBanner>` renders inside the modal pointing to upgrade.
+`<QuotaBanner>` renders inside the modal pointing to upgrade. The 2nd
+classroom from the setup step succeeds without any quota error.
 
 ### 10.2 Children quota (Starter cap = 15)
 
@@ -731,9 +736,9 @@ shipped. (When it ships, add a 9.2 sub-step here.)
 
 ### 10.4 Banner copy
 
-**Expected:** ✅ Banner text names the quota correctly ("You're at the
-1-classroom Starter cap"), the upgrade target tier ("Pro adds 4 more"),
-and links to `/plans`.
+**Expected:** ✅ Banner text names the quota correctly (e.g. "Starter
+plan limits you to 2 classrooms"), the upgrade target tier ("Upgrade
+to Pro to add more"), and links to `/plans`.
 
 ---
 
@@ -1121,7 +1126,7 @@ dashboard data leaks.
 
 ## Quick reference
 
-- **Starter limits**: 1 classroom · 15 children · 2 staff (`config/product.ts`
+- **Starter limits**: 2 classrooms · 15 children · 2 staff (`config/product.ts`
   → `QUOTAS`).
 - **Starter free window**: `STARTER_FREE_DAYS = 60` days.
 - **Amber warning**: `STARTER_PROMO_WARNING_DAYS = 14` days remaining.

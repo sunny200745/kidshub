@@ -195,12 +195,20 @@ export function starterPromoExpired(starterStartedAt: unknown): boolean {
  * rules (via `planAllows()` helper). `Infinity` encoded as `-1` because
  * Firestore rules don't support `Infinity`.
  *
+ * Starter classroom cap = 2 (bumped from 1). The original "1 classroom"
+ * cap killed multi-classroom centers immediately — even tiny daycares
+ * usually run an infants room + a toddlers room, so 1 made the free
+ * window feel broken before they'd seen any value. Two classrooms is
+ * still tight enough to push 3+ room centers to Pro, but generous enough
+ * that two-room mom-and-pop centers can actually evaluate the product
+ * end-to-end during the 60-day window.
+ *
  * TODO(limits): confirm Starter/Pro limits aren't too tight / too loose.
  */
 export type QuotaKey = 'classrooms' | 'children' | 'staff';
 
 export const QUOTAS: Record<QuotaKey, Record<Tier, number>> = {
-  classrooms: { trial: -1, starter: 1, pro: 5, premium: -1 },
+  classrooms: { trial: -1, starter: 2, pro: 5, premium: -1 },
   children: { trial: -1, starter: 15, pro: 75, premium: -1 },
   staff: { trial: -1, starter: 2, pro: 15, premium: -1 },
 };
