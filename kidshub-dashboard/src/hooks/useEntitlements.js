@@ -36,10 +36,14 @@ import {
   centersApi,
   downgradeExpiredTrial,
   ensurePlanStamped,
+  ensureStarterStarted,
 } from '../firebase/api/centers';
 import {
   DEFAULT_NEW_OWNER_TIER,
   TIERS_ARRAY,
+  starterPromoDaysLeft,
+  starterPromoEndsAtMs,
+  starterPromoExpired as computeStarterPromoExpired,
 } from '../config/product';
 
 function parseTimestamp(ts) {
@@ -97,6 +101,16 @@ export function useEntitlements() {
           if (maybe) return; // snapshot will re-deliver with plan='starter'
         }
 
+        // Stop 7 — lazy-stamp starterStartedAt on legacy Starter docs.
+        // Without a stamp, the 2-month grace helpers can't compute days
+        // left, and the banner / blocker would never fire. We stamp
+        // "now", not some retroactive date, so legacy customers get a
+        // fresh promo window rather than being cut off immediately.
+        if (data && data.plan === 'starter') {
+          const wrote = await ensureStarterStarted(data);
+          if (wrote) return; // snapshot will re-deliver with starterStartedAt
+        }
+
         setCenter(data);
         setLoading(false);
       },
@@ -126,6 +140,19 @@ export function useEntitlements() {
         )
       : null;
 
+    // Stop 7 — Starter grace state derived from `starterStartedAt`.
+    // `starterPromoDaysLeft` returns null when the field is missing,
+    // which is what we want — downstream UI only lights up when we
+    // have a valid clock. `starterPromoEndsAt` is exposed as a Date
+    // so components can render "ends on Jan 3" if they want to.
+    const starterPromoEndsMs = starterPromoEndsAtMs(center?.starterStartedAt);
+    const starterPromoEndsAt = starterPromoEndsMs > 0 ? new Date(starterPromoEndsMs) : null;
+    const starterDaysLeft = rawTier === 'starter'
+      ? starterPromoDaysLeft(center?.starterStartedAt)
+      : null;
+    const starterPromoExpired = rawTier === 'starter'
+      && computeStarterPromoExpired(center?.starterStartedAt);
+
     const demoMode = !!center?.demoMode;
 
     // effectiveTier is what downstream gates actually compare against.
@@ -151,6 +178,12 @@ export function useEntitlements() {
       trialEndsAt,
       trialDaysLeft,
       trialExpired,
+      // Stop 7 — Starter 2-month grace surface. Consumed by
+      // PlanStateBanner (countdown) and PlanGateInterstitial (blocker
+      // when expired + unacknowledged).
+      starterPromoEndsAt,
+      starterDaysLeft,
+      starterPromoExpired,
       demoMode,
       center,
     };

@@ -238,6 +238,7 @@ export async function setPlan(plan) {
     throw new Error(`centersApi.setPlan: invalid plan "${plan}"`);
   }
   const ownerId = currentOwnerId();
+  const ref = doc(db, 'centers', ownerId);
   const patch = {
     plan,
     updatedAt: serverTimestamp(),
@@ -245,7 +246,68 @@ export async function setPlan(plan) {
   if (plan === 'trial') {
     patch.trialEndsAt = trialEndsFromNow();
   }
-  await updateDoc(doc(db, 'centers', ownerId), patch);
+  if (plan === 'starter') {
+    // Stop 7 — first transition into Starter starts the 2-month grace
+    // clock. Only stamp if absent; subsequent flips (e.g. admin QA
+    // cycling between tiers) must NOT reset the clock, otherwise an
+    // owner could game the grace indefinitely via plan toggles.
+    const existing = await getDoc(ref);
+    const hasStamp = toMillisSafe(existing.data()?.starterStartedAt) > 0;
+    if (!hasStamp) {
+      patch.starterStartedAt = serverTimestamp();
+    }
+  }
+  await updateDoc(ref, patch);
+}
+
+// Local normalizer — keeps the public helpers in config/product.ts as the
+// single source of truth but avoids a cross-package import cycle here.
+function toMillisSafe(ts) {
+  if (!ts) return 0;
+  if (typeof ts.toMillis === 'function') return ts.toMillis();
+  if (typeof ts.toDate === 'function') return ts.toDate().getTime();
+  if (ts instanceof Date) return ts.getTime();
+  if (typeof ts === 'number') return ts;
+  return 0;
+}
+
+/**
+ * Lazy-stamp helper for legacy Starter centers that predate Stop 7 and
+ * therefore have no `starterStartedAt`. useEntitlements() calls this the
+ * first time it sees such a doc, starting a fresh 2-month grace window
+ * from "now" rather than retroactively penalizing early customers.
+ *
+ * Idempotent — safe to call on every read; only writes when the field
+ * is missing. Returns true if a write happened, false otherwise.
+ */
+export async function ensureStarterStarted(existing) {
+  if (!existing || existing.plan !== 'starter') return false;
+  if (toMillisSafe(existing.starterStartedAt) > 0) return false;
+  const ownerId = currentOwnerId();
+  try {
+    await updateDoc(doc(db, 'centers', ownerId), {
+      starterStartedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    return true;
+  } catch (err) {
+    console.warn('[centersApi] ensureStarterStarted failed:', err);
+    return false;
+  }
+}
+
+/**
+ * Owner-side acknowledgement of the "Starter grace window has ended"
+ * blocker (stop 7). Parallel to acknowledgeTrialExpiry above — writes
+ * a timestamp to the center doc so the interstitial doesn't re-appear
+ * on every navigation.
+ */
+export async function acknowledgeStarterPromoExpiry() {
+  const ownerId = currentOwnerId();
+  await updateDoc(doc(db, 'centers', ownerId), {
+    starterPromoAcknowledgedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
 }
 
 /**
@@ -300,8 +362,10 @@ export async function markOnboardingDismissed() {
 export const centersApi = {
   subscribeToSelfCenter,
   ensurePlanStamped,
+  ensureStarterStarted,
   downgradeExpiredTrial,
   acknowledgeTrialExpiry,
+  acknowledgeStarterPromoExpiry,
   setDemoMode,
   setPlan,
   getSelfCenter,

@@ -107,23 +107,76 @@ export const TRIAL_DURATION_DAYS = 14;
  * (pricing page, Settings → Plan & billing, in-app CTAs) renders from
  * here so tweaks are a one-file edit.
  *
- * TODO(billing): enforcement is not yet wired. To close the loop:
- *   1. Stamp `centers/{ownerId}.starterStartedAt` (serverTimestamp) the
- *      moment a center transitions into Starter — either on trial
- *      expiry or on direct Starter signup.
- *   2. Add a helper `starterPromoExpired(center)` that returns true
- *      when `now > starterStartedAt + STARTER_FREE_MONTHS months`.
- *   3. When true, treat the tier as "starter_expired": block writes
- *      to paid-tier surfaces AND flip the center into a read-only
- *      grace state with a prominent upgrade banner.
- *   4. Stripe integration (Track F) hooks subscription activation to
- *      clear the expiry flag.
- *
- * Until that lands, `STARTER_FREE_MONTHS` is COPY-ONLY — owners on
- * Starter keep their current access regardless of how long they've
- * been on it. That's fine for the small population we have pre-GA.
+ * Stop 7 of the owner onboarding journey:
+ *   1. `centers/{ownerId}.starterStartedAt` is stamped by
+ *      centers.ts whenever the center transitions to starter (trial
+ *      expiry AND explicit setPlan('starter')). Legacy starter
+ *      centers get a lazy stamp on first useEntitlements read.
+ *   2. The helpers below derive days-left / expired state from that
+ *      timestamp. UI components (PlanStateBanner, PlanGateInterstitial)
+ *      drive their surfaces off those helpers.
+ *   3. TODO(billing): we do NOT yet hard-enforce "starter_expired" by
+ *      blocking writes. The current shape is behavioral — banner +
+ *      blocker modal + upgrade CTAs. When Stripe ships (Track F) this
+ *      module will additionally feed into Firestore rules to prevent
+ *      writes to paid-tier surfaces past expiry.
  */
 export const STARTER_FREE_MONTHS = 2;
+
+/**
+ * Amber warning window inside the starter grace period. When there are
+ * fewer than this many days left on the Starter promo, the banner flips
+ * to a more urgent amber state (same pattern as the trial countdown).
+ */
+export const STARTER_PROMO_WARNING_DAYS = 14;
+
+// Avoid `Date | number | string` soup at call sites — callers pass
+// Firestore Timestamps OR Dates OR millis; this normalizes.
+function toMillis(ts: any): number {
+  if (!ts) return 0;
+  if (typeof ts.toMillis === 'function') return ts.toMillis();
+  if (typeof ts.toDate === 'function') return ts.toDate().getTime();
+  if (ts instanceof Date) return ts.getTime();
+  if (typeof ts === 'number') return ts;
+  return 0;
+}
+
+/**
+ * Calendar-aware "add N months to a timestamp". Handles end-of-month
+ * edge cases correctly via `Date.setMonth()` (Jan 31 + 1 month → Feb 28).
+ * Returns 0 when `starterStartedAt` is missing — callers should treat
+ * 0 as "no grace yet set, not expired".
+ */
+export function starterPromoEndsAtMs(starterStartedAt: unknown): number {
+  const startedMs = toMillis(starterStartedAt);
+  if (startedMs <= 0) return 0;
+  const d = new Date(startedMs);
+  d.setMonth(d.getMonth() + STARTER_FREE_MONTHS);
+  return d.getTime();
+}
+
+/**
+ * Days (rounded up) between now and the end of the Starter grace
+ * window. Returns null when there's no `starterStartedAt` yet (legacy
+ * doc pre-stamp, or not on starter at all). Floor-clamped at 0.
+ */
+export function starterPromoDaysLeft(starterStartedAt: unknown): number | null {
+  const endsMs = starterPromoEndsAtMs(starterStartedAt);
+  if (endsMs <= 0) return null;
+  const msLeft = endsMs - Date.now();
+  return Math.max(0, Math.ceil(msLeft / (24 * 60 * 60 * 1000)));
+}
+
+/**
+ * True when the Starter grace window has elapsed. Returns false when
+ * `starterStartedAt` is missing (defensive — we never want to blanket-
+ * block owners whose docs are mid-migration).
+ */
+export function starterPromoExpired(starterStartedAt: unknown): boolean {
+  const endsMs = starterPromoEndsAtMs(starterStartedAt);
+  if (endsMs <= 0) return false;
+  return Date.now() >= endsMs;
+}
 
 // ─── Quotas (per-tier numeric limits) ─────────────────────────────────
 

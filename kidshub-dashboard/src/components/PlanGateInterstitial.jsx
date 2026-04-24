@@ -8,32 +8,44 @@ import { centersApi } from '../firebase/api';
 import { STARTER_FREE_MONTHS, TRIAL_DURATION_DAYS } from '../config/product';
 
 /**
- * <PlanGateInterstitial /> — the trial-expired blocker (stop 5 of the
- * new-owner onboarding journey).
+ * <PlanGateInterstitial /> — the plan-transition blocker shared between
+ * stop 5 (trial just ended) and stop 7 (starter grace just ended).
  *
- * Shows a non-dismissible modal to owners whose `centers.trialEndedAt`
- * has been stamped but `trialExpiryAcknowledgedAt` is still absent or
- * older. This is the moment of highest conversion intent — the trial
- * just ended, Premium features just locked, and the owner needs to
- * consciously pick a path: stay on Starter for the 2-month grace, or
- * upgrade to a paid tier.
+ * Renders one of two variants, non-dismissible, based on which
+ * transition hasn't been acknowledged yet:
+ *
+ *   Trial → Starter (stop 5):
+ *     Trigger   — centers.trialEndedAt > trialExpiryAcknowledgedAt
+ *     Message   — "Your 14-day Premium trial has ended. You're now on
+ *                  Starter (free for 2 months). Pick what's next."
+ *     Actions   — Stay on Starter · See all plans · Upgrade to Premium
+ *
+ *   Starter grace expired (stop 7):
+ *     Trigger   — starterPromoExpired && no/stale starterPromoAcknowledgedAt
+ *     Message   — "Your free Starter window has ended. Upgrade to Pro
+ *                  or Premium to keep your center live."
+ *     Actions   — See all plans · Upgrade to Pro (primary)
+ *                 (no "Stay" option — grace is over)
+ *
+ * Priority when BOTH could fire simultaneously: stop 5 (trial) wins.
+ * This is an edge case — in practice an owner first clears the trial
+ * blocker and only later meets the starter-expired condition — but we
+ * pin the order for determinism.
  *
  * Why persist the ack to Firestore (not sessionStorage)?
  *   - Survives device changes, cleared cookies, private-mode sessions.
- *   - We only want to blast this modal ONCE per trial transition, not
- *     once per tab.
+ *   - We only want to blast each transition ONCE, not once per tab.
  *
  * Why non-dismissible via backdrop / X?
  *   - If the owner can click away, they often DO click away and forget
- *     they just lost Premium. Forcing an explicit action ("Stay on
- *     Starter" vs "See plans" vs "Contact sales") is the whole point.
+ *     they just lost entitlements. Forcing an explicit action is the
+ *     whole point.
  *
  * Suppressed on:
  *   - /plans   — the owner is literally at pricing; no need to block.
  *   - /welcome — the onboarding wizard has its own flow.
- *   - /login / /register — the Layout doesn't mount here anyway, but
- *     we double-guard in case the interstitial ever ships outside
- *     Layout.
+ *   - /login / /register — Layout doesn't mount here, but we
+ *     double-guard in case the interstitial ever ships outside Layout.
  */
 
 const SUPPRESSED_PATHS = new Set(['/plans', '/welcome', '/login', '/register']);
@@ -50,7 +62,7 @@ function toMillis(ts) {
 export function PlanGateInterstitial() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { center, loading, demoMode } = useEntitlements();
+  const { center, loading, demoMode, starterPromoExpired } = useEntitlements();
 
   const [acknowledging, setAcknowledging] = useState(false);
 
@@ -59,16 +71,35 @@ export function PlanGateInterstitial() {
   if (!center) return null;
   if (SUPPRESSED_PATHS.has(location.pathname)) return null;
 
+  // Stop 5 — unack'd trial-end takes precedence over starter expiry.
   const trialEndedMs = toMillis(center.trialEndedAt);
-  const ackedMs = toMillis(center.trialExpiryAcknowledgedAt);
-  const shouldShow = trialEndedMs > 0 && ackedMs < trialEndedMs;
+  const trialAckedMs = toMillis(center.trialExpiryAcknowledgedAt);
+  const showTrialEnded = trialEndedMs > 0 && trialAckedMs < trialEndedMs;
 
-  if (!shouldShow) return null;
+  // Stop 7 — starter grace expired AND the owner hasn't ack'd THIS
+  // specific Starter window yet. We compare against starterStartedAt,
+  // not wall-clock now, so re-entering Starter later (via admin tool /
+  // downgrade) creates a new unack window without having to clear any
+  // separate flag.
+  const starterStartedMs = toMillis(center.starterStartedAt);
+  const starterAckedMs = toMillis(center.starterPromoAcknowledgedAt);
+  const showStarterExpired =
+    starterPromoExpired
+    && starterStartedMs > 0
+    && starterAckedMs < starterStartedMs;
+
+  if (!showTrialEnded && !showStarterExpired) return null;
+
+  const variant = showTrialEnded ? 'trial' : 'starter';
 
   const ack = async () => {
     setAcknowledging(true);
     try {
-      await centersApi.acknowledgeTrialExpiry();
+      if (variant === 'trial') {
+        await centersApi.acknowledgeTrialExpiry();
+      } else {
+        await centersApi.acknowledgeStarterPromoExpiry();
+      }
     } catch (err) {
       // If the write fails we still want the user to be able to proceed —
       // we just won't remember they saw it. They'll see it once more on
@@ -98,6 +129,82 @@ export function PlanGateInterstitial() {
     navigate('/plans?tier=pro');
   };
 
+  if (variant === 'starter') {
+    return (
+      <Modal
+        isOpen
+        onClose={() => {}}
+        title="Your free Starter window has ended"
+        size="md"
+        showClose={false}
+      >
+        <div className="space-y-5">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-warning-100">
+              <AlertCircle className="h-5 w-5 text-warning-700" />
+            </div>
+            <div className="flex-1 text-sm text-surface-700">
+              <p>
+                You've been on Starter for {STARTER_FREE_MONTHS} months — the
+                free runway we give every new center. Your data is safe and
+                your center is still live, but to keep adding children,
+                messaging parents, and running attendance, you'll need to
+                upgrade to a paid plan.
+              </p>
+              <p className="mt-2">
+                Pro ($39/mo) unlocks reports and photo sharing. Premium
+                ($79/mo) adds branding, video, and more. Talk to sales and
+                we'll get you set up in minutes.
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-brand-100 bg-brand-50/60 p-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-accent-500 to-brand-500 text-white">
+                <Sparkles className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-surface-900">
+                  Need a bit more time?
+                </p>
+                <p className="mt-0.5 text-xs text-surface-600">
+                  Email{' '}
+                  <a
+                    href="mailto:support@nuvaro.ca"
+                    className="font-semibold text-brand-700 hover:underline"
+                  >
+                    support@nuvaro.ca
+                  </a>{' '}
+                  and we'll work with you.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6 flex flex-col-reverse gap-2 border-t border-surface-100 pt-5 sm:flex-row sm:items-center sm:justify-end">
+          <Button
+            variant="secondary"
+            onClick={handleSeePlans}
+            disabled={acknowledging}
+          >
+            {acknowledging ? <Loader2 className="h-4 w-4 animate-spin" /> : 'See all plans'}
+          </Button>
+          <Button
+            variant="primary"
+            onClick={handleContactSales}
+            disabled={acknowledging}
+          >
+            Upgrade to continue
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </Modal>
+    );
+  }
+
+  // Default: trial-ended variant
   return (
     <Modal
       isOpen
