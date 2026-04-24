@@ -37,11 +37,13 @@ import { Link, Redirect, useLocalSearchParams } from 'expo-router';
 import {
   AlertTriangle,
   ArrowRight,
+  CheckCircle2,
   Eye,
   EyeOff,
   Loader2,
   Lock,
   Mail,
+  Smartphone,
   ShieldCheck,
   User,
 } from 'lucide-react-native';
@@ -90,6 +92,14 @@ export default function InviteScreen() {
   const [invite, setInvite] = useState<Invite | null>(null);
   const [fetchError, setFetchError] = useState<string>('');
   const [fetching, setFetching] = useState(true);
+  // Set the moment the accept call resolves successfully. We capture the
+  // invitee's email + role here (not from `invite` directly) because the
+  // AccountActivated screen needs to render even after we sign the user
+  // out — and at that point the invite object has been deleted from
+  // Firestore, so we can't re-derive these values.
+  const [accepted, setAccepted] = useState<{ email: string; role: 'parent' | 'teacher' } | null>(
+    null
+  );
 
   useEffect(() => {
     if (!token) {
@@ -122,9 +132,21 @@ export default function InviteScreen() {
     };
   }, [token, fetchInvite]);
 
+  // Highest-priority branch: we just accepted the invite. We've already
+  // signed the user back out (see AcceptForm.handleSubmit), so we own the
+  // post-accept UX completely — show the AccountActivated screen with the
+  // "go open the app and sign in" copy instead of routing into the app.
+  // Must come BEFORE the role-match auto-redirect below, otherwise that
+  // redirect would briefly fire before our sign-out propagates.
+  if (accepted) {
+    return <AccountActivated email={accepted.email} role={accepted.role} />;
+  }
+
   // Edge case: a signed-in user whose email already matches the invite is
-  // probably refreshing the page after a successful accept. Send them home
-  // if their role matches the invite's role.
+  // probably refreshing the page after a successful accept (and the
+  // sign-out from AcceptForm hasn't kicked in yet, OR they came back to
+  // the link days later). Send them home if their role matches the
+  // invite's role so they don't get stuck on the form.
   if (
     !authLoading &&
     user &&
@@ -185,6 +207,8 @@ export default function InviteScreen() {
       invite={invite}
       acceptTeacherInvite={acceptTeacherInvite}
       acceptParentInvite={acceptParentInvite}
+      logout={logout}
+      onAccepted={setAccepted}
     />
   );
 }
@@ -284,10 +308,14 @@ function AcceptForm({
   invite,
   acceptTeacherInvite,
   acceptParentInvite,
+  logout,
+  onAccepted,
 }: {
   invite: Invite;
   acceptTeacherInvite: ReturnType<typeof useAuth>['acceptTeacherInvite'];
   acceptParentInvite: ReturnType<typeof useAuth>['acceptParentInvite'];
+  logout: ReturnType<typeof useAuth>['logout'];
+  onAccepted: (info: { email: string; role: 'parent' | 'teacher' }) => void;
 }) {
   const isParent = invite.role === 'parent';
   const [form, setForm] = useState<AcceptFormState>(EMPTY_FORM);
@@ -334,8 +362,38 @@ function AcceptForm({
           password: form.password,
         });
       }
-      // AuthContext flips → role router sends the new user to
-      // /home (parent) or /classroom (teacher). No explicit nav needed.
+
+      // Account is created and the user is briefly signed in (Firebase's
+      // createUserWithEmailAndPassword auto-signs them in). Two things
+      // happen next, in this order, ON PURPOSE:
+      //
+      //   1. onAccepted(...) — flips the parent screen into the
+      //      AccountActivated success view. This MUST run before logout()
+      //      so the activated screen is in place when the auth state
+      //      change re-renders the tree; otherwise the role-match
+      //      auto-redirect on InviteScreen could fire for the brief
+      //      window between accept-resolve and signOut-resolve.
+      //
+      //   2. logout() — signs the just-created user back out. We
+      //      deliberately don't drop them straight into /home or
+      //      /classroom: a fresh activator should consciously sign in
+      //      to the KidsHub app at app.getkidshub.com (especially
+      //      important on mobile where the eventual native app will
+      //      live). The success screen has the sign-in CTA.
+      onAccepted({
+        email: invite.email,
+        role: invite.role === 'parent' ? 'parent' : 'teacher',
+      });
+      try {
+        await logout();
+      } catch (signOutErr) {
+        // Non-fatal: the success screen renders either way. Worst case
+        // a stale session sticks around until the next app reload.
+        console.warn(
+          '[InviteScreen] post-accept sign-out failed (non-fatal):',
+          signOutErr
+        );
+      }
     } catch (err) {
       console.error('[InviteScreen] accept failed:', err);
       const code = (err as { code?: string } | null)?.code;
@@ -568,7 +626,8 @@ function AcceptForm({
               <View className="mt-6 pt-5 border-t border-surface-100 dark:border-surface-700 items-center">
                 <Text className="text-xs text-surface-400 text-center">
                   By accepting, you&apos;re creating a {isParent ? 'parent' : 'teacher'} account on
-                  KidsHub for {invite.email}.
+                  KidsHub for {invite.email}. After activation you&apos;ll sign in
+                  at app.getkidshub.com.
                 </Text>
               </View>
             </View>
@@ -576,5 +635,108 @@ function AcceptForm({
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
+  );
+}
+
+/**
+ * Post-accept success screen.
+ *
+ * Why we render this instead of dropping the new user straight into
+ * /home or /classroom:
+ *   - The invite link is delivered by email and may be opened on a
+ *     parent's laptop, a partner's phone, etc. Auto-routing them into
+ *     the live app on whatever device opened the link is jarring and
+ *     mixes up "I activated this account" with "I'm signing in to use
+ *     it right now".
+ *   - It gives us a single, predictable place to tell the invitee where
+ *     KidsHub actually lives (app.getkidshub.com) and, eventually,
+ *     point them at the iOS / Android app stores once those ship.
+ *   - The user has to consciously sign in once, which means their
+ *     password manager captures the credentials properly instead of
+ *     receiving a silent post-create login that most managers ignore.
+ *
+ * Implementation note: the user is already signed OUT by the time we
+ * render this — see AcceptForm.handleSubmit. The Sign-in button just
+ * routes to /login (which lives on the same app.getkidshub.com host
+ * we tell the user to "go to"), so the message is consistent whether
+ * they tap the button now or come back later.
+ */
+function AccountActivated({
+  email,
+  role,
+}: {
+  email: string;
+  role: 'parent' | 'teacher';
+}) {
+  return (
+    <ScrollView
+      className="flex-1 bg-surface-50 dark:bg-surface-900"
+      contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}>
+      <View className="px-6 py-10 items-center">
+        <View className="w-full max-w-md">
+          <View className="items-center mb-6">
+            <View className="w-16 h-16 rounded-full bg-success-100 dark:bg-success-900/40 items-center justify-center mb-4">
+              <CheckCircle2 size={36} color="#16a34a" />
+            </View>
+            <Text className="text-surface-900 dark:text-surface-50 text-3xl font-bold text-center">
+              You&apos;re all set!
+            </Text>
+            <Text className="text-surface-600 dark:text-surface-300 text-base text-center mt-3">
+              Your KidsHub {role} account is ready.
+            </Text>
+          </View>
+
+          <View className="bg-white dark:bg-surface-800 rounded-3xl p-6 sm:p-8 shadow-sm">
+            <View className="mb-5 p-3 bg-surface-50 dark:bg-surface-900 rounded-xl flex-row items-center gap-3">
+              <Mail size={18} color="#94a3b8" />
+              <View className="flex-1 min-w-0">
+                <Text className="text-xs text-surface-500 dark:text-surface-400">
+                  Sign in with this email
+                </Text>
+                <Text
+                  className="text-sm font-semibold text-surface-900 dark:text-surface-50"
+                  numberOfLines={1}>
+                  {email}
+                </Text>
+              </View>
+            </View>
+
+            <View className="mb-6 p-4 bg-brand-50 dark:bg-brand-900/30 border border-brand-100 dark:border-brand-800 rounded-xl flex-row items-start gap-3">
+              <View className="mt-0.5">
+                <Smartphone size={20} color="#0ea5e9" />
+              </View>
+              <View className="flex-1 min-w-0">
+                <Text className="text-sm font-semibold text-brand-900 dark:text-brand-100">
+                  Open the KidsHub app
+                </Text>
+                <Text className="text-sm text-brand-800 dark:text-brand-200 mt-1">
+                  Visit{' '}
+                  <Text className="font-semibold">app.getkidshub.com</Text>{' '}
+                  on any device and sign in with the email above. Save the
+                  link to your home screen for quick access.
+                </Text>
+              </View>
+            </View>
+
+            <Link
+              href="/login"
+              accessibilityRole="button"
+              className="flex-row items-center justify-center py-4 rounded-xl bg-brand-500 active:bg-brand-600">
+              <Text className="text-white text-base font-semibold mr-2">
+                Sign in to KidsHub
+              </Text>
+              <ArrowRight size={18} color="white" />
+            </Link>
+
+            <View className="mt-6 pt-5 border-t border-surface-100 dark:border-surface-700 items-center">
+              <Text className="text-xs text-surface-400 text-center">
+                Forgot your password? Use the &quot;Forgot password?&quot;
+                link on the sign-in screen — we&apos;ll email you a reset.
+              </Text>
+            </View>
+          </View>
+        </View>
+      </View>
+    </ScrollView>
   );
 }
