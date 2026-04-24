@@ -12,15 +12,18 @@
   `centers/{ownerId}.stripeCustomerId`.
 - One **subscription** per owner (one plan — Pro or Premium).
 - Plan state lives in Firestore on `centers/{ownerId}`:
-  - `plan: 'trial' | 'starter' | 'pro' | 'premium'`
-  - `trialEndsAt: Timestamp | null`
+  - `plan: 'starter' | 'pro' | 'premium'` (legacy `'trial'` is auto-migrated
+    to `'starter'` on next login — see `migrateLegacyTrialToStarter()`)
+  - `starterStartedAt: Timestamp | null` — when the 60-day free window began
   - `billingStatus: 'active' | 'past_due' | 'canceled'` (new, stamped
     by webhook)
   - `stripeCustomerId: string | null`
   - `stripeSubscriptionId: string | null`
 - The client's `useEntitlements()` hook already reads `plan` and
-  `trialEndsAt`; we only need to add `billingStatus` awareness for the
-  grace-period banner (F3).
+  `starterStartedAt` (to compute `starterPromoExpired` for the `/paywall`
+  redirect); we only need to add `billingStatus` awareness for the
+  grace-period banner (F3) and have the webhook clear the paywall by
+  setting `plan: 'pro' | 'premium'` on successful checkout.
 
 ## Flows
 
@@ -40,8 +43,13 @@
 
 Single endpoint `POST /api/stripe-webhook` handles:
 - `checkout.session.completed` → stamp `plan` from the subscription's
-  price, clear `trialEndsAt`, set `billingStatus: 'active'`.
-- `customer.subscription.updated/deleted` → same logic.
+  price (`pro` | `premium`), set `billingStatus: 'active'`. This
+  automatically clears the `/paywall` redirect because
+  `starterPromoExpired` only fires for `plan === 'starter'`.
+- `customer.subscription.updated/deleted` → same logic. On delete, drop
+  back to `starter` — if `starterStartedAt` is still in the 60-day
+  window the owner keeps free access; otherwise they hit `/paywall`
+  next navigation.
 - `invoice.payment_failed` → `billingStatus: 'past_due'`, send email.
 - `invoice.paid` → back to `active`.
 
@@ -50,8 +58,11 @@ Single endpoint `POST /api/stripe-webhook` handles:
 If `billingStatus === 'past_due'`:
 - Show a banner in the dashboard linking to Stripe customer portal.
 - `useEntitlements()` keeps the paid tier for **7 days** past the
-  invoice date. After that, `effectiveTier` downgrades to `starter` —
-  same mechanism as expired trials.
+  invoice date. After that, `plan` is dropped to `starter` — which
+  will immediately redirect to `/paywall` if the owner's original
+  60-day Starter window is already closed (the common case for
+  existing paying customers who lapse), using the same
+  `starterPromoExpired` machinery that gates brand-new signups.
 - Email the owner at day 1, day 3, day 7.
 
 ### Invoicing & receipts (F4)
@@ -88,7 +99,8 @@ Webhook endpoint to register in Stripe dashboard:
    banner appears and email fires.
 4. Fake a restore (`invoice.paid`); confirm banner disappears.
 5. Cancel the subscription from Stripe dashboard; confirm 7-day grace
-   then downgrade.
+   then downgrade to `starter` — and that a `starter` owner past their
+   60-day window immediately hits `/paywall` on next navigation.
 6. Flip live keys on and do a $1 test with a real card.
 
 ---

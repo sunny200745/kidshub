@@ -6,7 +6,7 @@
  * app or the dashboard — this screen is read-only for parents.
  *
  * Tier behavior (Sprint 5 / D1 wiring):
- *   - Pro+ (demoMode on, trial, pro, premium): live gallery from the
+ *   - Pro+ (demoMode on, pro, premium; legacy trial treated as Starter): live gallery from the
  *     `photos` Firestore collection, reverse-chronological, tap-to-
  *     expand for full-size view.
  *   - Starter: gallery is replaced with an `<UpgradeCTA feature="photoJournal">`

@@ -24,6 +24,7 @@ import Reports from './pages/Reports';
 import VideoSurveillance from './pages/VideoSurveillance';
 import Unlock from './pages/Unlock';
 import Welcome from './pages/Welcome';
+import Paywall from './pages/Paywall';
 
 function App() {
   return (
@@ -83,8 +84,18 @@ function App() {
 
           <Route path="/unlock" element={<ProtectedRoute><Unlock /></ProtectedRoute>} />
 
-          {/* Plans / upgrade Route (Sprint 3 / E3) */}
+          {/* Plans / upgrade Route — exempt from the /paywall redirect
+             (see ProtectedRoute.PAYWALL_EXEMPT_PATHS) so expired owners
+             can still review tiers before contacting sales. */}
           <Route path="/plans" element={<ProtectedRoute><Plans /></ProtectedRoute>} />
+
+          {/* Paywall — full-screen lock page for owners whose 60-day
+             Starter free window has elapsed. ProtectedRoute redirects
+             every non-exempt dashboard route here. Exempt itself so
+             the redirect doesn't loop; still owner-gated via
+             <ProtectedRoute> to prevent logged-out / wrong-role users
+             from viewing it. */}
+          <Route path="/paywall" element={<ProtectedRoute><Paywall /></ProtectedRoute>} />
 
           {/* Catch all - redirect to dashboard */}
           <Route path="*" element={<Navigate to="/" replace />} />

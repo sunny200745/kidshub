@@ -41,7 +41,7 @@ KidsHub is a 3-in-1 platform:
 - **~5 hours/week** of admin time saved per classroom (pilot average).
 - **~80% reduction** in parent-teacher text volume.
 - **3:1 ROI** from referral-driven waitlist growth on the Pro plan.
-- **Pricing**: Starter free for 2 months · Pro $39/mo · Premium $99/mo.
+- **Pricing**: Starter free for 60 days · Pro $39/mo · Premium $99/mo.
   No per-child gouging. Cancel anytime.
 
 ---
@@ -66,9 +66,10 @@ KidsHub is a 3-in-1 platform:
 
 1. **20-minute demo call** — I'll show you every screen in the order
    your day actually happens.
-2. **Free 2-week pilot** — one classroom, I do all the setup, you
-   decide at the end.
-3. **No credit card up front.** You only pay if you keep it.
+2. **60 days free on Starter** — one classroom, I do all the setup,
+   you decide before the 60-day window closes.
+3. **No credit card up front.** After 60 days you pick a plan or the
+   account locks — no silent charges, no surprise bills.
 
 **Book a demo:** [getkidshub.com/#demo](https://getkidshub.com/#demo)
 · **Pricing:** [getkidshub.com/pricing](https://getkidshub.com/pricing)

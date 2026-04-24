@@ -14,6 +14,13 @@
  * `loading:false, tier:'starter'` — i.e. locked-by-default until a daycare
  * owner links them. This is the correct behavior: they shouldn't see any
  * paid features while unlinked.
+ *
+ * 60-day Starter / paywall:
+ *   The `/paywall` hard-lock is owner-only — parents and teachers should
+ *   never be blocked because the owner forgot to pay. Whatever `plan`
+ *   they see is what feature gates check against; a legacy `plan: 'trial'`
+ *   is treated as `'starter'` until the owner opens the dashboard and the
+ *   lazy migration flips the field.
  */
 import { useEffect, useMemo, useState } from 'react';
 
@@ -30,22 +37,9 @@ export type EntitlementsState = {
   error: Error | null;
   tier: Tier;
   effectiveTier: Tier;
-  trialEndsAt: Date | null;
-  trialDaysLeft: number | null;
-  trialExpired: boolean;
   demoMode: boolean;
   center: Center | null;
 };
-
-function parseTimestamp(ts: unknown): Date | null {
-  if (!ts) return null;
-  if (typeof (ts as { toDate?: () => Date }).toDate === 'function') {
-    return (ts as { toDate: () => Date }).toDate();
-  }
-  if (ts instanceof Date) return ts;
-  if (typeof ts === 'number') return new Date(ts);
-  return null;
-}
 
 function isTier(value: unknown): value is Tier {
   return typeof value === 'string' && (TIERS_ARRAY as readonly string[]).includes(value);
@@ -85,42 +79,30 @@ export function useEntitlements(): EntitlementsState {
   }, [daycareId]);
 
   return useMemo(() => {
-    const rawTier: Tier = isTier(center?.plan)
-      ? (center!.plan as Tier)
-      : DEFAULT_NEW_OWNER_TIER;
-
-    const trialEndsAt = parseTimestamp(center?.trialEndsAt);
-    const now = Date.now();
-    const trialExpired =
-      rawTier === 'trial' && trialEndsAt !== null && trialEndsAt.getTime() < now;
-
-    const trialDaysLeft =
-      rawTier === 'trial' && trialEndsAt
-        ? Math.max(
-            0,
-            Math.ceil((trialEndsAt.getTime() - now) / (24 * 60 * 60 * 1000)),
-          )
-        : null;
+    // Treat legacy `'trial'` as `'starter'` from the teacher/parent POV.
+    // The real migration is owner-side (runs in the dashboard); until
+    // the owner next signs in, we just show the same feature set they
+    // will have after migration.
+    const rawPlan = center?.plan;
+    const rawTier: Tier = rawPlan === 'trial'
+      ? 'starter'
+      : isTier(rawPlan)
+        ? (rawPlan as Tier)
+        : DEFAULT_NEW_OWNER_TIER;
 
     const demoMode = !!center?.demoMode;
 
-    let effectiveTier: Tier;
-    if (demoMode) {
-      effectiveTier = 'premium';
-    } else if (trialExpired) {
-      effectiveTier = 'starter';
-    } else {
-      effectiveTier = rawTier;
-    }
+    // demoMode unlocks everything (for sales demos). Otherwise the raw
+    // (normalized) tier flows straight through — no trial-expiry
+    // downgrade logic lives here anymore, and the /paywall lock is
+    // owner-only.
+    const effectiveTier: Tier = demoMode ? 'premium' : rawTier;
 
     return {
       loading,
       error,
       tier: rawTier,
       effectiveTier,
-      trialEndsAt,
-      trialDaysLeft,
-      trialExpired,
       demoMode,
       center,
     };

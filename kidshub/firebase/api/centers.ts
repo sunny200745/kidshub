@@ -25,8 +25,16 @@ export type Center = {
   id: string;
   ownerId?: string;
   name?: string;
+  // `'trial'` is a legacy plan key — new owners land on `'starter'` and
+  // any existing `'trial'` docs are migrated on next owner login (see
+  // kidshub-dashboard/src/firebase/api/centers.js → migrateLegacyTrialToStarter).
+  // We keep it in the type so parent/teacher reads during the migration
+  // window don't crash.
   plan?: 'trial' | 'starter' | 'pro' | 'premium';
-  trialEndsAt?: { toMillis: () => number; toDate: () => Date } | null;
+  // Stamped when the owner enters the 60-day Starter free window.
+  // Owner-side only consumes this (for /paywall gating); exposed here
+  // so the type is complete for any future read.
+  starterStartedAt?: { toMillis: () => number; toDate: () => Date } | null;
   demoMode?: boolean;
   [key: string]: unknown;
 };

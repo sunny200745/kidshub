@@ -92,7 +92,8 @@ function currentDaycareId() {
 /**
  * Resolve the owner's EFFECTIVE tier the same way useEntitlements does:
  *   - demoMode on                 → 'premium'
- *   - plan='trial' + expired      → 'starter'
+ *   - legacy plan='trial'         → 'starter' (treated as Starter until
+ *                                   useEntitlements migrates them)
  *   - otherwise                   → raw plan (or 'starter' as defensive default)
  *
  * Done as a one-shot get() rather than subscribing — we only need the value
@@ -103,19 +104,10 @@ async function resolveEffectiveTier() {
   const snap = await getDoc(doc(db, 'centers', uid));
   const data = snap.exists() ? snap.data() : null;
 
-  const rawTier = TIERS_ARRAY.includes(data?.plan) ? data.plan : 'starter';
   if (data?.demoMode) return 'premium';
 
-  if (rawTier === 'trial') {
-    const ts = data?.trialEndsAt;
-    const ends =
-      ts && typeof ts.toDate === 'function'
-        ? ts.toDate()
-        : ts instanceof Date
-        ? ts
-        : null;
-    if (ends && ends.getTime() < Date.now()) return 'starter';
-  }
+  const rawTier = TIERS_ARRAY.includes(data?.plan) ? data.plan : 'starter';
+  if (rawTier === 'trial') return 'starter';
   return rawTier;
 }
 

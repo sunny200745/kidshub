@@ -92,7 +92,7 @@ const CARD_DEFS = [
 export default function Welcome() {
   const navigate = useNavigate();
   const { user, profile } = useAuth();
-  const { tier, trialDaysLeft, center } = useEntitlements();
+  const { tier, starterDaysLeft, center } = useEntitlements();
 
   const [classroomCount, setClassroomCount] = useState(null);
   const [childCount, setChildCount] = useState(null);
@@ -153,8 +153,8 @@ export default function Welcome() {
         <div className="mb-10">
           <div className="inline-flex items-center gap-2 rounded-full border border-brand-200 bg-white/60 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-brand-700 backdrop-blur">
             <Sparkles className="h-3.5 w-3.5" />
-            {tier === 'trial' && trialDaysLeft !== null
-              ? `${trialDaysLeft}-day Premium trial active`
+            {tier === 'starter' && starterDaysLeft !== null
+              ? `${starterDaysLeft} day${starterDaysLeft === 1 ? '' : 's'} free left`
               : 'Getting started'}
           </div>
           <h1 className="mt-4 text-3xl font-bold text-surface-900 sm:text-4xl">
@@ -162,8 +162,8 @@ export default function Welcome() {
           </h1>
           <p className="mt-3 max-w-2xl text-base text-surface-600">
             Four quick steps cover the essentials. You can skip any of them and
-            come back later from the sidebar. Nothing here is mandatory — you
-            already have full Premium access during your trial.
+            come back later from the sidebar. Nothing here is mandatory — your
+            free window is already running.
           </p>
 
           {/* Progress bar */}

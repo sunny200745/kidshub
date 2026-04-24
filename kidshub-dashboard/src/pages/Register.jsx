@@ -11,7 +11,7 @@ import { auth, db } from '../firebase/config';
 import { useAuth } from '../contexts';
 import { ROLES } from '../constants/roles';
 import { defaultPlanFields } from '../firebase/api/centers';
-import { STARTER_FREE_MONTHS, TRIAL_DURATION_DAYS } from '../config/product';
+import { STARTER_FREE_DAYS } from '../config/product';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -190,9 +190,11 @@ export default function Register() {
             sunday: { open: '08:00', close: '14:00', closed: true },
           },
         },
-        // Sprint 1 (PRODUCT_PLAN): stamp plan/trialEndsAt/demoMode so
-        // the entitlements system has something to read. New owners start
-        // on a 14-day Premium trial, then auto-downgrade to Starter.
+        // Stamp plan / starterStartedAt / demoMode so the entitlements
+        // system has something to read. New owners land on Starter
+        // directly with a fresh 60-day free-use clock — no upfront
+        // Premium trial, no card required (see config/product.ts for
+        // the full onboarding journey).
         ...defaultPlanFields(),
         // Onboarding journey (stop 2): new owner hasn't dismissed /welcome
         // yet. This nested map leaves room for future signals (seenAt,
@@ -264,7 +266,7 @@ export default function Register() {
             Join hundreds of daycare owners who trust KidsHub to streamline their operations.
           </p>
           <p className="text-sm text-brand-400/90 mb-12 max-w-md">
-            {TRIAL_DURATION_DAYS} days of Premium on us. No card required.
+            {STARTER_FREE_DAYS} days free. No card required.
           </p>
 
           {/* Benefits */}
@@ -299,19 +301,19 @@ export default function Register() {
           </div>
 
           <div className="bg-white rounded-3xl shadow-soft-xl p-8 sm:p-10 border border-surface-100">
-            {/* Trial-starts-today strip — honest upfront framing of the 14-day
-               Premium trial + Starter grace so owners aren't surprised by a
-               silent downgrade later (Stop 1 of the onboarding journey). */}
+            {/* Starter-free strip — honest upfront framing of the 60-day
+               free window + what happens after (paywall + contact sales),
+               so owners aren't surprised by a silent lock later. */}
             <div className="mb-7 flex items-start gap-3 rounded-2xl border border-brand-100 bg-brand-50/60 px-4 py-3">
               <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-accent-500 to-brand-500 text-white">
                 <Sparkles className="h-4 w-4" />
               </div>
               <div className="text-sm">
                 <p className="font-semibold text-surface-900">
-                  Your {TRIAL_DURATION_DAYS}-day Premium trial starts today
+                  Free for {STARTER_FREE_DAYS} days — no card required
                 </p>
                 <p className="text-surface-500">
-                  No card required. Keep going free on Starter for {STARTER_FREE_MONTHS} more months after the trial ends.
+                  Start on Starter with full Starter-tier access. Upgrade any time; after {STARTER_FREE_DAYS} days a membership is required to keep your center live.
                 </p>
               </div>
             </div>

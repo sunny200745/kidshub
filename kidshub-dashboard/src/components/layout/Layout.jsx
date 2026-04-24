@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { PlanStateBanner } from './PlanStateBanner';
-import { PlanGateInterstitial } from '../PlanGateInterstitial';
 
 export function Layout({ children, title, subtitle, actions }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -46,10 +45,13 @@ export function Layout({ children, title, subtitle, actions }) {
           sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'
         }`}
       >
-        {/* Plan state strip (trial countdown / starter grace / etc.) —
-           stops 3-4 of the owner onboarding journey. Renders above the
-           header so it's always the first thing in the page flow, and
-           returns null on its own for unaffected tiers & suppressed routes. */}
+        {/* Plan state strip (Starter free-window countdown). Renders
+           above the header so it's always the first thing in the page
+           flow; returns null for unaffected tiers (pro / premium /
+           demo), loading, and suppressed routes (/plans, /welcome,
+           /paywall). Expired Starter is NOT handled here — the
+           <ProtectedRoute> redirects non-admin owners to /paywall once
+           the 60-day window closes. */}
         <PlanStateBanner />
         <Header
           title={title}
@@ -61,11 +63,6 @@ export function Layout({ children, title, subtitle, actions }) {
           {children}
         </main>
       </div>
-
-      {/* Trial-expired blocker (stop 5). Renders on top of everything
-         when the owner's trial just flipped to starter and they haven't
-         acknowledged yet. Non-dismissible — forces an explicit action. */}
-      <PlanGateInterstitial />
     </div>
   );
 }

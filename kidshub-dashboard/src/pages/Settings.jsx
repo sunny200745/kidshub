@@ -23,7 +23,7 @@ import { Card, CardBody, CardHeader, Avatar, Badge, Button, TierBadge } from '..
 import { useAuth } from '../contexts';
 import { useEntitlements, useFeature } from '../hooks';
 import { centersApi } from '../firebase/api/centers';
-import { ADMIN_UIDS, STARTER_FREE_MONTHS, TIERS, TIERS_ARRAY } from '../config/product';
+import { ADMIN_UIDS, STARTER_FREE_DAYS, TIERS, TIERS_ARRAY } from '../config/product';
 import { UpgradeCTA } from '../components/UpgradeCTA';
 
 function SettingsSection({ icon: Icon, title, description, tierFeature, children }) {
@@ -322,17 +322,23 @@ export default function Settings() {
 }
 
 /**
- * Live billing/plan section — reads the current owner's plan, trial days
- * left, and demoMode state from useEntitlements().
+ * Live billing/plan section — reads the current owner's plan, Starter
+ * free-window days left, and demoMode state from useEntitlements().
  *
- * Sprint 3 (E3): the upgrade button now routes to the in-dashboard `/plans`
- * page, which hosts the 3-tier comparison and the contact-sales form that
- * writes to the `leads/` collection (E2). Stripe self-serve lands in Track F.
+ * Upgrade button routes to the in-dashboard `/plans` page, which hosts the
+ * 3-tier comparison and the contact-sales form that writes to the `leads/`
+ * collection. Stripe self-serve lands in Track F.
  */
 function BillingSection() {
   const navigate = useNavigate();
-  const { loading, tier, effectiveTier, trialDaysLeft, trialExpired, demoMode } =
-    useEntitlements();
+  const {
+    loading,
+    tier,
+    effectiveTier,
+    starterDaysLeft,
+    starterPromoExpired,
+    demoMode,
+  } = useEntitlements();
 
   if (loading) {
     return (
@@ -352,9 +358,9 @@ function BillingSection() {
   const tierInfo = TIERS[tier] ?? TIERS.starter;
   const price =
     tierInfo.monthlyPriceUsd === null
-      ? 'Free during trial'
+      ? '—'
       : tierInfo.monthlyPriceUsd === 0
-      ? `Free for ${STARTER_FREE_MONTHS} months`
+      ? `Free for ${STARTER_FREE_DAYS} days`
       : `$${tierInfo.monthlyPriceUsd}/month`;
 
   return (
@@ -369,11 +375,11 @@ function BillingSection() {
             <div className="flex items-center gap-2">
               <Badge variant="brand">{tierInfo.name} plan</Badge>
               {demoMode && <Badge variant="warning">Demo mode</Badge>}
-              {tier === 'trial' && trialDaysLeft !== null && (
-                <Badge variant={trialDaysLeft <= 3 ? 'danger' : 'info'}>
-                  {trialExpired
-                    ? 'Trial ended'
-                    : `${trialDaysLeft} day${trialDaysLeft === 1 ? '' : 's'} left`}
+              {tier === 'starter' && starterDaysLeft !== null && (
+                <Badge variant={starterPromoExpired || starterDaysLeft <= 3 ? 'danger' : 'info'}>
+                  {starterPromoExpired
+                    ? 'Free window ended'
+                    : `${starterDaysLeft} free day${starterDaysLeft === 1 ? '' : 's'} left`}
                 </Badge>
               )}
             </div>
@@ -399,8 +405,8 @@ function BillingSection() {
         description={
           demoMode
             ? 'Premium (via demo mode)'
-            : trialExpired
-            ? 'Starter (trial expired)'
+            : starterPromoExpired
+            ? 'Starter (free window ended — paywall active)'
             : tierInfo.name
         }
       >
@@ -421,10 +427,11 @@ function BillingSection() {
  * Houses two tools:
  *   1. Demo mode — one-click "unlock everything" for sales demos.
  *   2. Plan override (QA) — one-click switch between Starter / Pro /
- *      Premium / Trial to verify that FeatureGate + UpgradeCTA banners
- *      render correctly on every paid surface. Trial ranks == Premium by
- *      design, so without this tool you'd have to edit Firestore by hand
- *      every time you wanted to see a gate fire.
+ *      Premium to verify that FeatureGate + UpgradeCTA banners render
+ *      correctly on every paid surface. The legacy `trial` key is also
+ *      listed so QA can reproduce the one-shot legacy-trial migration
+ *      path (migrateLegacyTrialToStarter flips it back to Starter on
+ *      the next snapshot — the button round-trips through that flow).
  */
 function AdminSection() {
   const { user } = useAuth();
@@ -496,29 +503,21 @@ function AdminSection() {
 
       <SettingsItem
         label="Plan override (QA)"
-        description="One-click switch for verifying paywalls. Clicking Trial also resets the 14-day clock — useful if it expired mid-test."
+        description="One-click switch for verifying gates and the /paywall redirect. To test paywall, switch to Starter then manually edit starterStartedAt to 61+ days ago in Firestore."
       >
         <div className="flex flex-wrap items-center justify-end gap-2">
-          {TIERS_ARRAY.map((planKey) => {
+          {TIERS_ARRAY.filter((k) => k !== 'trial').map((planKey) => {
             const isCurrent = tier === planKey;
             const isPending = planPending === planKey;
             const wasJustSaved = planJustSaved === planKey;
-            // Trial stays clickable when current because the click also
-            // refreshes trialEndsAt — useful for QA once the clock expires.
-            const disabled = !!planPending || (isCurrent && planKey !== 'trial');
+            const disabled = !!planPending || isCurrent;
             return (
               <button
                 key={planKey}
                 type="button"
                 onClick={() => handleSetPlan(planKey)}
                 disabled={disabled}
-                title={
-                  isCurrent && planKey === 'trial'
-                    ? 'Reset the 14-day trial clock'
-                    : isCurrent
-                      ? 'Current plan'
-                      : `Switch to ${TIERS[planKey].name}`
-                }
+                title={isCurrent ? 'Current plan' : `Switch to ${TIERS[planKey].name}`}
                 className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
                   isCurrent
                     ? 'bg-brand-500 border-brand-500 text-white'

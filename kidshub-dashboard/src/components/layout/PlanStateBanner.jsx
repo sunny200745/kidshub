@@ -9,42 +9,37 @@ import { STARTER_PROMO_WARNING_DAYS } from '../../config/product';
  * PlanStateBanner — the dashboard shell's tenant-wide plan nag strip.
  *
  * Renders across every authenticated dashboard page (mounted in
- * `<Layout>`). Drives four visual states off `useEntitlements()`:
+ * `<Layout>`). Drives two visual states off `useEntitlements()`:
  *
- *   1. GREEN TRIAL   (trial + trialDaysLeft > TRIAL_WARNING_DAYS)
- *        Calm "Premium trial active" strip. Dismissible per-tab.
- *
- *   2. AMBER TRIAL   (trial + trialDaysLeft <= TRIAL_WARNING_DAYS)
- *        Urgent "trial ends in N days" strip. NOT dismissible.
- *
- *   3. GREEN STARTER (starter + starterDaysLeft > STARTER_PROMO_WARNING_DAYS)
+ *   1. GREEN STARTER (starter + starterDaysLeft > STARTER_PROMO_WARNING_DAYS)
  *        Calm "X days left in your free Starter window" strip.
- *        Dismissible per-tab — the warning is still far off.
+ *        Dismissible per-tab — the deadline is still far off.
  *
- *   4. AMBER STARTER (starter + starterDaysLeft <= STARTER_PROMO_WARNING_DAYS)
+ *   2. AMBER STARTER (starter + starterDaysLeft <= STARTER_PROMO_WARNING_DAYS)
  *        Urgent "free window ends in N days — upgrade to stay live"
  *        strip. NOT dismissible.
  *
- *   HIDDEN: every other case — pro, premium, demoMode, loading, and
- *   the expired states (handled by the PlanGateInterstitial modal).
+ *   HIDDEN: every other case — pro, premium, demoMode, loading, and the
+ *   expired Starter state. Expired Starter is handled by the `/paywall`
+ *   route (ProtectedRoute redirects non-admin owners there), so we
+ *   intentionally render nothing here past day 60 — the banner should
+ *   never appear side-by-side with the paywall content.
  *
  * Demo mode suppresses the banner entirely — internal sales demos
- * shouldn't look like a trial/grace period. Expired states surface
- * the full-screen blocker instead so we skip the banner for them.
+ * shouldn't look like a countdown.
  *
  * Routes excluded from rendering:
  *   - /plans    — they're literally looking at pricing, no nag needed.
  *   - /welcome  — keep the onboarding wizard visually clean.
+ *   - /paywall  — the paywall IS the message; don't stack a banner above.
  *
- * Dismiss keys are scoped to the RELEVANT clock (trialEndsAt for trial,
- * starterPromoEndsAt for starter) so a transition from trial → starter
- * doesn't inherit a stale dismissal and hide the starter countdown.
+ * Dismiss key is scoped to `starterPromoEndsAt` so an admin-triggered
+ * re-stamp (or a future billing event that resets the window) doesn't
+ * inherit a stale dismissal.
  */
 
-const TRIAL_WARNING_DAYS = 3;
-const TRIAL_STORAGE_PREFIX = 'kh:trial-banner-dismissed:';
 const STARTER_STORAGE_PREFIX = 'kh:starter-banner-dismissed:';
-const SUPPRESSED_PATHS = new Set(['/plans', '/welcome']);
+const SUPPRESSED_PATHS = new Set(['/plans', '/welcome', '/paywall']);
 
 function useDismissible(storageKey) {
   const [dismissed, setDismissed] = useState(() => {
@@ -67,83 +62,6 @@ function useDismissible(storageKey) {
   };
 
   return [dismissed, dismiss];
-}
-
-function TrialBanner({ trialEndsAt, trialDaysLeft }) {
-  const dismissKey = trialEndsAt
-    ? `${TRIAL_STORAGE_PREFIX}${trialEndsAt.getTime()}`
-    : null;
-  const [dismissed, dismiss] = useDismissible(dismissKey);
-
-  const isUrgent = trialDaysLeft <= TRIAL_WARNING_DAYS;
-  if (!isUrgent && dismissed) return null;
-
-  const daysLabel =
-    trialDaysLeft === 0
-      ? 'Your trial ends today'
-      : trialDaysLeft === 1
-      ? '1 day left on your Premium trial'
-      : `${trialDaysLeft} days left on your Premium trial`;
-
-  if (isUrgent) {
-    return (
-      <div className="border-b border-warning-200 bg-warning-50">
-        <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-2.5 sm:px-6">
-          <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-warning-500/15">
-            <AlertTriangle className="h-4 w-4 text-warning-700" />
-          </div>
-          <div className="flex-1 text-sm">
-            <span className="font-semibold text-warning-900">{daysLabel}.</span>{' '}
-            <span className="text-warning-800">
-              Upgrade to keep Premium features, or continue on Starter (free for 2 months).
-            </span>
-          </div>
-          <Link
-            to="/plans"
-            className="hidden flex-shrink-0 rounded-lg bg-warning-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-warning-700 sm:inline-flex"
-          >
-            See plans
-          </Link>
-          <Link
-            to="/plans"
-            className="flex-shrink-0 rounded-lg bg-warning-600 px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-warning-700 sm:hidden"
-          >
-            Upgrade
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="border-b border-success-200 bg-success-50">
-      <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-2.5 sm:px-6">
-        <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-success-500/15">
-          <Sparkles className="h-4 w-4 text-success-700" />
-        </div>
-        <div className="flex-1 text-sm">
-          <span className="font-semibold text-success-900">{daysLabel}.</span>{' '}
-          <span className="text-success-800">
-            Enjoy full access — no card required.
-          </span>
-        </div>
-        <Link
-          to="/plans"
-          className="hidden flex-shrink-0 text-xs font-semibold text-success-800 hover:text-success-900 sm:inline-flex"
-        >
-          See plans
-        </Link>
-        <button
-          type="button"
-          onClick={dismiss}
-          aria-label="Dismiss trial banner"
-          className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md text-success-700 transition-colors hover:bg-success-100"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-    </div>
-  );
 }
 
 function StarterGraceBanner({ starterPromoEndsAt, starterDaysLeft }) {
@@ -227,9 +145,6 @@ export function PlanStateBanner() {
   const location = useLocation();
   const {
     tier,
-    trialDaysLeft,
-    trialExpired,
-    trialEndsAt,
     starterDaysLeft,
     starterPromoExpired,
     starterPromoEndsAt,
@@ -241,12 +156,8 @@ export function PlanStateBanner() {
   if (demoMode) return null;
   if (SUPPRESSED_PATHS.has(location.pathname)) return null;
 
-  // Trial — green/amber countdown; expired handled by interstitial.
-  if (tier === 'trial' && !trialExpired && trialDaysLeft !== null) {
-    return <TrialBanner trialEndsAt={trialEndsAt} trialDaysLeft={trialDaysLeft} />;
-  }
-
-  // Starter — green/amber grace countdown; expired handled by interstitial.
+  // Starter — green/amber countdown. Expired Starter is handled by the
+  // /paywall route, so we render nothing once the window closes.
   if (tier === 'starter' && !starterPromoExpired && starterDaysLeft !== null) {
     return (
       <StarterGraceBanner

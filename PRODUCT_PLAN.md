@@ -20,20 +20,20 @@ Build a demo-ready, feature-gated daycare SaaS where:
 
 ## Tier structure (strawman — confirm before we build)
 
-Four tiers, with Trial being a time-limited full-access state rather than a separate paid tier.
+Three tiers. New signups land directly on **Starter** with a 60-day free window. When the window closes, owners are redirected to a full-screen paywall with a "Contact sales" CTA — no silent downgrade, no free-forever fallback. `trial` still exists in the schema as a legacy key for pre-flip owners and is auto-migrated to Starter on next login.
 
 | Tier | Price (strawman) | Limits | Positioning |
 |---|---|---|---|
-| **Trial** | Free, 14 days | Full Premium access | New signups land here, auto-downgrade to Starter when trial ends unless upgraded |
-| **Starter** | Free for first 2 months | 1 classroom · 15 children · 2 staff | Small home daycares — a 2-month on-ramp past the trial so they get hooked before the paywall lands |
+| **Starter** | Free for first 60 days, then paywalled | 1 classroom · 15 children · 2 staff | Default landing tier — 60-day runway to evaluate, then you pick a plan or the account locks |
 | **Pro** | ~$39/mo (placeholder) | 5 classrooms · 75 children · 15 staff | Standard center — the bread-and-butter tier |
 | **Premium** | ~$99/mo (placeholder) | Unlimited classrooms/children/staff · multi-daycare | Multi-location operators, franchise owners |
 
 **Decision points for you:**
-1. **Tier count**: 3 paid-facing tiers (Starter/Pro/Premium) + hidden Trial — or do you want a 4th "Enterprise" / "Custom" tier for the biggest accounts?
+1. **Tier count**: 3 tiers today (Starter/Pro/Premium) — add a 4th "Enterprise" / "Custom" tier later for the biggest accounts if needed.
 2. **Tier names**: `Starter` / `Pro` / `Premium` (generic, clear) vs something branded (`Sprout` / `Bloom` / `Canopy`)? I lean generic — easier for customers to map against competitors.
 3. **Starter limits**: generous enough to actually be useful (so people use it) but tight enough to drive upgrades. 1 classroom / 15 kids is my recommendation — 1 classroom kills multi-classroom centers immediately.
 4. **Pricing**: placeholders above. We don't need final numbers until just before first sale, but we need ranges to shape the upgrade CTA copy.
+5. **Paywall enforcement**: day-61 hard redirect to `/paywall` is in place (nav-layer lock). Actual billing / Stripe activation that clears the block lives in Track F.
 
 ---
 
@@ -83,15 +83,15 @@ Each track is a self-contained slice. Tracks A + B + E are pre-sale critical. D 
 
 The plumbing that gates everything. Build once, reuse everywhere.
 
-- [ ] **A1** Tier data model: extend `centers/{ownerId}` with `plan: 'starter' | 'pro' | 'premium'`, `trialEndsAt?: Timestamp`, `demoMode?: boolean`. Default new owners to `trial` until trialEndsAt passes.
+- [x] **A1** Tier data model: `centers/{ownerId}` has `plan: 'starter' | 'pro' | 'premium'`, `starterStartedAt: Timestamp` (when the 60-day free window began), `demoMode?: boolean`. New owners default to `starter` with `starterStartedAt = serverTimestamp()`. Legacy `plan: 'trial'` docs are lazily migrated to Starter on next login (fresh 60-day clock). _Shipped Sprint 3 → flipped to 60-day-Starter model Sprint 3.5._
 - [ ] **A2** `useEntitlements()` hook reading the current owner's center doc (for dashboard) and the daycare owner's center doc (for kidshub teacher/parent, via `profile.daycareId`).
 - [ ] **A3** `useFeature(key: FeatureKey)` hook — returns `{ enabled, reason, upgradeTo }`. Honors `demoMode: true` as override.
 - [ ] **A4** `<FeatureGate feature="photoJournal">` component — renders children if enabled, renders `<UpgradeCTA>` if not. Single-line wrap around any feature.
 - [ ] **A5** `<UpgradeCTA>` component — banner with "Upgrade to Pro" headline, required tier badge, "See plans" button → `/plans` page (dashboard) or contact-sales modal (kidshub).
 - [x] **A6** Quota enforcement on writes: extend dashboard `classroomsApi.create`, `childrenApi.create`, `staffApi.create` to refuse with a friendly error when tier quota exceeded. Rules also enforce the same so client bypass fails server-side. _Shipped Sprint 3: `kidshub-dashboard/src/firebase/api/quotas.js` throws typed `QuotaExceededError`; `<QuotaBanner>` shows the upgrade CTA in each `Add*` modal; rules enforce same limits via `planAllows()` (A7)._
-- [x] **A7** Firestore rule helper `planAllows(feature)` — reads `/centers/{daycareId}.plan` and checks the feature matrix. Prevents paid-feature writes even if the client is compromised. _Shipped Sprint 3 (see `firestore.rules` — `centerDoc()`, `effectiveTierRank()`, `requiredRankFor()`, `planAllows()`). Respects demoMode + expired-trial downgrade._
+- [x] **A7** Firestore rule helper `planAllows(feature)` — reads `/centers/{daycareId}.plan` and checks the feature matrix. Prevents paid-feature writes even if the client is compromised. _Shipped Sprint 3 (see `firestore.rules` — `centerDoc()`, `effectiveTierRank()`, `requiredRankFor()`, `planAllows()`). Respects demoMode; expired-Starter enforcement is owner-side via `/paywall` route — Track F adds rule-level billing gating._
 - [ ] **A8** Admin demo-mode toggle: dashboard owner-profile has a button visible only to owners whose uid is in a hard-coded admin list (e.g. `users/{uid}.isAdmin = true`). Flips `demoMode` on their center doc.
-- [x] **A9** Trial expiry cron: Firebase scheduled function runs daily, flips `plan: 'trial' → 'starter'` once `trialEndsAt < now`. (Actual billing enforcement is Track F.) _Sprint 3: shipped as a lazy owner-side downgrade (`centersApi.downgradeExpiredTrial()` wired into `useEntitlements`) — writes `plan: 'starter'` the first time an expired-trial owner opens the dashboard. Follow-up: a real Vercel cron / Firebase scheduled function for cases where the owner never comes back, TODO in Track F._
+- [x] **A9** ~~Trial expiry cron~~ — **superseded**. The 14-day Premium trial was removed in Sprint 3.5; new owners land on Starter directly. Legacy `plan: 'trial'` docs are lazy-migrated to Starter with a fresh 60-day clock via `centersApi.migrateLegacyTrialToStarter()` on next login. The 60-day Starter paywall is enforced nav-side (`ProtectedRoute` → `/paywall`); rule-level billing enforcement is Track F.
 
 ### Track B — Teacher UX redesign (Lillio-inspired)
 
@@ -141,7 +141,7 @@ Don't build these all at once. Build the highest-leverage ones first, keep the r
 
 What makes the product sellable, not just built.
 
-- [x] **E1** Pricing page on `getkidshub.com/pricing` — 3-tier comparison table, "Start free trial" + "Contact sales" CTAs. Feeds `leads` collection via existing `/api/chat` pattern. _Shipped Sprint 3 (`kidshub-landing/pricing.html`): hero + 3-tier cards + full feature comparison table + FAQ + inline contact-sales modal. Nav + mobile menu + footer link from index.html; served at `/pricing` via `vercel.json` cleanUrls._
+- [x] **E1** Pricing page on `getkidshub.com/pricing` — 3-tier comparison table, "Start free — 60 days" + "Contact sales" CTAs. Feeds `leads` collection via existing `/api/chat` pattern. _Shipped Sprint 3 (`kidshub-landing/pricing.html`): hero + 3-tier cards + full feature comparison table + FAQ + inline contact-sales modal. Nav + mobile menu + footer link from index.html; served at `/pricing` via `vercel.json` cleanUrls. Sprint 3.5: copy updated from "14-day Premium trial" → "60 days on Starter, then paywalled"._
 - [x] **E2** Contact sales flow — form on landing + in-app modal (triggered from `<UpgradeCTA>`). Writes to `leads` collection, emails us via Resend. _Shipped Sprint 3: `kidshub-landing/api/contact-sales.js` writes `leads/{id}` via Firestore REST (see `createFirestoreDoc()` in `_shared.js`) and sends `salesNotificationEmail` to `SALES_NOTIFICATION_TO` with `reply_to` set to the lead's email. Firestore rules allow anonymous `create` with field validation, deny all `read/update/delete`._
 - [x] **E3** Upgrade flow in dashboard — `/plans` page with current plan highlighted, compare table, "Contact sales to upgrade" button. (Stripe self-serve upgrade is Track F.) _Shipped Sprint 3 (`kidshub-dashboard/src/pages/Plans.jsx`): 3-tier cards with current-plan highlight, full feature comparison table, inline `<ContactSalesCard>` posting to the same `/api/contact-sales` endpoint. `<UpgradeCTA>` and Settings → Billing now route here instead of mailto; deep-links like `/plans?tier=pro&feature=photoJournal` pre-fill the form._
 - [ ] **E4** Sales demo guide — short doc with the demo flow: register owner → admin flips `demoMode: true` → walk through all features unlocked → show feature gates by flipping demoMode off.
@@ -166,7 +166,7 @@ Sprint length is loose; each sprint is ~1 coding session or a few hours.
 ### Sprint 1 — Foundation + first visible win ✅ DONE
 Goal: plumbing in place, obvious visual upgrade to show.
 
-- [x] A1 · Tier data model on `centers/{ownerId}` — `plan` / `trialEndsAt` / `demoMode` fields stamped at register, lazy-migrated for pre-existing centers
+- [x] A1 · Tier data model on `centers/{ownerId}` — `plan` / `starterStartedAt` / `demoMode` fields stamped at register, lazy-migrated for pre-existing centers (legacy `plan: 'trial'` → `starter` with fresh 60-day clock)
 - [x] A2 · `useEntitlements()` hook — dashboard + kidshub versions, same return shape
 - [x] A3 · `useFeature(key)` hook — returns `{ enabled, reason, upgradeTo }`
 - [x] A4 · `<FeatureGate feature="…">` — both apps
@@ -188,7 +188,7 @@ Goal: plumbing in place, obvious visual upgrade to show.
 ### Sprint 3 — Tier enforcement + pricing page ✅
 - [x] A6 · Quota enforcement on writes (`quotas.js` + `<QuotaBanner>`)
 - [x] A7 · Firestore rule `planAllows()` helper (feature matrix in rules)
-- [x] A9 · Trial expiry (lazy owner-side downgrade via `useEntitlements`)
+- [x] A9 · Trial expiry — **superseded Sprint 3.5**. 14-day Premium trial removed; Starter 60-day window + `/paywall` redirect replace it. Legacy docs lazy-migrated to Starter on next login.
 - [x] E1 · Pricing page on landing (`kidshub-landing/pricing.html`)
 - [x] E2 · Contact sales flow (`/api/contact-sales` → `leads/{id}` + Resend)
 - [x] E3 · In-dashboard `/plans` page (replaces all mailto CTAs)
@@ -248,14 +248,15 @@ That gives you a checklist of every open decision and the exact line to edit. No
 
 | Decision | Placeholder | Where to change |
 |---|---|---|
-| Tier names | `Starter` / `Pro` / `Premium` (+ `Trial`) | `TIERS[tier].name` |
+| Tier names | `Starter` / `Pro` / `Premium` (+ legacy `Trial` for migration only) | `TIERS[tier].name` |
 | Pricing | $0 / $39 / $99 | `TIERS[tier].monthlyPriceUsd` |
 | Starter limits | 1 classroom · 15 children · 2 staff | `QUOTAS` |
 | Pro limits | 5 classrooms · 75 children · 15 staff | `QUOTAS` |
 | Premium limits | unlimited (-1) | `QUOTAS` |
-| Trial duration | 14 days | `TRIAL_DURATION_DAYS` |
+| Starter free window | 60 days | `STARTER_FREE_DAYS` |
+| Default new-owner tier | `starter` | `DEFAULT_NEW_OWNER_TIER` |
 | Web app default | hidden (`false`) — env var override | `ENABLE_WEB_APP_DEFAULT` |
-| Admin UIDs (demoMode privilege) | empty `[]` | `ADMIN_UIDS` |
+| Admin UIDs (demoMode + paywall bypass) | empty `[]` | `ADMIN_UIDS` |
 
 These placeholders are internally consistent — the app runs correctly with them. Revisit before first-customer close; no rush.
 
@@ -266,4 +267,5 @@ These placeholders are internally consistent — the app runs correctly with the
 _Append dated notes as sprints complete._
 
 - **2026-04-22** — Plan drafted. Tier structure + feature matrix + 7-sprint execution plan laid out. Created `config/product.ts` as single source of truth for all tier/pricing/feature decisions; placeholders in place so Sprint 1 is unblocked. User deferred decisions on tier names, pricing, limits, trial duration — all tracked via `TODO(` markers in the config file.
+- **2026-04-24** — **Monetization pivot (Sprint 3.5).** Removed the 14-day Premium trial entirely. New owners now sign up directly on Starter with a 60-day free window (`STARTER_FREE_DAYS = 60`, stamped via `starterStartedAt`). When the window closes, non-admin owners hit a full-screen `/paywall` on every protected route — no silent downgrade, no free-forever Starter. Paywall page has "Contact sales" modal + plan snapshot; `ProtectedRoute` redirects to it, exempting `/paywall` and `/plans`. Legacy `plan: 'trial'` docs are lazy-migrated to Starter with a fresh 60-day clock via `migrateLegacyTrialToStarter()` on next login. Removed `PlanGateInterstitial`, `TrialBanner`, `downgradeExpiredTrial`, `acknowledgeTrialExpiry`, `STARTER_FREE_MONTHS`, `TRIAL_DURATION_DAYS`, `trialEndsAt`, `trialEndedAt`, `trialExpiryAcknowledgedAt`. `ContactSalesModal` extracted to a shared component for reuse across `/plans` and `/paywall`. Landing pricing copy + PRODUCT_PLAN + BILLING + config README aligned.
 - **2026-04-23** — Sprints 5, 6, 7 shipped in one push. Added `photos`, `attendance`, `healthLogs`, `weeklyPlans`, `activityTemplates`, `screenings` collections with types + Firestore rules + API modules + live hooks. New teacher pages: `/photos`, `/weekly-planner`, `/health-log`, `/curriculum`, `/screenings`, `/aria`. New owner dashboard page: `/reports` (Daily + Attendance CSV + Health CSV). Parent app updates: photo journal, weekly plan on schedule, messaging day dividers. Branding Settings section (D11). Scaffolded Stripe checkout + webhook endpoints and documented go-live flow in `BILLING.md`. Documented multi-daycare migration plan in `MULTI_DAYCARE.md`. Authored `SALES_DEMO_GUIDE.md`, `KIDSHUB_ONE_PAGER.md`, and a case-study template page on the landing site.

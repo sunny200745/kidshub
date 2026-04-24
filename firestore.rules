@@ -205,12 +205,24 @@ service cloud.firestore {
     // one extra read per rule — worth it for the safety.
     //
     // Tier satisfaction uses numeric ranks (matches TIER_ORDER):
-    //   starter=0 · pro=1 · premium=2 · trial=2 (trial == premium while active)
+    //   starter=0 · pro=1 · premium=2 · trial=0 (legacy, grandfathered to starter)
     //
-    // Trial expiry: rules do NOT enforce trialEndsAt. The client lazy-
-    // downgrades via `useEntitlements()` (A9), so a compromised client
-    // could theoretically keep writing as trial past its end. That's
-    // acceptable today — first-customer billing enforcement is Track F.
+    // Legacy trial handling: the old 14-day Premium trial was removed
+    // in Sprint 3.5 in favour of "60 days free on Starter, then hard
+    // paywall." Any `plan: 'trial'` docs still in Firestore are from
+    // pre-flip owners and are lazy-migrated to `plan: 'starter'` on
+    // next owner login (see kidshub-dashboard centersApi →
+    // migrateLegacyTrialToStarter). We therefore rank `trial` == `starter`
+    // at the rule layer so client + server agree during the migration
+    // window. No owner loses paid access — if their legacy trial was
+    // supposed to unlock Pro/Premium features, they weren't paying for
+    // them anyway.
+    //
+    // 60-day Starter paywall: rules do NOT enforce `starterStartedAt`.
+    // Nav-layer enforcement (ProtectedRoute → /paywall in the dashboard)
+    // is good enough for today — a compromised client could in theory
+    // keep writing as starter past day 60. Rule-level billing-status
+    // gating is Track F.
 
     function centerDoc() {
       return get(/databases/$(database)/documents/centers/$(userDaycare())).data;
@@ -227,12 +239,13 @@ service cloud.firestore {
     }
 
     // Maps a tier string to its capability rank. Higher == more features.
-    // Keep in sync with TIER_ORDER in config/product.ts.
+    // Keep in sync with TIER_ORDER in config/product.ts. `trial` is legacy
+    // (see comment block above) and maps to starter — identical to how
+    // the client normalizes it in useEntitlements.
     function tierRank(tier) {
       return tier == 'premium' ? 2
-        : tier == 'trial' ? 2
         : tier == 'pro' ? 1
-        : 0; // 'starter' or unknown
+        : 0; // 'starter', legacy 'trial', or unknown
     }
 
     // Effective rank for gating. Demo mode always passes every check.

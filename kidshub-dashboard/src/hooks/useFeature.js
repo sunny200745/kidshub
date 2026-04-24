@@ -19,7 +19,7 @@ import { useEntitlements } from './useEntitlements';
 
 /** @returns {{ enabled: boolean, loading: boolean, reason: string|null, upgradeTo: string|null, currentTier: string }} */
 export function useFeature(key) {
-  const { effectiveTier, loading, demoMode, trialExpired, tier } = useEntitlements();
+  const { effectiveTier, loading, demoMode } = useEntitlements();
 
   return useMemo(() => {
     const requiredTier = FEATURES[key];
@@ -40,21 +40,15 @@ export function useFeature(key) {
     }
 
     // Infra holds take precedence over the tier check. Features in
-    // INFRA_LOCKED_FEATURES are locked for every tier (even trial /
-    // premium) because backing infrastructure isn't provisioned yet —
-    // see config/product.ts for the current list and the flip rules.
+    // INFRA_LOCKED_FEATURES are locked for every tier (even premium)
+    // because backing infrastructure isn't provisioned yet — see
+    // config/product.ts for the current list and the flip rules.
     const infraLocked = INFRA_LOCKED_FEATURES.has(key);
     const enabled = !infraLocked && tierSatisfies(effectiveTier, requiredTier);
 
     let reason = null;
     if (!enabled) {
-      if (infraLocked) {
-        reason = 'infra-locked';
-      } else if (tier === 'trial' && trialExpired) {
-        reason = 'trial-expired';
-      } else {
-        reason = 'tier';
-      }
+      reason = infraLocked ? 'infra-locked' : 'tier';
     }
 
     return {
@@ -69,5 +63,5 @@ export function useFeature(key) {
       currentTier: effectiveTier,
       demoMode,
     };
-  }, [key, effectiveTier, loading, tier, trialExpired, demoMode]);
+  }, [key, effectiveTier, loading, demoMode]);
 }

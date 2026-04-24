@@ -2,24 +2,27 @@
  * centersApi — owner-side operations on the `centers/{ownerId}` tenant doc.
  *
  * The center doc holds daycare-level metadata + the billing/tier fields
- * that drive the entitlements system (Sprint 1 of PRODUCT_PLAN):
+ * that drive the entitlements system:
  *
- *   plan          : 'trial' | 'starter' | 'pro' | 'premium'
- *   trialEndsAt   : Timestamp | null   (only meaningful when plan === 'trial')
- *   demoMode      : boolean            (admin-only bypass of feature gates)
+ *   plan               : 'starter' | 'pro' | 'premium'  (legacy: 'trial')
+ *   starterStartedAt   : Timestamp   — stamped when a center first lands
+ *                        on Starter. Drives the 60-day free-use countdown
+ *                        and the /paywall redirect once the window closes.
+ *   demoMode           : boolean     — admin-only bypass of feature gates
+ *
+ * New signups start on Starter with `starterStartedAt` set to now. The
+ * old 14-day Premium trial is gone (see Register.jsx history).
  *
  * Legacy centers created before Sprint 1 lack these fields; consumers use
- * `ensurePlanStamped()` below to lazy-migrate on first read. This means we
- * don't need a separate one-off backfill script — the first time an owner
- * (or eventually, an automated Cloud Function) touches their center doc,
- * it gets the defaults.
+ * `ensurePlanStamped()` below to lazy-migrate on first read. Legacy trial
+ * owners are migrated to Starter by `migrateLegacyTrialToStarter` on
+ * their next login so nobody is stuck on a plan key we no longer support.
  *
  * Firestore rule (firestore.rules):
  *   - read  : self-owner, or any teacher/parent within the same daycare
  *   - write : self-owner only
  */
 import {
-  Timestamp,
   doc,
   getDoc,
   onSnapshot,
@@ -28,11 +31,7 @@ import {
   updateDoc,
 } from 'firebase/firestore';
 
-import {
-  DEFAULT_NEW_OWNER_TIER,
-  TIERS_ARRAY,
-  TRIAL_DURATION_DAYS,
-} from '../../config/product';
+import { DEFAULT_NEW_OWNER_TIER, TIERS_ARRAY } from '../../config/product';
 import { auth, db } from '../config';
 
 function currentOwnerId() {
@@ -44,24 +43,19 @@ function currentOwnerId() {
 }
 
 /**
- * JS Date → Firestore Timestamp N days from now. Exported so callers
- * (Register.jsx, admin tools) can stamp a consistent trialEndsAt.
- */
-export function trialEndsFromNow(days = TRIAL_DURATION_DAYS) {
-  return Timestamp.fromMillis(Date.now() + days * 24 * 60 * 60 * 1000);
-}
-
-/**
  * Default plan-related fields for a brand-new center. Used by Register.jsx
- * on owner signup and by `ensurePlanStamped()` below for legacy centers.
+ * on owner signup and by `ensurePlanStamped()` below for legacy centers
+ * missing a `plan` value.
  *
- * Trial is the default (per product strategy — every new owner gets 14 days
- * of full Premium access before auto-downgrade to Starter).
+ * Starter is the default: new owners get STARTER_FREE_DAYS days of free
+ * access (no card, no trial) before the /paywall gate activates. The
+ * `starterStartedAt` server timestamp is what useEntitlements reads to
+ * compute days-left and expired-ness.
  */
 export function defaultPlanFields() {
   return {
     plan: DEFAULT_NEW_OWNER_TIER,
-    trialEndsAt: trialEndsFromNow(),
+    starterStartedAt: serverTimestamp(),
     demoMode: false,
   };
 }
@@ -83,7 +77,7 @@ export function subscribeToSelfCenter(onNext, onError) {
 }
 
 /**
- * Ensure the CURRENT OWNER's center doc carries the plan/trialEndsAt/demoMode
+ * Ensure the CURRENT OWNER's center doc carries the plan/starterStartedAt/demoMode
  * fields. Safe to call repeatedly — a no-op once the fields exist.
  *
  * Idempotent lazy-migration: only writes the missing fields, never overwrites
@@ -126,78 +120,42 @@ export async function ensurePlanStamped(existing) {
 }
 
 /**
- * Downgrade an expired trial to Starter (A9 — client-side cron replacement).
+ * Migrate any legacy `plan: 'trial'` center to Starter with a fresh
+ * 60-day free-use window. Called by useEntitlements() the first time
+ * it sees a trial doc after the model flip (commit history shows we
+ * used to ship a 14-day Premium trial — that's gone; new owners land
+ * on Starter directly).
  *
- * Why client-side instead of a Firebase Cloud Function?
- *   - We don't have Firebase Functions deployed (Sprint 3 scope = ship
- *     tier gating fast, not stand up billing infra).
- *   - Every owner that hits the dashboard runs this on load, which covers
- *     the realistic case (expired trial + owner logs in again).
- *   - Tradeoff: an abandoned trial account lingers on `plan: 'trial'` in
- *     Firestore until they log back in. That's fine because:
- *       (a) `useEntitlements().effectiveTier` already returns 'starter'
- *           for expired trials, so the app behaves correctly regardless.
- *       (b) Billing enforcement (Track F) will revisit this with a real
- *           scheduled job when we actually charge cards.
+ * Semantics:
+ *   - Unconditional flip: we don't look at `trialEndsAt`. Whether the
+ *     legacy trial was "still active" or already expired, the owner
+ *     gets the same Starter treatment going forward. Trying to preserve
+ *     remaining trial days would mean keeping a whole code path alive
+ *     for a tiny population — not worth it.
+ *   - Fresh `starterStartedAt`: stamped "now", not retroactively. A
+ *     legacy-trial owner logging in today deserves a full 60 days,
+ *     not 60-minus-however-long-they-were-on-trial.
+ *   - Fire-and-forget: the caller's onSnapshot listener will re-fire
+ *     with the updated plan. Returning a truthy value tells the caller
+ *     to bail out of its current snapshot handler so the next update
+ *     drives the UI.
  *
- * Pre-conditions enforced here:
- *   - The current owner's center doc has `plan === 'trial'`.
- *   - `trialEndsAt` is in the past.
- * Violations → no-op (safer than writing on wrong state).
- *
- * Returns the updated plan when a write happens, else null.
+ * Returns 'starter' on successful write, null otherwise.
  */
-export async function downgradeExpiredTrial(existing) {
+export async function migrateLegacyTrialToStarter(existing) {
   if (!existing || existing.plan !== 'trial') return null;
-  const ts = existing.trialEndsAt;
-  const ends =
-    ts && typeof ts.toDate === 'function'
-      ? ts.toDate()
-      : ts instanceof Date
-      ? ts
-      : null;
-  if (!ends || ends.getTime() >= Date.now()) return null;
-
   const ownerId = currentOwnerId();
   try {
     await updateDoc(doc(db, 'centers', ownerId), {
       plan: 'starter',
-      // Stamp the moment the trial ended so <PlanGateInterstitial>
-      // (stop 5) can detect "just transitioned, hasn't been ack'd yet"
-      // and force the owner to consciously pick a path forward. Without
-      // this, the downgrade is invisible and intent gets lost.
-      trialEndedAt: serverTimestamp(),
-      // Stop 7 — begin the 2-month Starter grace clock. This lets us
-      // drive the starter-expiring banner + blocker purely from
-      // centers/{ownerId} without any extra collections.
       starterStartedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
     return 'starter';
   } catch (err) {
-    console.warn('[centersApi] downgradeExpiredTrial failed:', err);
+    console.warn('[centersApi] migrateLegacyTrialToStarter failed:', err);
     return null;
   }
-}
-
-/**
- * Owner-side acknowledgement of the "your trial just ended" blocker
- * (stop 5). Called when the owner picks any explicit action on the
- * <PlanGateInterstitial> modal — "Stay on Starter", "See plans",
- * "Contact sales" — so the interstitial doesn't re-appear on every
- * page navigation.
- *
- * We persist to Firestore (not localStorage) so the acknowledgement
- * survives device / browser changes and private-mode sessions. The
- * semantic is "user was made aware, don't block again" — no billing
- * or entitlement effects.
- */
-export async function acknowledgeTrialExpiry() {
-  const ownerId = currentOwnerId();
-  await updateDoc(doc(db, 'centers', ownerId), {
-    trialExpiryAcknowledgedAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
 }
 
 /**
@@ -220,13 +178,12 @@ export async function setDemoMode(enabled) {
  * the "Plan override" section on Settings for QA / sales testing, where
  * one-click tier changes are much faster than editing Firestore by hand.
  *
- * Semantics:
- *   - When `plan === 'trial'`, we ALSO refresh `trialEndsAt` to a fresh
- *     14-day window (otherwise flipping back to trial with a past
- *     `trialEndsAt` would immediately downgrade via `downgradeExpiredTrial`
- *     and negate the whole point of the test).
- *   - For any other tier, `trialEndsAt` is left untouched — harmless
- *     since `useEntitlements` only consults it when plan === 'trial'.
+ * Admin QA also uses this to test the /paywall flow — click Starter,
+ * then reset `starterStartedAt` to something 61+ days ago via Firestore
+ * console to trigger the redirect. We intentionally DON'T let setPlan
+ * overwrite an existing `starterStartedAt` when an admin re-clicks
+ * Starter, because doing so would let real owners game the grace
+ * indefinitely via plan toggles once this is customer-facing.
  *
  * Security: this uses the same `centers/{ownerId}` self-owner write rule
  * as every other field on the center doc. Once billing (Stripe) lands in
@@ -243,14 +200,7 @@ export async function setPlan(plan) {
     plan,
     updatedAt: serverTimestamp(),
   };
-  if (plan === 'trial') {
-    patch.trialEndsAt = trialEndsFromNow();
-  }
   if (plan === 'starter') {
-    // Stop 7 — first transition into Starter starts the 2-month grace
-    // clock. Only stamp if absent; subsequent flips (e.g. admin QA
-    // cycling between tiers) must NOT reset the clock, otherwise an
-    // owner could game the grace indefinitely via plan toggles.
     const existing = await getDoc(ref);
     const hasStamp = toMillisSafe(existing.data()?.starterStartedAt) > 0;
     if (!hasStamp) {
@@ -294,20 +244,6 @@ export async function ensureStarterStarted(existing) {
     console.warn('[centersApi] ensureStarterStarted failed:', err);
     return false;
   }
-}
-
-/**
- * Owner-side acknowledgement of the "Starter grace window has ended"
- * blocker (stop 7). Parallel to acknowledgeTrialExpiry above — writes
- * a timestamp to the center doc so the interstitial doesn't re-appear
- * on every navigation.
- */
-export async function acknowledgeStarterPromoExpiry() {
-  const ownerId = currentOwnerId();
-  await updateDoc(doc(db, 'centers', ownerId), {
-    starterPromoAcknowledgedAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
 }
 
 /**
@@ -363,14 +299,11 @@ export const centersApi = {
   subscribeToSelfCenter,
   ensurePlanStamped,
   ensureStarterStarted,
-  downgradeExpiredTrial,
-  acknowledgeTrialExpiry,
-  acknowledgeStarterPromoExpiry,
+  migrateLegacyTrialToStarter,
   setDemoMode,
   setPlan,
   getSelfCenter,
   updateBranding,
   markOnboardingDismissed,
   defaultPlanFields,
-  trialEndsFromNow,
 };

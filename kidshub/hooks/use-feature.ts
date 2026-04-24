@@ -17,14 +17,14 @@ import { useEntitlements } from './use-entitlements';
 export type FeatureState = {
   enabled: boolean;
   loading: boolean;
-  reason: 'tier' | 'trial-expired' | 'infra-locked' | 'unknown-feature' | null;
+  reason: 'tier' | 'infra-locked' | 'unknown-feature' | null;
   upgradeTo: Tier | null;
   currentTier: Tier;
   demoMode: boolean;
 };
 
 export function useFeature(key: FeatureKey): FeatureState {
-  const { effectiveTier, loading, demoMode, trialExpired, tier } = useEntitlements();
+  const { effectiveTier, loading, demoMode } = useEntitlements();
 
   return useMemo<FeatureState>(() => {
     const requiredTier = FEATURES[key];
@@ -44,18 +44,14 @@ export function useFeature(key: FeatureKey): FeatureState {
 
     // Infra holds take precedence over the tier check. If the feature
     // is temporarily locked because backing infrastructure isn't ready,
-    // every tier sees the upgrade CTA — even trial/premium. See
+    // every tier sees the upgrade CTA — even premium. See
     // config/product.ts → INFRA_LOCKED_FEATURES.
     const infraLocked = INFRA_LOCKED_FEATURES.has(key);
     const enabled = !infraLocked && tierSatisfies(effectiveTier, requiredTier);
 
     let reason: FeatureState['reason'] = null;
     if (!enabled) {
-      reason = infraLocked
-        ? 'infra-locked'
-        : tier === 'trial' && trialExpired
-          ? 'trial-expired'
-          : 'tier';
+      reason = infraLocked ? 'infra-locked' : 'tier';
     }
 
     return {
@@ -66,5 +62,5 @@ export function useFeature(key: FeatureKey): FeatureState {
       currentTier: effectiveTier,
       demoMode,
     };
-  }, [key, effectiveTier, loading, tier, trialExpired, demoMode]);
+  }, [key, effectiveTier, loading, demoMode]);
 }

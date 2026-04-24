@@ -19,20 +19,28 @@
 /**
  * Canonical tier keys. Stored on `centers/{ownerId}.plan` in Firestore.
  * Adding a tier? Append here AND update `TIER_ORDER` AND `TIERS`.
+ *
+ * NOTE — `trial` is a **legacy-only** key. New owners signing up never
+ * get it; they land on Starter directly (see DEFAULT_NEW_OWNER_TIER below).
+ * We keep `trial` in the array so that owners whose centers were created
+ * under the old 14-day-trial flow don't crash the app before
+ * `migrateLegacyTrialToStarter` flips them on their next login.
  */
 export const TIERS_ARRAY = ['trial', 'starter', 'pro', 'premium'] as const;
 export type Tier = (typeof TIERS_ARRAY)[number];
 
 /**
  * Ordered by ascending capability. Used to answer "does tier X satisfy
- * requirement Y" via `tierIndex(x) >= tierIndex(y)`. Trial ranks equal to
- * premium because during trial the customer gets full access.
+ * requirement Y" via `tierIndex(x) >= tierIndex(y)`. Legacy `trial` docs
+ * keep premium-equivalent ranking so they don't lose access before the
+ * migration helper flips them — they get the intended Starter scope after
+ * the next login.
  */
 export const TIER_ORDER: Record<Tier, number> = {
   starter: 0,
   pro: 1,
   premium: 2,
-  trial: 2, // intentional — trial == premium while active
+  trial: 2, // legacy — see migrateLegacyTrialToStarter
 };
 
 export function tierSatisfies(current: Tier, required: Tier): boolean {
@@ -61,19 +69,23 @@ export const TIERS: Record<Tier, {
 }> = {
   trial: {
     key: 'trial',
-    name: 'Trial',
-    tagline: '14 days of full Premium access, free',
-    monthlyPriceUsd: null,
-    accentColor: '#8B5CF6', // purple
+    // Legacy — retained so pre-existing `plan: 'trial'` docs don't
+    // collide with TIERS[plan] lookups. migrateLegacyTrialToStarter
+    // flips these to Starter on next login. No new signups land here.
+    name: 'Starter',
+    tagline: 'Legacy account — migrating to Starter',
+    monthlyPriceUsd: 0,
+    accentColor: '#64748B',
   },
   starter: {
     key: 'starter',
-    // Starter is a 2-month free on-ramp, NOT free forever. The promo
-    // window is `STARTER_FREE_MONTHS` below. After the window expires,
-    // owners must upgrade to Pro/Premium (enforcement ships with
-    // billing — see TODO at `STARTER_FREE_MONTHS`).
+    // Starter is the new signup default. Owners get full Starter-tier
+    // access free for STARTER_FREE_DAYS days (see below). When the
+    // window expires every dashboard route redirects to `/paywall`
+    // until they upgrade — the "lock the entry" behavior. Teachers and
+    // parents already onboarded keep their mobile access unchanged.
     name: 'Starter',
-    tagline: 'Free for your first 2 months',
+    tagline: 'Free for your first 60 days',
     monthlyPriceUsd: 0,
     accentColor: '#64748B', // slate
   },
@@ -93,40 +105,36 @@ export const TIERS: Record<Tier, {
   },
 };
 
-// ─── Trial configuration ──────────────────────────────────────────────
-
-/** TODO(trial): confirm 14 days vs 30 before GA. */
-export const TRIAL_DURATION_DAYS = 14;
-
-// ─── Starter promo window ─────────────────────────────────────────────
+// ─── Starter free-use window ──────────────────────────────────────────
 
 /**
- * Starter is offered free for the first `STARTER_FREE_MONTHS` months
- * of a center's life, then requires a paid plan. This constant is the
- * SINGLE source of truth for the promo window — copy everywhere
- * (pricing page, Settings → Plan & billing, in-app CTAs) renders from
+ * New owners get Starter-tier access free for `STARTER_FREE_DAYS` days.
+ * After the window closes the dashboard redirects them to `/paywall` on
+ * every route except `/plans`, where they can either contact sales or
+ * log out. This constant is the SINGLE source of truth for that window —
+ * pricing page, Settings → Plan & billing, in-app CTAs all render from
  * here so tweaks are a one-file edit.
  *
- * Stop 7 of the owner onboarding journey:
- *   1. `centers/{ownerId}.starterStartedAt` is stamped by
- *      centers.ts whenever the center transitions to starter (trial
- *      expiry AND explicit setPlan('starter')). Legacy starter
- *      centers get a lazy stamp on first useEntitlements read.
- *   2. The helpers below derive days-left / expired state from that
- *      timestamp. UI components (PlanStateBanner, PlanGateInterstitial)
- *      drive their surfaces off those helpers.
- *   3. TODO(billing): we do NOT yet hard-enforce "starter_expired" by
- *      blocking writes. The current shape is behavioral — banner +
- *      blocker modal + upgrade CTAs. When Stripe ships (Track F) this
- *      module will additionally feed into Firestore rules to prevent
- *      writes to paid-tier surfaces past expiry.
+ * How the clock works end-to-end:
+ *   1. Register.jsx stamps `centers/{ownerId}.starterStartedAt` on
+ *      signup via `defaultPlanFields()`.
+ *   2. `ensureStarterStarted()` lazy-stamps the field on pre-existing
+ *      Starter docs that were created before this system existed, so
+ *      they get a fresh 60-day window rather than being locked out.
+ *   3. `starterPromoDaysLeft` / `starterPromoExpired` derive state
+ *      from that timestamp. PlanStateBanner shows the countdown;
+ *      ProtectedRoute redirects to /paywall once expired.
+ *   4. TODO(billing): Stripe activation (Track F) will stamp
+ *      `centers/{ownerId}.billingActivatedAt` and ProtectedRoute will
+ *      grant access based on that instead. Until then Starter expiry
+ *      is enforced purely client-side by the paywall redirect.
  */
-export const STARTER_FREE_MONTHS = 2;
+export const STARTER_FREE_DAYS = 60;
 
 /**
- * Amber warning window inside the starter grace period. When there are
- * fewer than this many days left on the Starter promo, the banner flips
- * to a more urgent amber state (same pattern as the trial countdown).
+ * Amber warning window inside the Starter free-use period. When there
+ * are fewer than this many days left, PlanStateBanner flips from the
+ * green countdown to an amber urgent state that can't be dismissed.
  */
 export const STARTER_PROMO_WARNING_DAYS = 14;
 
@@ -142,17 +150,19 @@ function toMillis(ts: any): number {
 }
 
 /**
- * Calendar-aware "add N months to a timestamp". Handles end-of-month
- * edge cases correctly via `Date.setMonth()` (Jan 31 + 1 month → Feb 28).
+ * Milliseconds-since-epoch for the end of the Starter free-use window.
  * Returns 0 when `starterStartedAt` is missing — callers should treat
- * 0 as "no grace yet set, not expired".
+ * 0 as "no clock yet, not expired".
+ *
+ * We add exact days (not calendar months) so "60 days" means 60 days
+ * regardless of what month the owner signed up in. This matches the
+ * copy on the pricing page and removes the "wait, was I supposed to
+ * have 59 or 62 days?" question customers asked during our Feb demo.
  */
 export function starterPromoEndsAtMs(starterStartedAt: unknown): number {
   const startedMs = toMillis(starterStartedAt);
   if (startedMs <= 0) return 0;
-  const d = new Date(startedMs);
-  d.setMonth(d.getMonth() + STARTER_FREE_MONTHS);
-  return d.getTime();
+  return startedMs + STARTER_FREE_DAYS * 24 * 60 * 60 * 1000;
 }
 
 /**
@@ -384,5 +394,12 @@ export const ENABLE_WEB_APP_DEFAULT = false;
 /** All purchasable tiers (excludes Trial). Use for pricing tables. */
 export const PURCHASABLE_TIERS: readonly Tier[] = ['starter', 'pro', 'premium'];
 
-/** Default tier for a brand-new signup before they start the trial. */
-export const DEFAULT_NEW_OWNER_TIER: Tier = 'trial';
+/**
+ * Default tier for a brand-new signup.
+ *
+ * New owners land directly on Starter with `starterStartedAt` stamped
+ * to now. They get STARTER_FREE_DAYS days of free access before the
+ * paywall kicks in (no upfront credit card, no 14-day Premium trial —
+ * see commit history for rationale).
+ */
+export const DEFAULT_NEW_OWNER_TIER: Tier = 'starter';

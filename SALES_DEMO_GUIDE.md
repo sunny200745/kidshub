@@ -92,9 +92,11 @@ and the dashboard fills itself in."*
 Pick **one** of:
 
 **A. Pilot close (preferred):**
-> "Here's what I'd like to do: let's put your classroom on this for 2
-> weeks, free. I'll set it up for you — you don't do anything. At the
-> end of two weeks you tell me if it's helping or not. Sound fair?"
+> "Here's what I'd like to do: let's put your classroom on this for 60
+> days, free — that's our Starter window. I'll set it up for you; you
+> don't do anything. Before day 60 we either upgrade you to Pro or the
+> account quietly locks — no surprise charge, no auto-billing. Sound
+> fair?"
 
 **B. Referral close:**
 > "Even if this isn't for you, who do you know running a daycare that
@@ -109,8 +111,9 @@ Pick **one** of:
 ## Common objections + the one-line answer
 
 - **"My teachers won't use it."**
-  → "Let's pilot with one classroom. If the teacher doesn't love it in
-  2 weeks I'll refund you, no questions."
+  → "Let's pilot with one classroom. You're on Starter free for 60
+  days — if the teacher doesn't love it by then, you never paid
+  anything and the account just locks. Zero risk."
 
 - **"I already use [Brightwheel / Procare / Lillio]."**
   → "Great — they're solid. What's one thing you wish they did that

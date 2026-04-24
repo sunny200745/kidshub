@@ -5,24 +5,26 @@
  *
  * Returns:
  *   {
- *     loading,      // true until the center doc has been read at least once
- *     error,        // unexpected read failure
- *     tier,         // 'trial' | 'starter' | 'pro' | 'premium'
- *     effectiveTier,// what gates actually check — equals `tier`, OR 'premium'
- *                   //   when demoMode is on (so every gate unlocks for demos),
- *                   //   OR 'starter' when a trial has expired but the cron
- *                   //   hasn't flipped plan yet (defensive — A9 is Sprint 3)
- *     trialEndsAt,  // Date | null
- *     trialDaysLeft,// integer, or null when not on trial
- *     trialExpired, // boolean (trial plan + trialEndsAt in the past)
- *     demoMode,     // boolean
- *     center,       // raw center doc (for pages that need name, settings, etc.)
+ *     loading,             // true until the center doc has been read at least once
+ *     error,               // unexpected read failure
+ *     tier,                // 'starter' | 'pro' | 'premium' (legacy 'trial' auto-migrated)
+ *     effectiveTier,       // what gates actually check — equals `tier`, OR 'premium'
+ *                          //   when demoMode is on (so every gate unlocks for demos)
+ *     starterPromoEndsAt,  // Date | null — when the 60-day free window closes
+ *     starterDaysLeft,     // integer or null — days left in the Starter free window
+ *     starterPromoExpired, // boolean — paywall redirect fires when true
+ *     demoMode,            // boolean
+ *     center,              // raw center doc (for pages that need name, settings, etc.)
  *   }
  *
- * Lazy migration:
- *   - If the center doc exists but lacks a `plan` field (pre-Sprint-1 owners),
- *     `ensurePlanStamped()` writes the defaults. The subsequent snapshot fires
- *     and we hydrate naturally. No manual backfill step needed.
+ * Lazy migrations (run in priority order on every snapshot):
+ *   1. `ensurePlanStamped` — pre-Sprint-1 docs missing a `plan` field get
+ *      the current defaults (Starter + starterStartedAt=now).
+ *   2. `migrateLegacyTrialToStarter` — docs still on `plan: 'trial'` from
+ *      the old 14-day-Premium-trial flow get flipped to Starter with a
+ *      fresh 60-day clock. One-shot per legacy owner.
+ *   3. `ensureStarterStarted` — Starter docs without `starterStartedAt`
+ *      get it stamped "now" so the 60-day countdown has a reference point.
  *
  * Read scope:
  *   - Only the current owner's own center doc. The kidshub app has its own
@@ -34,9 +36,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../contexts';
 import {
   centersApi,
-  downgradeExpiredTrial,
   ensurePlanStamped,
   ensureStarterStarted,
+  migrateLegacyTrialToStarter,
 } from '../firebase/api/centers';
 import {
   DEFAULT_NEW_OWNER_TIER,
@@ -45,14 +47,6 @@ import {
   starterPromoEndsAtMs,
   starterPromoExpired as computeStarterPromoExpired,
 } from '../config/product';
-
-function parseTimestamp(ts) {
-  if (!ts) return null;
-  if (typeof ts.toDate === 'function') return ts.toDate();
-  if (ts instanceof Date) return ts;
-  if (typeof ts === 'number') return new Date(ts);
-  return null;
-}
 
 export function useEntitlements() {
   const { user, isOwner } = useAuth();
@@ -72,10 +66,10 @@ export function useEntitlements() {
     setError(null);
     const unsub = centersApi.subscribeToSelfCenter(
       async (data) => {
-        // Lazy migration: pre-Sprint-1 centers lack the plan field. Stamp
-        // defaults once, then the snapshot listener will fire again with
-        // the fully-populated doc. We swallow the write error here; the
-        // UI will still show "free" defaults while the write retries.
+        // Lazy migration 1 — pre-Sprint-1 docs missing `plan`. Stamp
+        // defaults; the snapshot will re-fire with the fully-populated
+        // doc and we'll hydrate on that pass. Returning here avoids
+        // racing setCenter against the upcoming snapshot.
         if (data && !TIERS_ARRAY.includes(data.plan)) {
           try {
             await ensurePlanStamped(data);
@@ -85,27 +79,23 @@ export function useEntitlements() {
               err
             );
           }
-          // Don't setCenter here — the onSnapshot listener already has us
-          // subscribed and will deliver the updated doc once the write
-          // commits. Setting here would race the snapshot.
           return;
         }
 
-        // A9 — Trial-expiry cron (client-side). If the owner's plan is
-        // still 'trial' but trialEndsAt is in the past, flip plan →
-        // 'starter' so the persisted state matches what the app already
-        // shows via effectiveTier. Idempotent + fire-and-forget: the
-        // snapshot will re-fire with the updated plan shortly.
+        // Lazy migration 2 — legacy `plan: 'trial'` docs. The old 14-day
+        // Premium trial is gone; everyone gets Starter directly now. We
+        // flip them here so they don't linger on a tier key the app no
+        // longer treats as a first-class state.
         if (data && data.plan === 'trial') {
-          const maybe = await downgradeExpiredTrial(data);
+          const maybe = await migrateLegacyTrialToStarter(data);
           if (maybe) return; // snapshot will re-deliver with plan='starter'
         }
 
-        // Stop 7 — lazy-stamp starterStartedAt on legacy Starter docs.
-        // Without a stamp, the 2-month grace helpers can't compute days
-        // left, and the banner / blocker would never fire. We stamp
-        // "now", not some retroactive date, so legacy customers get a
-        // fresh promo window rather than being cut off immediately.
+        // Lazy migration 3 — Starter docs missing `starterStartedAt`.
+        // Without the stamp we can't compute the 60-day countdown, so
+        // the paywall would never fire. We stamp "now" rather than any
+        // retroactive date so legacy Starter customers get a fresh
+        // window rather than being locked out immediately.
         if (data && data.plan === 'starter') {
           const wrote = await ensureStarterStarted(data);
           if (wrote) return; // snapshot will re-deliver with starterStartedAt
@@ -127,20 +117,7 @@ export function useEntitlements() {
       ? center.plan
       : DEFAULT_NEW_OWNER_TIER;
 
-    const trialEndsAt = parseTimestamp(center?.trialEndsAt);
-    const now = Date.now();
-    const trialExpired = rawTier === 'trial'
-      && trialEndsAt !== null
-      && trialEndsAt.getTime() < now;
-
-    const trialDaysLeft = rawTier === 'trial' && trialEndsAt
-      ? Math.max(
-          0,
-          Math.ceil((trialEndsAt.getTime() - now) / (24 * 60 * 60 * 1000))
-        )
-      : null;
-
-    // Stop 7 — Starter grace state derived from `starterStartedAt`.
+    // Starter 60-day free-use state derived from `starterStartedAt`.
     // `starterPromoDaysLeft` returns null when the field is missing,
     // which is what we want — downstream UI only lights up when we
     // have a valid clock. `starterPromoEndsAt` is exposed as a Date
@@ -158,29 +135,20 @@ export function useEntitlements() {
     // effectiveTier is what downstream gates actually compare against.
     // Priority:
     //   1. demoMode on → premium (unlocks everything for sales demos)
-    //   2. trial + expired → starter (graceful degrade until the cron
-    //      runs; A9 in Sprint 3 will handle this server-side)
-    //   3. otherwise → the raw plan
-    let effectiveTier;
-    if (demoMode) {
-      effectiveTier = 'premium';
-    } else if (trialExpired) {
-      effectiveTier = 'starter';
-    } else {
-      effectiveTier = rawTier;
-    }
+    //   2. otherwise → the raw plan
+    //
+    // Note: we intentionally do NOT downgrade effectiveTier to something
+    // like 'locked' when starterPromoExpired is true. The paywall is a
+    // navigation-layer lock (ProtectedRoute redirects the user to
+    // /paywall) — downstream feature gates keep computing normally so
+    // /paywall and /plans themselves work correctly for expired owners.
+    const effectiveTier = demoMode ? 'premium' : rawTier;
 
     return {
       loading,
       error,
       tier: rawTier,
       effectiveTier,
-      trialEndsAt,
-      trialDaysLeft,
-      trialExpired,
-      // Stop 7 — Starter 2-month grace surface. Consumed by
-      // PlanStateBanner (countdown) and PlanGateInterstitial (blocker
-      // when expired + unacknowledged).
       starterPromoEndsAt,
       starterDaysLeft,
       starterPromoExpired,

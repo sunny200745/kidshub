@@ -10,9 +10,9 @@
  * read as one product.
  *
  * Only renders when the feature is actually locked for the current
- * tenant. Unlocked, starter/trial-tier, unknown-key, and loading cases
- * all return `null` — callers can drop one in unconditionally without
- * gating the render themselves.
+ * tenant. Unlocked, starter-tier (or legacy trial), unknown-key, and
+ * loading cases all return `null` — callers can drop one in
+ * unconditionally without gating the render themselves.
  *
  * Usage:
  *   <TierBadge feature="photoJournal" />        // shown on Starter

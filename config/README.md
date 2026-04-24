@@ -26,9 +26,10 @@ The big knobs:
 | Tier names | `TIERS[tier].name` |
 | Tier taglines | `TIERS[tier].tagline` |
 | Starter/Pro/Premium limits | `QUOTAS` |
-| Trial duration | `TRIAL_DURATION_DAYS` |
+| Starter free-window length | `STARTER_FREE_DAYS` (currently 60) |
+| Default tier new owners land on | `DEFAULT_NEW_OWNER_TIER` (currently `'starter'`) |
 | Which features are Pro-only | `FEATURES['<featureKey>']` |
-| Admin allowlist (demoMode privilege) | `ADMIN_UIDS` |
+| Admin allowlist (demoMode privilege + paywall bypass) | `ADMIN_UIDS` |
 | Web-app default-on/off | `ENABLE_WEB_APP_DEFAULT` |
 
 ## How to find your admin UID
