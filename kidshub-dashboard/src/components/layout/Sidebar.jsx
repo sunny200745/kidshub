@@ -18,6 +18,7 @@ import {
   FileText,
   Heart,
   Video,
+  Sparkles,
   Loader2,
 } from 'lucide-react';
 import { Avatar, TierBadge } from '../ui';
@@ -42,6 +43,14 @@ const navigation = [
   { name: 'Schedule', href: '/schedule', icon: Calendar },
   { name: 'Reports', href: '/reports', icon: FileText, tierFeature: 'attendanceReports' },
   { name: 'Video surveillance', href: '/video-surveillance', icon: Video, tierFeature: 'videoSurveillance' },
+];
+
+// Rendered with a pink-to-violet gradient treatment (see render block
+// below) so the discovery / upgrade entry point stands apart from the
+// operational nav above it. Kept out of `navigation` to avoid gradient
+// styling bleeding into workflow rows.
+const discoveryNav = [
+  { name: 'Unlock features', href: '/unlock', icon: Sparkles },
 ];
 
 const bottomNav = [
@@ -157,6 +166,36 @@ export function Sidebar({ collapsed, onToggle, isMobile = false, onClose }) {
           );
         })}
       </nav>
+
+      {/* Discovery / upgrade CTA — gradient pill so it reads as a
+         marketing surface, not a workflow entry. Sits between the main
+         nav and Settings so it's in the bottom half of the sidebar
+         where the eye settles after a scan. */}
+      <div className="px-3 pt-3 pb-1 border-t border-surface-100">
+        {discoveryNav.map((item) => {
+          const isActive = location.pathname === item.href;
+          return (
+            <NavLink
+              key={item.name}
+              to={item.href}
+              onClick={handleNavClick}
+              title={collapsed && !isMobile ? item.name : undefined}
+              className={`relative flex items-center gap-3 rounded-xl px-3 py-2 transition-all ${
+                isActive
+                  ? 'bg-gradient-to-br from-accent-500 to-brand-500 text-white shadow-brand'
+                  : 'text-brand-700 hover:text-white hover:bg-gradient-to-br hover:from-accent-500 hover:to-brand-500 hover:shadow-brand'
+              } ${collapsed && !isMobile ? 'justify-center' : ''}`}
+            >
+              <item.icon className="w-5 h-5 flex-shrink-0" />
+              {(!collapsed || isMobile) && (
+                <span className="text-sm sm:text-base font-semibold">
+                  {item.name}
+                </span>
+              )}
+            </NavLink>
+          );
+        })}
+      </div>
 
       {/* Bottom Navigation */}
       <div className="px-3 py-4 border-t border-surface-100 space-y-1">

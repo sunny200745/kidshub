@@ -22,6 +22,7 @@ import Settings from './pages/Settings';
 import Plans from './pages/Plans';
 import Reports from './pages/Reports';
 import VideoSurveillance from './pages/VideoSurveillance';
+import Unlock from './pages/Unlock';
 
 function App() {
   return (
@@ -73,6 +74,8 @@ function App() {
           <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
 
           <Route path="/video-surveillance" element={<ProtectedRoute><VideoSurveillance /></ProtectedRoute>} />
+
+          <Route path="/unlock" element={<ProtectedRoute><Unlock /></ProtectedRoute>} />
 
           {/* Plans / upgrade Route (Sprint 3 / E3) */}
           <Route path="/plans" element={<ProtectedRoute><Plans /></ProtectedRoute>} />
