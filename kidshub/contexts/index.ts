@@ -11,3 +11,5 @@ export type {
 } from './AuthContext';
 export { ThemeProvider, useTheme } from './ThemeContext';
 export type { EffectiveTheme, ThemeContextValue, ThemePreference } from './ThemeContext';
+export { SelectedChildProvider, useSelectedChild } from './SelectedChildContext';
+export type { SelectedChildContextValue } from './SelectedChildContext';

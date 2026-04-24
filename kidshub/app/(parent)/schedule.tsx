@@ -18,12 +18,13 @@ import { CalendarRange, Clock, HelpCircle, Sparkles } from 'lucide-react-native'
 import { Text, View } from 'react-native';
 
 import { ScreenContainer } from '@/components/layout';
+import { ChildSwitcher } from '@/components/parent';
 import { Card, CardBody, EmptyState, LoadingState, Pill, TierBadge } from '@/components/ui';
+import { useSelectedChild } from '@/contexts';
 import {
   useClassroom,
   useClassroomWeeklyPlan,
   useFeature,
-  useMyChildren,
 } from '@/hooks';
 
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -134,8 +135,11 @@ function ScheduleRow({ item, status, isLast }: { item: ScheduleItemModel; status
 }
 
 export default function ParentSchedule() {
-  const { data: children, loading: childrenLoading } = useMyChildren();
-  const child = children[0] ?? null;
+  // Multi-sibling: schedule depends on the active child's classroom, so
+  // pull from SelectedChildContext. Switching siblings reroutes the
+  // weekly-plan query to the other child's classroom (which may differ
+  // when the kids are in different rooms).
+  const { selectedChild: child, loading: childrenLoading } = useSelectedChild();
   const classroomId = child?.classroomId ?? child?.classroom ?? null;
   const { data: classroom } = useClassroom(classroomId);
   const plannerFeature = useFeature('weeklyPlanner');
@@ -182,6 +186,10 @@ export default function ParentSchedule() {
 
   return (
     <ScreenContainer title="Daily Schedule" subtitle={dateLabel}>
+      {/* Sibling switcher (multi-child only) */}
+      <View className="mb-4">
+        <ChildSwitcher />
+      </View>
       {/* Classroom header */}
       <View className="flex-row items-center justify-between mb-4">
         <View className="flex-row items-center gap-3">

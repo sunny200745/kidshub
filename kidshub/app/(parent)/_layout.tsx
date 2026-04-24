@@ -31,7 +31,7 @@ import { HapticTab } from '@/components/haptic-tab';
 import { RouteSplash } from '@/components/route-splash';
 import { Colors } from '@/constants/theme';
 import { ROLES } from '@/constants/roles';
-import { useTheme } from '@/contexts';
+import { SelectedChildProvider, useTheme } from '@/contexts';
 import { useRequireRole } from '@/hooks';
 
 export default function ParentLayout() {
@@ -43,6 +43,20 @@ export default function ParentLayout() {
   // before useEffect bounces them to /unauthorized.
   if (status !== 'allowed') return <RouteSplash />;
 
+  // SelectedChildProvider mounts here (NOT at root) so that the children
+  // subscription only runs for actual parent users in the parent tab
+  // group, and so that switching between tabs preserves the child
+  // selection — which is the whole point of lifting it out of the
+  // individual screens. See contexts/SelectedChildContext.tsx for the
+  // full rationale.
+  return (
+    <SelectedChildProvider>
+      <ParentTabs effective={effective} />
+    </SelectedChildProvider>
+  );
+}
+
+function ParentTabs({ effective }: { effective: ReturnType<typeof useTheme>['effective'] }) {
   return (
     <Tabs
       screenOptions={{

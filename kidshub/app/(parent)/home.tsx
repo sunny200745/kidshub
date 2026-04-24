@@ -15,10 +15,17 @@
  * for the status chip, ActionButton for the primary CTAs, tighter grid
  * for secondary quick actions. Parent tone is pink, matching the brand.
  *
- * Data: live Firestore subscriptions via the `useMyChildren`,
- * `useAnnouncements`, `useTodaysActivitiesForChildren` and `useClassroom`
- * hooks. Empty states cover "no children linked" and "no activity yet"
- * without ever falling back to mock data.
+ * Data: live Firestore subscriptions via `useSelectedChild` (which wraps
+ * `useMyChildren` + a per-parent persisted active-child id),
+ * `useAnnouncements`, `useTodaysActivitiesForChildren` and `useClassroom`.
+ * Empty states cover "no children linked" and "no activity yet" without
+ * ever falling back to mock data.
+ *
+ * Multi-sibling: the <ChildSwitcher /> chip strip up top is rendered for
+ * parents with more than one linked child (single-sibling parents see no
+ * switcher and the same UX as before). Switching siblings re-keys this
+ * whole screen — the hero, status card, activity preview, classroom dot,
+ * and CTA labels all reflect the newly selected child without a tab change.
  */
 import { LinearGradient } from 'expo-linear-gradient';
 import { Link, useRouter } from 'expo-router';
@@ -38,6 +45,7 @@ import { Pressable, Text, View } from 'react-native';
 
 import { ActivityIcon } from '@/components/icons/activity-icon';
 import { ScreenContainer } from '@/components/layout';
+import { ChildSwitcher } from '@/components/parent';
 import {
   ActionButton,
   Avatar,
@@ -49,12 +57,11 @@ import {
   RoleBadge,
 } from '@/components/ui';
 import { Fonts } from '@/constants/theme';
-import { useAuth } from '@/contexts';
+import { useAuth, useSelectedChild } from '@/contexts';
 import type { Activity, Announcement, Child, Classroom } from '@/firebase/types';
 import {
   useAnnouncements,
   useClassroom,
-  useMyChildren,
   useTodaysActivitiesForChildren,
 } from '@/hooks';
 
@@ -353,11 +360,20 @@ function StatusPill({ child }: { child: Child }) {
 export default function ParentHome() {
   const router = useRouter();
   const { profile } = useAuth();
-  const { data: children, loading: childrenLoading } = useMyChildren();
-  // First child = "primary" for the hero. Multi-child parents are a future
-  // feature (see RESTRUCTURE_PLAN.md uiux-polish task) — for now we just
-  // show the first one and let the rest surface in /profile.
-  const child = children[0] ?? null;
+  // Multi-sibling: pull the active child from SelectedChildContext (mounted
+  // in (parent)/_layout.tsx). The ChildSwitcher rendered below lets the
+  // parent flip between siblings; the rest of this screen re-keys to the
+  // new child automatically. Single-sibling parents see no switcher and
+  // the same UX as before.
+  const {
+    children,
+    selectedChild: child,
+    loading: childrenLoading,
+  } = useSelectedChild();
+  // Today's activities still load for ALL children (one query, then we
+  // filter per-child below). Cheaper than re-subscribing every time the
+  // parent flips siblings, and lets us show "X meals across both kids"
+  // style aggregates in a future iteration.
   const childIds = useMemo(() => children.map((c) => c.id), [children]);
   const { data: todaysActivities, loading: activitiesLoading } =
     useTodaysActivitiesForChildren(childIds);
@@ -376,6 +392,11 @@ export default function ParentHome() {
   return (
     <ScreenContainer hideHeader showRoleBadge={false}>
       <View className="gap-4 pt-2">
+        {/* Sibling switcher — renders nothing for single-child parents,
+            so this is a no-op for the common case. For multi-child
+            parents it sits above the hero so the active child the hero
+            describes is always one tap away from changing. */}
+        <ChildSwitcher />
         {/* Parent hero — pink-gradient card, big avatar, personal greeting.
             Intentionally contrasts with the teacher cockpit's teal band so
             a glance tells you whose view you're in. */}

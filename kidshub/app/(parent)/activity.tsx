@@ -13,9 +13,15 @@
  * Filter implementation detail: snacks fall under the "Meals" filter since
  * a snack is effectively a small meal for a parent's purposes.
  *
- * Data: live via `useMyChildren` (primary child) +
- * `useTodaysActivitiesForChildren` (today's activity log) +
- * `useClassroom` (classroom name + accent color).
+ * Data: live via `useSelectedChild` (parent-scoped active child) +
+ * `useTodaysActivitiesForChildren` (today's activity log; subscription
+ * stays scoped to ALL of the parent's kids and we filter per-child in
+ * memo so flipping siblings doesn't refetch) + `useClassroom`
+ * (classroom name + accent color).
+ *
+ * Multi-sibling: <ChildSwitcher /> renders for 2+ linked children and
+ * lets the parent flip the active sibling — the timeline + filter
+ * chips + nap card all re-key to the new child instantly.
  */
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -33,11 +39,12 @@ import { ScrollView, Text, View } from 'react-native';
 
 import { ActivityIcon } from '@/components/icons/activity-icon';
 import { ScreenContainer } from '@/components/layout';
+import { ChildSwitcher } from '@/components/parent';
 import { Badge, Card, CardBody, EmptyState, LoadingState, Pill } from '@/components/ui';
+import { useSelectedChild } from '@/contexts';
 import type { Activity } from '@/firebase/types';
 import {
   useClassroom,
-  useMyChildren,
   useTodaysActivitiesForChildren,
 } from '@/hooks';
 
@@ -178,8 +185,11 @@ function NapStatusCard({ activities, childId }: { activities: Activity[]; childI
 
 export default function ParentActivity() {
   const [activeFilter, setActiveFilter] = useState<FilterId>('all');
-  const { data: children, loading: childrenLoading } = useMyChildren();
-  const child = children[0] ?? null;
+  // Multi-sibling: read the active child from context. The ChildSwitcher
+  // up top changes the selection; the timeline + filter chips re-key
+  // automatically. The activities subscription stays scoped to ALL of
+  // the parent's kids so swap-then-back doesn't refetch.
+  const { selectedChild: child, loading: childrenLoading } = useSelectedChild();
   const childIds = useMemo(() => (child ? [child.id] : []), [child]);
   const { data: activities, loading: activitiesLoading } =
     useTodaysActivitiesForChildren(childIds);
@@ -228,6 +238,10 @@ export default function ParentActivity() {
 
   return (
     <ScreenContainer title="Activity Feed" subtitle={dateLabel}>
+      {/* Sibling switcher (multi-child only) */}
+      <View className="mb-4">
+        <ChildSwitcher />
+      </View>
       {/* Child header */}
       <View className="flex-row items-center gap-3 mb-6">
         <View

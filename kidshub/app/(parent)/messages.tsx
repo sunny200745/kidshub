@@ -36,13 +36,13 @@ import {
 } from 'react-native';
 
 import { ScreenContainer } from '@/components/layout';
+import { ChildSwitcher } from '@/components/parent';
 import { Avatar, Card, EmptyState, LoadingState, Pill } from '@/components/ui';
-import { useAuth } from '@/contexts';
+import { useAuth, useSelectedChild } from '@/contexts';
 import { messagesApi } from '@/firebase/api';
 import type { Message, Staff } from '@/firebase/types';
 import {
   useClassroom,
-  useMyChildren,
   useMyMessages,
   useStaffForDaycare,
 } from '@/hooks';
@@ -140,8 +140,13 @@ export default function ParentMessages() {
   const uid = profile?.uid;
   const daycareId = profile?.daycareId as string | undefined;
 
-  const { data: children, loading: childrenLoading } = useMyChildren();
-  const child = children[0] ?? null;
+  // Multi-sibling: messages are scoped per-child (one thread per child x
+  // primary teacher). The selected child drives which thread shows; the
+  // ChildSwitcher up top swaps the conversation. Until we redesign this
+  // screen to show a unified Inbox/Sent UI (tracked separately as
+  // parent-inbox-outbox-ui), this is the right behavior — one thread at
+  // a time, one tap to switch which sibling's thread you're viewing.
+  const { selectedChild: child, loading: childrenLoading } = useSelectedChild();
   const { data: classroom } = useClassroom(
     child?.classroomId ?? child?.classroom ?? null,
   );
@@ -266,6 +271,10 @@ export default function ParentMessages() {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
         style={{ flex: 1 }}>
         <View className="flex-1 px-4 pb-4">
+          {/* Sibling switcher (multi-child only) */}
+          <View className="mb-3">
+            <ChildSwitcher />
+          </View>
           <Card className="flex-1 overflow-hidden">
             {/* Teacher header */}
             <View className="bg-white dark:bg-surface-800 border-b border-surface-100 dark:border-surface-700 p-4">

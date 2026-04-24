@@ -11,10 +11,16 @@
  * detail screens they'd navigate to get built in later tickets. The
  * current release just needs the parity shell so Profile isn't a stub.
  *
- * Data: live `useMyChildren` for the child hero + the medical/allergy
- * summary. Emergency contacts / authorized pickups / schedule remain
- * placeholder counts (those fields aren't part of the children-doc
- * schema yet — adding them is a separate ticket on RESTRUCTURE_PLAN).
+ * Data: live `useSelectedChild` (parent-scoped context that wraps
+ * `useMyChildren` + a persisted active-child id) for the hero + the
+ * medical/allergy summary. Emergency contacts / authorized pickups /
+ * schedule remain placeholder counts (those fields aren't part of the
+ * children-doc schema yet — adding them is a separate ticket on
+ * RESTRUCTURE_PLAN).
+ *
+ * Multi-sibling: <ChildSwitcher /> renders above the hero card whenever
+ * the parent has 2+ linked children, so they can flip between siblings'
+ * profiles in one tap. Hidden for single-child families.
  *
  * Sign-out actively uses AuthContext.logout(); the RootRedirect layer
  * (app/index.tsx) handles the navigation after `user` flips to null.
@@ -38,6 +44,7 @@ import { useState, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
 import { ScreenContainer } from '@/components/layout';
+import { ChildSwitcher } from '@/components/parent';
 import {
   ActionButton,
   Avatar,
@@ -47,8 +54,8 @@ import {
   LoadingState,
   Pill,
 } from '@/components/ui';
-import { useAuth } from '@/contexts';
-import { useClassroom, useMyChildren } from '@/hooks';
+import { useAuth, useSelectedChild } from '@/contexts';
+import { useClassroom } from '@/hooks';
 
 function ProfileSection({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -125,8 +132,11 @@ export default function ParentProfile() {
   const router = useRouter();
   const { logout, profile } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
-  const { data: children, loading: childrenLoading } = useMyChildren();
-  const child = children[0] ?? null;
+  // Multi-sibling: the profile screen now reflects whichever child is
+  // currently selected globally. The ChildSwitcher up top changes the
+  // selection; medical/allergy/classroom info below re-keys to the new
+  // child without a tab change.
+  const { selectedChild: child, loading: childrenLoading } = useSelectedChild();
   const { data: classroom } = useClassroom(
     child?.classroomId ?? child?.classroom ?? null,
   );
@@ -170,6 +180,12 @@ export default function ParentProfile() {
 
   return (
     <ScreenContainer title="Profile" subtitle="Manage your child's information">
+      {/* Sibling switcher (multi-child only). When the parent has more
+          than one linked child, this strip lets them pick which child's
+          profile to view. Hidden for single-child families. */}
+      <View className="mb-4">
+        <ChildSwitcher />
+      </View>
       {/* Hero card: avatar, name, classroom dot, allergies */}
       {child ? (
         <Card className="mb-6">

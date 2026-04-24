@@ -29,6 +29,7 @@ import { useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 
 import { ScreenContainer } from '@/components/layout';
+import { ChildSwitcher } from '@/components/parent';
 import { UpgradeCTA } from '@/components/upgrade-cta';
 import {
   Avatar,
@@ -39,10 +40,10 @@ import {
   Pill,
   TierBadge,
 } from '@/components/ui';
+import { useSelectedChild } from '@/contexts';
 import {
   useClassroom,
   useFeature,
-  useMyChildren,
   useMyChildrenPhotos,
 } from '@/hooks';
 import type { Photo } from '@/firebase/types';
@@ -170,15 +171,18 @@ function StarterPreview() {
 }
 
 export default function ParentPhotos() {
-  const { data: children, loading: childrenLoading } = useMyChildren();
-  const childIds = useMemo(() => children.map((c) => c.id), [children]);
-  const child = children[0] ?? null;
+  // Multi-sibling: photos are scoped to the *selected* child only — that
+  // matches the header copy ("{firstName}'s photos") and the per-child
+  // mental model used by the rest of the parent app. Switching siblings
+  // re-keys the photos query to the new childId list.
+  const { selectedChild: child, loading: childrenLoading } = useSelectedChild();
+  const selectedChildIds = useMemo(() => (child ? [child.id] : []), [child]);
   const { data: classroom } = useClassroom(
     child?.classroomId ?? child?.classroom ?? null,
   );
 
   const feature = useFeature('photoJournal');
-  const { data: photos, loading: photosLoading } = useMyChildrenPhotos(childIds);
+  const { data: photos, loading: photosLoading } = useMyChildrenPhotos(selectedChildIds);
   const sections = useMemo(() => groupByDay(photos), [photos]);
 
   const [viewer, setViewer] = useState<Photo | null>(null);
@@ -215,6 +219,10 @@ export default function ParentPhotos() {
       subtitle={`${child.firstName}'s gallery`}
       headerBadge={<TierBadge feature="photoJournal" />}>
       <ScrollView showsVerticalScrollIndicator={false}>
+        {/* Sibling switcher (multi-child only) */}
+        <View className="mb-4">
+          <ChildSwitcher />
+        </View>
         {/* Header */}
         <View className="flex-row items-center gap-3 mb-5">
           <View
