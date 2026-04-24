@@ -67,26 +67,49 @@ rules_version = '2';
 // staff record would leave the user's session live with dangling state.
 //
 // =============================================================================
-// Owner ↔ Parent linkage (new in p3-15)
+// Owner ↔ Parent linkage (Option B for parents)
 // =============================================================================
 //
-// Parents sign up in the kidshub app with an empty childIds list and no
-// daycareId. They can't see any business data until an owner explicitly
-// links them to one of their children (dashboard UI for this is a follow-up,
-// but the rule is baked in so the feature won't require another rules roll).
+// Parent onboarding mirrors teacher onboarding exactly. Canonical flow:
 //
-// Linkage mechanics (see usersApi.linkParentToChild):
-//   - Owner updates users/{parentUid}.childIds (arrayUnion childId)
-//   - Owner updates users/{parentUid}.daycareId = ownerUid (first link only)
-//   - Owner updates children/{childId}.parentIds (arrayUnion parentUid)
+//   1. Owner creates parents/{pid} in the dashboard — a pre-user contact
+//      record with firstName/lastName/email/phone/childIds[]. Seeded with
+//      { appStatus:'none', linkedUserId:null } (mirror of staff record).
+//   2. Owner clicks "Invite to app" on that parent card — dashboard writes
+//      invites/{token} with role='parent', parentId=pid, childId=<primary>,
+//      and updates parents.appStatus='invited'.
+//   3. Parent accepts invite in kidshub app (/invite/{token}):
+//      a. setDoc(users/{uid}) with role='parent', linkedParentId=pid,
+//         daycareId, childIds=<parents/{pid}.childIds> (ALL siblings in
+//         the parent record are linked in one pass — this is the multi-
+//         child property that makes parent onboarding differ from 1:1
+//         teacher-to-classroom).
+//      b. updateDoc(parents/{pid}) with linkedUserId=uid, appStatus='active'
+//         (permitted by the parent update branch below — scoped to their
+//         own parent record by email match).
+//      c. updateDoc(children/{childId}) arrayUnion uid into parentIds
+//         (one per sibling), which unlocks the per-child read rule.
+//      d. deleteDoc(invites/{token}).
+//   4. If owner revokes a pending parent invite, dashboard resets
+//      parents.appStatus='none' in the same batch.
 //
-// Rules below restrict the owner's writeable fields on a parent's users doc
-// to ONLY {childIds, daycareId, updatedAt} — they cannot rename the parent,
-// change their role, or edit PII.
+// Parent data access after link:
+//   - users/{uid}.childIds is the ONLY surface that grants a parent access
+//     to any business data. Every downstream read rule (children, activities,
+//     messages, photos, healthLogs, screenings) joins on `childId in
+//     userChildIds()`. That means: a parent can only ever see documents
+//     for children listed on their own users doc. Nothing in this flow
+//     widens that invariant.
+//   - No "parent self-signup" UI is exposed anywhere in the apps; the code
+//     path in AuthContext.registerParent is unreachable from end-user UI
+//     and is kept for future pre-existing-account recovery edge cases.
+//     Even if exercised, it creates a dormant account with childIds=[] and
+//     daycareId=null — zero data access until an owner or invite links it.
 //
-// Owners cannot "steal" a parent already linked to another daycare: the
-// resource.data.daycareId must be either null (fresh link) or already
-// match the owner's own uid (re-adding a child).
+// Legacy owner-linking of a bare parent user (older usersApi.linkParentToChild)
+// is still supported by the rules below (owner can patch childIds + daycareId
+// + updatedAt on a users/{parent} doc), but the canonical path is the
+// invite-only Option B flow above.
 //
 // =============================================================================
 
@@ -382,6 +405,22 @@ service cloud.firestore {
       // to 'active' + links linkedUserId. Field is required on new teacher
       // invites; existing pre-Option-B invites without it are still honored
       // by accept (linkedStaffId just stays null on the teacher's users doc).
+      //
+      // Parent invites (mirror of Option B for parents) carry:
+      //   - childId       — REQUIRED, the primary child the parent is being
+      //     introduced to (used for the accept-screen banner: "You're invited
+      //     to connect with {childName}"). Always present for rule compat
+      //     with the legacy ChildProfile path.
+      //   - parentId      — OPTIONAL, pointer at the pre-existing parents/{id}
+      //     contact roster record (new in this step). When present, the
+      //     accept flow (acceptParentInvite in AuthContext) reads the parent
+      //     record's childIds[] and stamps ALL of them on users/{uid}.childIds
+      //     so siblings are linked in one pass. When absent, the accept flow
+      //     falls back to the legacy single-child path (childId only).
+      //   Keeping parentId optional is intentional: existing in-flight invites
+      //   from before this rollout must still be redeemable, and the
+      //   ChildProfile page's legacy "Invite parent to app" button doesn't
+      //   pass parentId until it's rewired in Step 6.
       allow create: if isOwner()
         && request.resource.data.invitedBy == request.auth.uid
         && request.resource.data.daycareId == request.auth.uid
@@ -671,19 +710,68 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
-    // parents/{parentId} — legacy owner-managed parent roster
+    // parents/{parentId} — owner-managed parent CONTACT ROSTER
     // -------------------------------------------------------------------------
     //
-    // Separate from `users where role='parent'` (which are app accounts).
-    // Phase 4 cleanup will reconcile. For now, owners manage this roster
-    // directly; parents and teachers have no business with it.
+    // Direct structural mirror of staff/{staffId}. A `parents/{id}` doc is
+    // the owner's pre-user contact record for a parent — it exists before
+    // the parent has a Firebase Auth account, and lives through the invite
+    // lifecycle (none → invited → active) identically to staff.
+    //
+    // Read:
+    //   - owner: any record in their tenant
+    //   - parent: their OWN record after self-link (scoped by linkedUserId).
+    //     No other parent can read someone else's record — tenants are
+    //     an owner-level boundary; within a tenant, parents are siloed.
+    //
+    // Create: owner only, must stamp daycareId == own uid.
+    //
+    // Update:
+    //   - owner: any field in tenant, daycareId must not change.
+    //   - parent self-link (mirror of staff self-link on lines ~546-559):
+    //     a parent accepting their invite flips their own record to
+    //     appStatus='active' + linkedUserId=self. Constraints:
+    //       - requester is an authenticated parent in the same tenant
+    //       - record.email matches request.auth.token.email  (strong link
+    //         from the parent roster to the invite to the Firebase Auth
+    //         account — email is the invariant across all three)
+    //       - only {linkedUserId, appStatus, updatedAt} change (name /
+    //         childIds / phone etc. are frozen from the parent's side)
+    //       - linkedUserId must be the requester themselves
+    //       - record isn't already linked to someone else (prevents a
+    //         stolen-invite scenario where a different authed user tries
+    //         to hijack the record)
+    //
+    // Delete: owner only. Dashboard UX should gate delete when
+    //         appStatus='active' (analog of staff).
     //
     match /parents/{parentId} {
-      allow read: if isOwner() && inMyTenant(resource.data);
+      allow read: if (isOwner() && inMyTenant(resource.data))
+        || (isParent()
+            && inMyTenant(resource.data)
+            && resource.data.get('linkedUserId', null) == request.auth.uid);
+
       allow create: if isOwner()
         && request.resource.data.daycareId == request.auth.uid;
-      allow update, delete: if isOwner() && inMyTenant(resource.data)
-        && request.resource.data.daycareId == resource.data.daycareId;
+
+      allow update: if (isOwner() && inMyTenant(resource.data)
+          && request.resource.data.daycareId == resource.data.daycareId)
+        || (
+          isParent()
+          && inMyTenant(resource.data)
+          && resource.data.email == request.auth.token.email
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'linkedUserId', 'appStatus', 'updatedAt'
+          ])
+          && request.resource.data.linkedUserId == request.auth.uid
+          && request.resource.data.appStatus == 'active'
+          && (
+            resource.data.get('linkedUserId', null) == null
+            || resource.data.linkedUserId == request.auth.uid
+          )
+        );
+
+      allow delete: if isOwner() && inMyTenant(resource.data);
     }
 
     // -------------------------------------------------------------------------
