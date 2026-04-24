@@ -194,11 +194,18 @@ export default function Register() {
         // the entitlements system has something to read. New owners start
         // on a 14-day Premium trial, then auto-downgrade to Starter.
         ...defaultPlanFields(),
+        // Onboarding journey (stop 2): new owner hasn't dismissed /welcome
+        // yet. This nested map leaves room for future signals (seenAt,
+        // skippedSteps, completedAt) without polluting the root doc.
+        onboarding: { dismissedAt: null },
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
 
-      navigate('/');
+      // New owners land on the /welcome wizard instead of the bare
+      // dashboard. They can skip any step and come back later; the
+      // wizard detects completion from live data so it stays honest.
+      navigate('/welcome');
     } catch (err) {
       console.error('Registration error:', err);
       if (err.code === 'auth/weak-password') {

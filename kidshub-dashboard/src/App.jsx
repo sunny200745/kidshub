@@ -23,6 +23,7 @@ import Plans from './pages/Plans';
 import Reports from './pages/Reports';
 import VideoSurveillance from './pages/VideoSurveillance';
 import Unlock from './pages/Unlock';
+import Welcome from './pages/Welcome';
 
 function App() {
   return (
@@ -36,6 +37,11 @@ function App() {
 
           {/* Protected Routes */}
           <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+
+          {/* Onboarding wizard (new-owner journey, stop 2). Register.jsx
+             lands new owners here after signup; existing owners can
+             always return here to pick up unfinished setup steps. */}
+          <Route path="/welcome" element={<ProtectedRoute><Welcome /></ProtectedRoute>} />
           
           {/* Children Routes */}
           <Route path="/children" element={<ProtectedRoute><Children /></ProtectedRoute>} />

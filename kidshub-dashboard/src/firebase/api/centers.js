@@ -248,6 +248,26 @@ export async function updateBranding({ logoUrl, accentColor }) {
   await updateDoc(doc(db, 'centers', ownerId), patch);
 }
 
+/**
+ * Mark the /welcome onboarding wizard as dismissed. Writes a timestamp to
+ * `centers/{ownerId}.onboarding.dismissedAt` so we can (a) skip auto-
+ * redirecting returning owners to /welcome and (b) eventually report on
+ * activation funnel metrics.
+ *
+ * Idempotent — callers are free to invoke on every "Back to dashboard"
+ * click; we just re-stamp. We intentionally use a nested map under
+ * `onboarding` (rather than flat top-level fields) to leave room for
+ * future signals (seenAt, skippedSteps[], completedAt) without polluting
+ * the root of the center doc.
+ */
+export async function markOnboardingDismissed() {
+  const ownerId = currentOwnerId();
+  await updateDoc(doc(db, 'centers', ownerId), {
+    'onboarding.dismissedAt': serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+}
+
 export const centersApi = {
   subscribeToSelfCenter,
   ensurePlanStamped,
@@ -256,6 +276,7 @@ export const centersApi = {
   setPlan,
   getSelfCenter,
   updateBranding,
+  markOnboardingDismissed,
   defaultPlanFields,
   trialEndsFromNow,
 };
