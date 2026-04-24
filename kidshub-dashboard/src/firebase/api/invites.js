@@ -45,6 +45,7 @@ import {
 
 import { db } from '../config';
 import { staffApi } from './staff';
+import { parentsApi, parentChildIds } from './parents';
 import { emailApi } from './email';
 
 const COLLECTION = 'invites';
@@ -145,23 +146,41 @@ export const invitesApi = {
   },
 
   /**
-   * Create a new parent invite (p3-20). Parallels create() above but scoped
-   * to a specific child instead of a classroom. The parent accepts via
-   * /invite/{token} in kidshub, which stamps childIds=[childId] + daycareId
-   * on their users/{uid} doc and arrayUnions their uid into the child's
-   * parentIds.
+   * Create a new parent invite. Direct mirror of create() above for parents,
+   * with the same Option B linkage to a pre-existing roster record.
+   *
+   * The parent accepts via /invite/{token} in kidshub, which:
+   *   1. creates users/{uid} with role='parent' + linkedParentId=parentId
+   *      (when parentId is present) + childIds populated from the parent
+   *      record's childIds[] (so siblings are linked in one pass);
+   *   2. arrayUnions uid into each child's parentIds;
+   *   3. flips parents/{parentId}.appStatus='active' + linkedUserId=uid.
+   *
+   * `parentId` is optional for backwards compatibility with the legacy
+   * ChildProfile "Invite parent to app" path (which still uses childId
+   * only). When absent, the kidshub accept flow falls back to the
+   * single-child legacy path. New invites issued from the Parents page
+   * always pass parentId.
    *
    * @param {object} input
-   * @param {string} input.email          — parent's email; lowercased + trimmed
-   * @param {string} input.childId        — required
-   * @param {string} input.childName      — denormalized label, shown to parent
-   * @param {string} input.invitedBy      — owner's uid (must equal request.auth.uid)
-   * @param {string} input.invitedByName  — denormalized label, shown to parent
-   * @param {string} [input.daycareId]    — defaults to invitedBy
+   * @param {string}  input.email          — parent's email; lowercased + trimmed
+   * @param {string}  input.childId        — REQUIRED, primary child for the
+   *                                         accept-screen banner ("invited to
+   *                                         connect with {childName}")
+   * @param {string}  [input.parentId]     — pre-existing parents/{id} record id
+   *                                         (Option B). When present, accept
+   *                                         flow links ALL siblings on the
+   *                                         parent record; when absent, just
+   *                                         the single childId is linked.
+   * @param {string}  [input.childName]    — denormalized label, shown to parent
+   * @param {string}  input.invitedBy      — owner's uid (must equal request.auth.uid)
+   * @param {string}  [input.invitedByName]— denormalized label, shown to parent
+   * @param {string}  [input.daycareId]    — defaults to invitedBy
    */
   async createParentInvite({
     email,
     childId,
+    parentId,
     childName,
     invitedBy,
     invitedByName,
@@ -174,6 +193,11 @@ export const invitesApi = {
     const token = generateInviteToken();
     const expiresAt = Timestamp.fromDate(new Date(Date.now() + INVITE_TTL_MS));
 
+    // Build the payload conditionally — Firestore stores `undefined` as a
+    // missing field, but explicitly omitting parentId from the object
+    // makes the intent obvious to anyone reading invite docs in the
+    // console. When parentId IS passed, it lands as a plain string so
+    // the rule comment ("parentId — OPTIONAL string") matches reality.
     const payload = {
       email: email.trim().toLowerCase(),
       role: 'parent',
@@ -185,8 +209,53 @@ export const invitesApi = {
       createdAt: serverTimestamp(),
       expiresAt,
     };
+    if (typeof parentId === 'string' && parentId.length > 0) {
+      payload.parentId = parentId;
+
+      // Denormalize the parent record's childIds onto the invite doc so the
+      // accept flow can link ALL siblings in one pass without needing a
+      // post-auth read on parents/{parentId} (the parents-read rule scopes
+      // to records already linked to the requester's uid, which is null
+      // until self-link completes — chicken-and-egg).
+      //
+      // Pre-read is best-effort: if it fails (transient permission, deleted
+      // record), we still create the invite with just `childId` and the
+      // accept flow falls back to single-child linking.
+      try {
+        const parentRecord = await parentsApi.getById(parentId);
+        const siblingIds = parentChildIds(parentRecord);
+        // Always include the primary childId (defends against a record that
+        // was edited to remove the child between invite click and create).
+        const merged = Array.from(new Set([childId, ...siblingIds]));
+        if (merged.length > 0) {
+          payload.childIds = merged;
+        }
+      } catch (err) {
+        console.warn(
+          '[invitesApi.createParentInvite] could not denormalize parent.childIds onto invite:',
+          err
+        );
+      }
+    }
 
     await setDoc(doc(db, COLLECTION, token), payload);
+
+    // Mirror of the staff path in create(): if this invite is anchored to
+    // a parents/{id} roster record, flip its app-status badge to "Pending
+    // invite". Best-effort — if the update fails (stale client, deleted
+    // record, transient permission), the invite still exists and the
+    // accept flow will heal by setting appStatus='active' directly via
+    // its own Firestore-rule-allowed self-link branch.
+    if (payload.parentId) {
+      try {
+        await parentsApi.setAppStatusInvited(payload.parentId);
+      } catch (err) {
+        console.warn(
+          '[invitesApi.createParentInvite] could not flip parents.appStatus to invited:',
+          err
+        );
+      }
+    }
 
     // Best-effort invite email (see create() above for rationale).
     let emailSent = false;
@@ -217,21 +286,34 @@ export const invitesApi = {
    * Revoke (delete) a pending invite. The Firestore rule allows deletion by
    * the inviter (for revoke) or by the invitee email (for consume-on-accept).
    *
-   * Option B: if this is a teacher invite with a staffId, reset the staff
-   * card's appStatus back to 'none' so the "Invite to app" affordance
-   * returns. We read the invite before deleting so we have the staffId;
-   * failure to read or reset is non-fatal (the owner can re-invite and
-   * the new create will flip the badge back to 'invited').
+   * Option B (teacher + parent): pre-read the invite to find any roster
+   * record it points at (staffId for teachers, parentId for parents) and
+   * reset that record's appStatus back to 'none' AFTER the delete lands,
+   * so the "Invite to app" affordance returns on the owner UI. Pre-read
+   * is a separate getDoc rather than waiting for the snapshot listener
+   * to fire because the listener may run AFTER the deleteDoc completes.
+   *
+   * Failure modes are intentionally non-fatal:
+   *   - Pre-read fails  → log + skip the reset; owner can manually flip
+   *                       the badge by re-inviting (creates new invite,
+   *                       which calls setAppStatusInvited).
+   *   - Reset fails     → invite IS gone (the important bit), the owner
+   *                       just sees a stale "Pending invite" badge until
+   *                       they refresh or re-invite.
    */
   async delete(token) {
     if (!token) throw new Error('invitesApi.delete: token is required.');
 
     let staffIdToReset = null;
+    let parentIdToReset = null;
     try {
       const snap = await getDoc(doc(db, COLLECTION, token));
       const data = snap.exists() ? snap.data() : null;
       if (data?.role === 'teacher' && typeof data.staffId === 'string') {
         staffIdToReset = data.staffId;
+      }
+      if (data?.role === 'parent' && typeof data.parentId === 'string') {
+        parentIdToReset = data.parentId;
       }
     } catch (err) {
       console.warn('[invitesApi.delete] pre-read failed:', err);
@@ -244,6 +326,13 @@ export const invitesApi = {
         await staffApi.resetAppStatus(staffIdToReset);
       } catch (err) {
         console.warn('[invitesApi.delete] could not reset staff.appStatus:', err);
+      }
+    }
+    if (parentIdToReset) {
+      try {
+        await parentsApi.resetAppStatus(parentIdToReset);
+      } catch (err) {
+        console.warn('[invitesApi.delete] could not reset parents.appStatus:', err);
       }
     }
   },

@@ -104,8 +104,20 @@ export type TeacherInvite = {
 };
 
 /**
- * Shape of a role='parent' invites/{token} doc (p3-20). Child-scoped instead
- * of classroom-scoped — the parent is linked to a specific child on accept.
+ * Shape of a role='parent' invites/{token} doc.
+ *
+ * `childId` is the PRIMARY child the invite is anchored to (drives the
+ * accept-screen banner, "you're invited to connect with {childName}").
+ *
+ * `parentId` (optional) is Option B's pointer back to the dashboard's
+ * pre-existing parents/{id} contact record. When present, the accept
+ * flow also reads `childIds` off this invite doc (denormalized at create
+ * time by the dashboard) to link ALL siblings in a single pass.
+ *
+ * `childIds` (optional) is the denormalized sibling list. Present iff
+ * `parentId` is present AND the dashboard could read the parent record
+ * at invite-create time. The accept flow always validates that
+ * `childId` is included before stamping (defensive).
  */
 export type ParentInvite = {
   token: string;
@@ -113,6 +125,18 @@ export type ParentInvite = {
   role: 'parent';
   childId: string;
   childName?: string;
+  /**
+   * Option B: pointer back to the dashboard's parent roster record.
+   * Required on all new parent invites issued from the Parents page.
+   * Absent on legacy invites issued from ChildProfile.
+   */
+  parentId?: string;
+  /**
+   * Denormalized sibling list, copied from parents/{parentId}.childIds at
+   * invite-create time. Always includes `childId`. Absent on legacy
+   * single-child invites.
+   */
+  childIds?: string[];
   daycareId: string;
   invitedBy: string;
   invitedByName?: string;
@@ -498,24 +522,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   /**
-   * Parent invite acceptance flow (p3-20). Shape parallels
-   * acceptTeacherInvite, with two extra steps at the end:
+   * Parent invite acceptance flow. Mirror of acceptTeacherInvite, with one
+   * extra wrinkle: parents can be linked to MULTIPLE children (siblings),
+   * so when the invite carries an Option B `parentId` we read the full
+   * `parents/{parentId}.childIds` list and stamp ALL of them on the user
+   * doc in a single pass.
    *
+   * Steps:
    *   1. Re-fetch invite (defensive — protects against a revoke between
    *      page load and submit).
-   *   2. createUserWithEmailAndPassword(invite.email, password) — email comes
+   *   2. If invite.parentId is set, getDoc(parents/{parentId}) and use its
+   *      childIds[] as the authoritative list. Always ensure invite.childId
+   *      is in the final list (the Firestore users-create rule requires it).
+   *      If parentId is absent (legacy ChildProfile path), the list is just
+   *      [invite.childId].
+   *   3. createUserWithEmailAndPassword(invite.email, password) — email comes
    *      from the invite so the Firestore rule for users create with
    *      role='parent'+inviteToken can compare request.auth.token.email.
-   *   3. setDoc(users/{uid}, { role:'parent', childIds:[invite.childId],
-   *      daycareId: invite.daycareId, inviteToken: token, ... }). The rule
-   *      walks the inviteToken back to the invite doc and verifies the
-   *      email + role + daycareId + childId match.
-   *   4. updateDoc(children/{invite.childId}, { parentIds: arrayUnion(uid) }).
-   *      The rule (p3-20 `isParent()` branch on children.update) allows this
-   *      because the parent's users doc already has childId in childIds
-   *      (set in step 3), and they're only adding themselves.
-   *   5. deleteDoc(invites/{token}). Allowed by rule for the invitee email.
+   *   4. setDoc(users/{uid}, { role:'parent', childIds, daycareId,
+   *      inviteToken, linkedParentId?, ... }). The rule walks the
+   *      inviteToken back to the invite doc and verifies email + role +
+   *      daycareId match, plus that invite.childId IS in childIds.
+   *      `linkedParentId` is stamped only when the invite carries parentId.
+   *   5. For EACH childId in the list: updateDoc(children/{c}, {
+   *      parentIds: arrayUnion(uid) }). The children-update rule's parent
+   *      branch reads the just-written user doc to confirm the child is
+   *      in their childIds[], then allows the self-add. Per-child errors
+   *      are non-fatal (logged) — we'd rather link 2 of 3 siblings than
+   *      bail on the whole accept.
+   *   6. If invite.parentId, updateDoc(parents/{parentId}, {linkedUserId,
+   *      appStatus:'active', updatedAt}). Allowed by the parents-update
+   *      rule's parent self-link branch (added in Step 2 of this sprint):
+   *      scoped to records matching the parent's email, only those three
+   *      fields, only when not already linked to a different uid.
+   *   7. deleteDoc(invites/{token}). Allowed by rule for the invitee email.
    *      Best-effort — non-fatal if it fails.
+   *   8. Welcome email — same contract as teacher flow.
    *
    * Edge cases (caller should surface friendly messages):
    *   - 'auth/email-already-in-use' — parent already has a Firebase Auth
@@ -524,9 +566,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    *     consent. The owner can revoke + reissue to a different email, or
    *     the parent uses a different email.
    *   - child not in invite's tenant: blocked by the setDoc rule check.
-   *   - parentIds update fails: non-fatal, we still return the user but
-   *     the parent's child read won't unlock until the owner re-runs
-   *     linkParentToChild manually. We surface a warning console log.
+   *   - parentIds update fails for one child: non-fatal, logged. The
+   *     parent will still see the other linked children; the missing one
+   *     can be fixed by the owner re-running linkParentToChild manually.
+   *   - parents/{parentId} update fails: non-fatal, logged. The user is
+   *     fully linked to children either way; the badge on the owner UI
+   *     just stays "Pending invite" until the owner refreshes or
+   *     re-invites (which is a no-op for a now-registered email).
    */
   const acceptParentInvite = async (
     input: AcceptParentInviteInput
@@ -559,34 +605,86 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         displayName: `${firstName.trim()} ${lastName.trim()}`,
       });
 
-      await setDoc(doc(db, 'users', fbUser.uid), {
+      // Resolve the authoritative childIds list. The dashboard denormalizes
+      // parents/{parentId}.childIds onto the invite doc at create time
+      // (see invitesApi.createParentInvite), so we just read it directly
+      // from the invite. No post-auth round-trip to parents/{id} is
+      // needed — and would be denied anyway under the parents-read rule,
+      // since linkedUserId is still null at this point (chicken-and-egg).
+      //
+      // Defensive merge: always include invite.childId in the final list.
+      // The Firestore users-create rule requires `invite.childId in
+      // request.resource.data.childIds`, so a primary that's missing from
+      // the sibling list would fail that check.
+      const inviteSiblings = Array.isArray(invite.childIds)
+        ? invite.childIds.filter((c): c is string => typeof c === 'string')
+        : [];
+      const childIds: string[] = Array.from(
+        new Set<string>([invite.childId, ...inviteSiblings])
+      );
+      const linkedParentId: string | undefined = invite.parentId;
+
+      const userDocPayload: Record<string, unknown> = {
         uid: fbUser.uid,
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         email: invite.email,
         phone: phone?.trim() || null,
         role: ROLES.PARENT,
-        childIds: [invite.childId],
+        childIds,
         daycareId: invite.daycareId,
         inviteToken: token,
         invitedBy: invite.invitedBy,
         status: 'active',
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
+      };
+      if (linkedParentId) {
+        userDocPayload.linkedParentId = linkedParentId;
+      }
+
+      await setDoc(doc(db, 'users', fbUser.uid), userDocPayload);
+
+      // Add self to each child's parentIds so the children-read rule
+      // (`uid in parentIds` AND `childId in userChildIds()`) unlocks for
+      // every linked sibling. Per-child errors are logged but don't
+      // fail the whole accept — we'd rather successfully onboard the
+      // parent with N-1 of N children than bail entirely.
+      const parentLinkResults = await Promise.allSettled(
+        childIds.map((cid) =>
+          updateDoc(doc(db, 'children', cid), {
+            parentIds: arrayUnion(fbUser.uid),
+            updatedAt: serverTimestamp(),
+          })
+        )
+      );
+      parentLinkResults.forEach((r, i) => {
+        if (r.status === 'rejected') {
+          console.warn(
+            `[AuthContext] failed to arrayUnion parent into children/${childIds[i]}.parentIds:`,
+            r.reason
+          );
+        }
       });
 
-      // Add self to children/{childId}.parentIds so the child-read rule
-      // unlocks (rule: `uid in parentIds` AND `childId in userChildIds()`).
-      try {
-        await updateDoc(doc(db, 'children', invite.childId), {
-          parentIds: arrayUnion(fbUser.uid),
-          updatedAt: serverTimestamp(),
-        });
-      } catch (linkErr) {
-        console.warn(
-          '[AuthContext] failed to arrayUnion parent into child.parentIds:',
-          linkErr
-        );
+      // Flip the parent contact record to appStatus='active' + linkedUserId.
+      // Allowed by the parents-update rule's parent self-link branch added
+      // in Step 2 — scoped to email-matched record, only the three fields
+      // below, only when not already linked to a different uid. Best
+      // effort: the user is fully functional even if this fails.
+      if (linkedParentId) {
+        try {
+          await updateDoc(doc(db, 'parents', linkedParentId), {
+            linkedUserId: fbUser.uid,
+            appStatus: 'active',
+            updatedAt: serverTimestamp(),
+          });
+        } catch (parentUpdateErr) {
+          console.warn(
+            '[AuthContext] could not self-link parents/{parentId} on accept:',
+            parentUpdateErr
+          );
+        }
       }
 
       try {
@@ -595,8 +693,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.warn('[AuthContext] failed to delete consumed parent invite:', deleteErr);
       }
 
-      // Welcome email — same contract as teacher flow above. See the
-      // note there about daycareName falling back to invitedByName.
       try {
         await emailApi.sendWelcome({
           email: invite.email,

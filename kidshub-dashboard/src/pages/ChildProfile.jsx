@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   Phone,
@@ -36,7 +36,7 @@ import {
 import { ActivityIcon, activityLabels } from '../components/icons/ActivityIcons';
 import { useChild, useClassroom, useChildActivities, useParentsData, useStaffData } from '../hooks';
 import { activitiesApi, childrenApi, emailApi, invitesApi, usersApi } from '../firebase/api';
-import { InviteParentModal, ChildFormModal } from '../components/modals';
+import { ChildFormModal } from '../components/modals';
 
 /**
  * Same VITE_KIDSHUB_APP_URL as InviteParentModal — kept as a local constant
@@ -204,13 +204,13 @@ function TimelineItem({ activity, staff }) {
 
 export default function ChildProfile() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { data: child, loading: childLoading } = useChild(id);
   const { data: classroom } = useClassroom(child?.classroom);
   const { data: activities, loading: activitiesLoading } = useChildActivities(id);
   const { data: parents } = useParentsData();
   const { data: staff } = useStaffData();
   const [activeTab, setActiveTab] = useState('timeline');
-  const [showInviteParentModal, setShowInviteParentModal] = useState(false);
   const [pendingParentInvites, setPendingParentInvites] = useState([]);
   const [copiedInviteToken, setCopiedInviteToken] = useState('');
   const [editOpen, setEditOpen] = useState(false);
@@ -644,7 +644,8 @@ export default function ChildProfile() {
                     </div>
                     <Button
                       icon={UserPlus}
-                      onClick={() => setShowInviteParentModal(true)}>
+                      onClick={() => navigate(`/parents?addFor=${child.id}`)}
+                      title="Open the Parents page to add a new parent contact, pre-linked to this child">
                       Invite parent to app
                     </Button>
                   </div>
@@ -777,12 +778,6 @@ export default function ChildProfile() {
           </Card>
         </div>
       </div>
-
-      <InviteParentModal
-        isOpen={showInviteParentModal}
-        onClose={() => setShowInviteParentModal(false)}
-        child={child}
-      />
 
       <ChildFormModal
         isOpen={editOpen}

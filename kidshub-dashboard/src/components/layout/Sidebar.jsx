@@ -16,6 +16,7 @@ import {
   Activity,
   Megaphone,
   FileText,
+  Heart,
   Loader2,
 } from 'lucide-react';
 import { Avatar } from '../ui';
@@ -28,6 +29,7 @@ const navigation = [
   { name: 'Activities', href: '/activities', icon: Activity },
   { name: 'Classrooms', href: '/classrooms', icon: School },
   { name: 'Staff', href: '/staff', icon: Users },
+  { name: 'Parents', href: '/parents', icon: Heart },
   { name: 'Messages', href: '/messages', icon: MessageSquare, badge: 2 },
   { name: 'Announcements', href: '/announcements', icon: Megaphone },
   { name: 'Schedule', href: '/schedule', icon: Calendar },

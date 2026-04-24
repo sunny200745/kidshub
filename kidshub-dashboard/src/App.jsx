@@ -12,6 +12,7 @@ import Children from './pages/Children';
 import ChildProfile from './pages/ChildProfile';
 import Classrooms from './pages/Classrooms';
 import Staff from './pages/Staff';
+import Parents from './pages/Parents';
 import Messages from './pages/Messages';
 import Schedule from './pages/Schedule';
 import CheckIn from './pages/CheckIn';
@@ -44,7 +45,10 @@ function App() {
           
           {/* Staff Route */}
           <Route path="/staff" element={<ProtectedRoute><Staff /></ProtectedRoute>} />
-          
+
+          {/* Parents Route */}
+          <Route path="/parents" element={<ProtectedRoute><Parents /></ProtectedRoute>} />
+
           {/* Messages Route */}
           <Route path="/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
           
