@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 
 import { Layout } from '../components/layout';
-import { Card, CardBody, Badge, Button } from '../components/ui';
+import { Card, CardBody, Badge, Button, Modal, ModalFooter } from '../components/ui';
 import { useAuth } from '../contexts';
 import { useEntitlements } from '../hooks';
 import {
@@ -381,33 +381,46 @@ export default function Plans() {
           </CardBody>
         </Card>
 
-        {/* Contact sales form (inline, triggered by the CTA buttons above) */}
-        {showContact && (
-          <ContactSalesCard
-            contactUrl={CONTACT_SALES_URL}
-            interestTier={interestTier}
-            interestFeature={initialFeature}
-            user={user}
-            center={center}
-            onClose={() => setShowContact(false)}
-          />
-        )}
       </div>
+
+      {/* Contact sales modal — opens over the Plans content when the
+         CTA buttons fire. Conditional mount resets form state on every
+         reopen, which is what users expect after cancelling midway. */}
+      {showContact && (
+        <ContactSalesModal
+          isOpen={showContact}
+          onClose={() => setShowContact(false)}
+          contactUrl={CONTACT_SALES_URL}
+          interestTier={interestTier}
+          interestFeature={initialFeature}
+          user={user}
+          center={center}
+        />
+      )}
     </Layout>
   );
 }
 
 /**
- * Contact-sales card — posts to the kidshub-landing /api/contact-sales
- * endpoint (E2). On success, flips to a confirmation state.
+ * Contact-sales modal — posts to the kidshub-landing /api/contact-sales
+ * endpoint (E2). Rendered in a <Modal> so the form pops over the page
+ * instead of pushing content below the tier grid.
+ *
+ * Two render states:
+ *   1. Form — name/email/tier/message. On submit, POSTs the lead.
+ *   2. Success — confirmation panel with a prominent Close button.
+ *
+ * Close is guarded while `submitting` so users can't dismiss a request
+ * mid-flight and lose their own confirmation.
  */
-function ContactSalesCard({
+function ContactSalesModal({
+  isOpen,
+  onClose,
   contactUrl,
   interestTier,
   interestFeature,
   user,
   center,
-  onClose,
 }) {
   const [name, setName] = useState(user?.displayName || center?.name || '');
   const [email, setEmail] = useState(user?.email || '');
@@ -420,6 +433,11 @@ function ContactSalesCard({
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
+
+  const handleClose = () => {
+    if (submitting) return;
+    onClose();
+  };
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -461,8 +479,13 @@ function ContactSalesCard({
 
   if (submitted) {
     return (
-      <Card className="border-2 border-success-200 bg-success-50/40">
-        <CardBody className="flex items-start gap-4 py-6">
+      <Modal
+        isOpen={isOpen}
+        onClose={handleClose}
+        title="Request sent"
+        size="md"
+      >
+        <div className="flex items-start gap-4">
           <div className="w-10 h-10 rounded-xl bg-success-100 flex items-center justify-center flex-shrink-0">
             <CheckCircle2 className="w-5 h-5 text-success-600" />
           </div>
@@ -481,123 +504,127 @@ function ContactSalesCard({
               </a>
               .
             </p>
-            <Button variant="ghost" size="sm" onClick={onClose} className="mt-3">
-              Close
-            </Button>
           </div>
-        </CardBody>
-      </Card>
+        </div>
+        <ModalFooter>
+          <Button variant="primary" onClick={handleClose}>
+            Close
+          </Button>
+        </ModalFooter>
+      </Modal>
     );
   }
 
   return (
-    <Card className="border-2 border-brand-200">
-      <CardBody>
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-xl bg-brand-500/10 flex items-center justify-center">
-            <Sparkles className="w-5 h-5 text-brand-600" />
+    <Modal
+      isOpen={isOpen}
+      onClose={handleClose}
+      title="Contact sales"
+      size="lg"
+    >
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-10 h-10 rounded-xl bg-brand-500/10 flex items-center justify-center flex-shrink-0">
+          <Sparkles className="w-5 h-5 text-brand-600" />
+        </div>
+        <p className="text-sm text-surface-500">
+          Tell us about your daycare and we'll get back within one
+          business day.
+        </p>
+      </div>
+
+      {error && (
+        <div className="p-3 mb-3 bg-danger-50 border border-danger-200 rounded-xl text-sm text-danger-700">
+          {error}
+        </div>
+      )}
+
+      <form id="contact-sales-form" className="space-y-4" onSubmit={onSubmit}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-surface-700 mb-1">
+              Your name
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full border border-surface-300 rounded-xl px-3 py-2 focus:ring-2 focus:ring-brand-300 focus:border-brand-500 outline-none"
+              required
+            />
           </div>
           <div>
-            <h3 className="text-lg font-bold text-surface-900">
-              Contact sales
-            </h3>
-            <p className="text-sm text-surface-500">
-              Tell us about your daycare and we'll get back within one
-              business day.
-            </p>
+            <label className="block text-sm font-medium text-surface-700 mb-1">
+              Email
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full border border-surface-300 rounded-xl px-3 py-2 focus:ring-2 focus:ring-brand-300 focus:border-brand-500 outline-none"
+              required
+            />
           </div>
         </div>
 
-        {error && (
-          <div className="p-3 mb-3 bg-danger-50 border border-danger-200 rounded-xl text-sm text-danger-700">
-            {error}
-          </div>
-        )}
+        <div>
+          <label className="block text-sm font-medium text-surface-700 mb-1">
+            Interested in
+          </label>
+          <select
+            value={tier}
+            onChange={(e) => setTier(e.target.value)}
+            className="w-full border border-surface-300 rounded-xl px-3 py-2 focus:ring-2 focus:ring-brand-300 focus:border-brand-500 outline-none"
+          >
+            {PURCHASABLE_TIERS.map((t) => (
+              <option key={t} value={t}>
+                {TIERS[t].name}{' '}
+                {TIERS[t].monthlyPriceUsd
+                  ? `— $${TIERS[t].monthlyPriceUsd}/mo`
+                  : '— Free'}
+              </option>
+            ))}
+          </select>
+        </div>
 
-        <form className="space-y-4" onSubmit={onSubmit}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                Your name
-              </label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full border border-surface-300 rounded-xl px-3 py-2 focus:ring-2 focus:ring-brand-300 focus:border-brand-500 outline-none"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                Email
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full border border-surface-300 rounded-xl px-3 py-2 focus:ring-2 focus:ring-brand-300 focus:border-brand-500 outline-none"
-                required
-              />
-            </div>
-          </div>
+        <div>
+          <label className="block text-sm font-medium text-surface-700 mb-1">
+            Tell us a bit about your daycare (optional)
+          </label>
+          <textarea
+            rows={3}
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            className="w-full border border-surface-300 rounded-xl px-3 py-2 focus:ring-2 focus:ring-brand-300 focus:border-brand-500 outline-none"
+            placeholder="Size, classrooms, pain points, go-live timeline…"
+          />
+        </div>
+      </form>
 
-          <div>
-            <label className="block text-sm font-medium text-surface-700 mb-1">
-              Interested in
-            </label>
-            <select
-              value={tier}
-              onChange={(e) => setTier(e.target.value)}
-              className="w-full border border-surface-300 rounded-xl px-3 py-2 focus:ring-2 focus:ring-brand-300 focus:border-brand-500 outline-none"
-            >
-              {PURCHASABLE_TIERS.map((t) => (
-                <option key={t} value={t}>
-                  {TIERS[t].name}{' '}
-                  {TIERS[t].monthlyPriceUsd
-                    ? `— $${TIERS[t].monthlyPriceUsd}/mo`
-                    : '— Free'}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-surface-700 mb-1">
-              Tell us a bit about your daycare (optional)
-            </label>
-            <textarea
-              rows={3}
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              className="w-full border border-surface-300 rounded-xl px-3 py-2 focus:ring-2 focus:ring-brand-300 focus:border-brand-500 outline-none"
-              placeholder="Size, classrooms, pain points, go-live timeline…"
-            />
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Button type="submit" variant="primary" disabled={submitting}>
-              {submitting ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Sending…
-                </>
-              ) : (
-                'Send request'
-              )}
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={onClose}
-              disabled={submitting}
-            >
-              Cancel
-            </Button>
-          </div>
-        </form>
-      </CardBody>
-    </Card>
+      <ModalFooter>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={handleClose}
+          disabled={submitting}
+        >
+          Cancel
+        </Button>
+        <Button
+          type="submit"
+          form="contact-sales-form"
+          variant="primary"
+          disabled={submitting}
+        >
+          {submitting ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Sending…
+            </>
+          ) : (
+            'Send request'
+          )}
+        </Button>
+      </ModalFooter>
+    </Modal>
   );
 }
