@@ -269,9 +269,10 @@ export function useMyMessages(): AsyncState<Message[]> {
       );
       return unsub;
     }
-    if (isTeacher && daycareId) {
+    if (isTeacher && uid && daycareId) {
       setState((s) => ({ ...s, loading: true, error: null }));
-      const unsub = messagesApi.subscribeForDaycare(
+      const unsub = messagesApi.subscribeForTeacher(
+        uid,
         daycareId,
         (msgs) => setState({ data: msgs, loading: false, error: null }),
         (error) => setState((s) => ({ ...s, loading: false, error })),

@@ -105,30 +105,78 @@ export const messagesApi = {
   },
 
   /**
-   * Subscribe to all messages in a teacher's daycare. Teacher rules
-   * allow read on any message in their tenant; UI filters to "threads I
-   * participate in" by checking senderId/recipientId == teacher.uid OR
-   * staff threads for their classroom.
+   * Subscribe to every message a teacher participates in (as sender OR
+   * recipient) within their tenant.
+   *
+   * IMPORTANT: this used to be `subscribeForDaycare(daycareId)` which
+   * ran a single `where('daycareId', '==', daycareId)` query and relied
+   * on the client to filter down to participant threads. That pattern
+   * silently returned `[]` for every teacher because the Firestore
+   * message-read rule is
+   *   inMyTenant(resource.data)
+   *   && (senderId == uid || recipientId == uid)
+   * for non-owners, and Firestore's list-query evaluator cannot prove
+   * the participant constraint from a daycareId-only filter — so the
+   * entire query was rejected with `permission-denied` and the teacher
+   * Inbox looked empty even though outbound sends worked (writes don't
+   * depend on the subscription).
+   *
+   * Fix mirrors the parent side: two queries, one per participant
+   * field, both pinned to daycareId so Firestore can statically prove
+   * both branches of the rule. Dedup + sort happens client-side.
    */
-  subscribeForDaycare(
+  subscribeForTeacher(
+    teacherUid: string,
     daycareId: string,
     callback: (messages: Message[]) => void,
     onError?: (err: Error) => void,
   ): Unsubscribe {
-    return onSnapshot(
-      query(collection(db, COLLECTION), where('daycareId', '==', daycareId)),
+    const buckets: { sent: Message[]; received: Message[] } = { sent: [], received: [] };
+
+    const emit = () => {
+      const dedup = new Map<string, Message>();
+      [...buckets.sent, ...buckets.received].forEach((m) => dedup.set(m.id, m));
+      const merged = Array.from(dedup.values()).sort((a, b) =>
+        a.timestamp < b.timestamp ? -1 : 1,
+      );
+      callback(merged);
+    };
+
+    const unsubSent = onSnapshot(
+      query(
+        collection(db, COLLECTION),
+        where('daycareId', '==', daycareId),
+        where('senderId', '==', teacherUid),
+      ),
       (snap) => {
-        const list = snap.docs
-          .map(snapToMessage)
-          .sort((a, b) => (a.timestamp < b.timestamp ? -1 : 1));
-        callback(list);
+        buckets.sent = snap.docs.map(snapToMessage);
+        emit();
       },
       (err) => {
-        console.error('[messagesApi.subscribeForDaycare]', err);
+        console.error('[messagesApi.subscribeForTeacher sent]', err);
         onError?.(err);
-        callback([]);
       },
     );
+    const unsubRecv = onSnapshot(
+      query(
+        collection(db, COLLECTION),
+        where('daycareId', '==', daycareId),
+        where('recipientId', '==', teacherUid),
+      ),
+      (snap) => {
+        buckets.received = snap.docs.map(snapToMessage);
+        emit();
+      },
+      (err) => {
+        console.error('[messagesApi.subscribeForTeacher recv]', err);
+        onError?.(err);
+      },
+    );
+
+    return () => {
+      unsubSent();
+      unsubRecv();
+    };
   },
 
   /**
