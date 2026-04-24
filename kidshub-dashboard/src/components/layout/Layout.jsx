@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { PlanStateBanner } from './PlanStateBanner';
+import { PlanGateInterstitial } from '../PlanGateInterstitial';
 
 export function Layout({ children, title, subtitle, actions }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -60,6 +61,11 @@ export function Layout({ children, title, subtitle, actions }) {
           {children}
         </main>
       </div>
+
+      {/* Trial-expired blocker (stop 5). Renders on top of everything
+         when the owner's trial just flipped to starter and they haven't
+         acknowledged yet. Non-dismissible — forces an explicit action. */}
+      <PlanGateInterstitial />
     </div>
   );
 }

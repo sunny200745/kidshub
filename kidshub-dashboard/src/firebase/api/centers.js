@@ -162,6 +162,15 @@ export async function downgradeExpiredTrial(existing) {
   try {
     await updateDoc(doc(db, 'centers', ownerId), {
       plan: 'starter',
+      // Stamp the moment the trial ended so <PlanGateInterstitial>
+      // (stop 5) can detect "just transitioned, hasn't been ack'd yet"
+      // and force the owner to consciously pick a path forward. Without
+      // this, the downgrade is invisible and intent gets lost.
+      trialEndedAt: serverTimestamp(),
+      // Stop 7 — begin the 2-month Starter grace clock. This lets us
+      // drive the starter-expiring banner + blocker purely from
+      // centers/{ownerId} without any extra collections.
+      starterStartedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
     return 'starter';
@@ -169,6 +178,26 @@ export async function downgradeExpiredTrial(existing) {
     console.warn('[centersApi] downgradeExpiredTrial failed:', err);
     return null;
   }
+}
+
+/**
+ * Owner-side acknowledgement of the "your trial just ended" blocker
+ * (stop 5). Called when the owner picks any explicit action on the
+ * <PlanGateInterstitial> modal — "Stay on Starter", "See plans",
+ * "Contact sales" — so the interstitial doesn't re-appear on every
+ * page navigation.
+ *
+ * We persist to Firestore (not localStorage) so the acknowledgement
+ * survives device / browser changes and private-mode sessions. The
+ * semantic is "user was made aware, don't block again" — no billing
+ * or entitlement effects.
+ */
+export async function acknowledgeTrialExpiry() {
+  const ownerId = currentOwnerId();
+  await updateDoc(doc(db, 'centers', ownerId), {
+    trialExpiryAcknowledgedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
 }
 
 /**
@@ -272,6 +301,7 @@ export const centersApi = {
   subscribeToSelfCenter,
   ensurePlanStamped,
   downgradeExpiredTrial,
+  acknowledgeTrialExpiry,
   setDemoMode,
   setPlan,
   getSelfCenter,
