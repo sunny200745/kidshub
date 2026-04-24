@@ -262,6 +262,83 @@ These placeholders are internally consistent — the app runs correctly with the
 
 ---
 
+## Pre-launch TODOs (not blocking the build, blocking the launch)
+
+The product builds, demos, and tests cleanly today. These items don't
+block development and aren't part of any sprint, but you'll want each
+checked off **before the first paying customer** (or before any
+public-facing PR push).
+
+### Legal + compliance
+
+- [ ] **`/legal/privacy` page on `getkidshub.com`.** Cover: what we
+      collect, why, retention windows, data residency (Canadian
+      Firestore region), parental consent for child data,
+      PIPEDA-aware language to match `KIDSHUB_ONE_PAGER.md`'s
+      "Canadian & private" claim. Link from landing footer.
+- [ ] **`/legal/terms` page on `getkidshub.com`.** Cover: subscription
+      + cancellation terms (matches BILLING.md grace logic), data
+      ownership ("yours; full CSV export anytime"), service-level
+      expectations, governing law (likely Ontario or BC).
+- [ ] **Cookie banner** on the landing site. Probably trivial since
+      we're storing only a session cookie + Vercel's analytics-free
+      defaults — but PIPEDA still expects a notice.
+- [ ] **Data Processing Agreement (DPA) template** to send to
+      enterprise prospects. Can wait until first multi-location
+      lead asks.
+
+### Sales asset activation (the case-study lift)
+
+- [ ] **Land first paying Pro customer.** Track F billing flip is
+      the gating dependency; until Stripe is live this is manual
+      ("invoice + bank transfer" is fine for #1).
+- [ ] **Wait 30–60 days, run the case-study interview.** 30-min
+      recorded call → 7-question script (see "How to fill in
+      `case-study.html`" in repo notes / chat history). Get written
+      sign-off on quotes + numbers before publishing.
+- [ ] **Fill `kidshub-landing/case-study.html`** — replace every
+      `[bracketed]` placeholder with real data. Update `<title>`
+      and OG meta tags (lines 6–11) to reference the real daycare
+      name. Add a real photo (`<img>` near the hero).
+- [ ] **Link the case study from the rest of the site.** It's
+      currently reachable at `/case-study` but unlinked. Three
+      placements:
+      - Pricing page hero or near the Pro tier card
+      - Index page — new "Customer story" section between "How it
+        works" and "Pricing"
+      - Footer "Customers" link group on all three pages
+- [ ] **(Optional, +20% lead capture)** Lead-gate the bottom 30% of
+      the case study behind a `/api/contact-sales` form (reuse the
+      existing endpoint, set `source: 'case-study-download'`).
+- [ ] **Generate PDF** (`/assets/kidshub-case-study.pdf`) for email
+      attachments — closes out Sprint 7 / E5.
+- [ ] **Distribute** — LinkedIn post (personal + Nuvaro), insert
+      into outbound email CTAs, pin on slide 2 of demo deck.
+
+### Marketing / SEO loose ends
+
+- [ ] **Open Graph + Twitter Card images** (`assets/og-card.png`)
+      for `index.html`, `pricing.html`, `case-study.html`. Today
+      they fall back to plain text previews.
+- [ ] **`sitemap.xml` + `robots.txt`** at the landing root. Currently
+      missing — search engines are indexing fine but crawl efficiency
+      improves with both.
+- [ ] **Google Search Console + Bing Webmaster Tools** verification.
+
+### Operational
+
+- [ ] **Status page** (probably `status.getkidshub.com`, hosted via
+      a service like Instatus or Better Uptime). Daycare owners
+      will ask "is it down?" before they email us.
+- [ ] **Support inbox monitoring** — `support@nuvaro.ca` is in
+      `SALES_NOTIFICATION_TO`. Make sure it's actually monitored
+      with a ≤ 24-hour SLA.
+- [ ] **Error monitoring** — Sentry (or equivalent) on dashboard +
+      kidshub. Currently all errors are console-only; we won't see
+      production issues until a customer tells us.
+
+---
+
 ## Progress log
 
 _Append dated notes as sprints complete._
