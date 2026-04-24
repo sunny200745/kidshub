@@ -23,6 +23,20 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+/**
+ * Extra bottom padding on web to clear the Expo Router tab bar.
+ *
+ * Why: on native, RN `Modal` is a true full-screen overlay so it covers
+ * the tab bar. On Expo Web, `Modal` renders inside the current tab
+ * screen's DOM container, which sits ABOVE the tab bar — so the tab
+ * bar (z-indexed on top of the screen's content) visually occludes the
+ * bottom of the sheet. 64 px tab height + 8 px padding + a safe buffer
+ * ≈ 96 px keeps the primary action buttons fully tappable on web
+ * without changing how the sheet looks on native.
+ */
+const WEB_TAB_BAR_CLEARANCE = 96;
 
 export type SheetModalProps = {
   visible: boolean;
@@ -50,9 +64,16 @@ export function SheetModal({
   maxHeight = '88%',
   children,
 }: SheetModalProps) {
+  const insets = useSafeAreaInsets();
   const handleBackdropPress = () => {
     if (dismissible) onClose();
   };
+
+  // Base 32 px sheet padding + home-indicator inset on iOS/Android + a
+  // fixed clearance on web so the sheet's bottom action row doesn't sit
+  // underneath the tab bar.
+  const bottomPadding =
+    32 + insets.bottom + (Platform.OS === 'web' ? WEB_TAB_BAR_CLEARANCE : 0);
 
   return (
     <Modal
@@ -65,8 +86,11 @@ export function SheetModal({
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         pointerEvents="box-none">
         <View
-          className="bg-white dark:bg-surface-900 rounded-t-3xl px-6 pt-3 pb-8"
-          style={{ maxHeight: maxHeight as unknown as number }}>
+          className="bg-white dark:bg-surface-900 rounded-t-3xl px-6 pt-3"
+          style={{
+            maxHeight: maxHeight as unknown as number,
+            paddingBottom: bottomPadding,
+          }}>
           {/* Grab handle — decorative, centered. Signals "draggable" even
               though the Modal itself doesn't support a drag gesture. */}
           <View className="w-10 h-1.5 bg-surface-200 dark:bg-surface-700 rounded-full self-center mb-4" />
