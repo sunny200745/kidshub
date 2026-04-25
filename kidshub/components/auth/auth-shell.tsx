@@ -56,6 +56,9 @@ import {
   View,
 } from 'react-native';
 
+import { AuthDecorations } from './auth-decorations';
+import { PlayfulMascots } from './playful-mascots';
+
 const LOGO = require('@/assets/images/icon.png');
 
 export function AuthShell({
@@ -136,11 +139,26 @@ export function AuthShell({
           }}
         />
 
+        {/* Animated decoration layer — twinkling stars, floating
+            hearts, drifting sparkles + flowers, slow-floating clouds.
+            Sits above the blobs but below the scroll content (the
+            ScrollView is the next sibling), so it never intercepts
+            taps and never obscures the form. Mirrors the dashboard's
+            <AnimatedAuthBackground /> so both surfaces share one
+            playful visual language. */}
+        <AuthDecorations />
+
         <ScrollView
           contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
           keyboardShouldPersistTaps="handled">
           <View className="px-6 py-10 items-center">
             <View className="w-full max-w-md">
+              {/* Mascot row — friendly cartoon scene above the logo.
+                  Anchors the page emotionally before the user even
+                  reads the form. Wraps gracefully on the narrowest
+                  devices. */}
+              <PlayfulMascots />
+
               {/* Logo header — a real logo image (not just a wordmark)
                   so the page has a proper graphic anchor. The chip-
                   style background + shadow matches the loading splash
