@@ -111,6 +111,16 @@ export default {
         'slide-down': 'slideDown 0.3s ease-out',
         'scale-in': 'scaleIn 0.2s ease-out',
         'pulse-soft': 'pulseSoft 2s infinite',
+        // Auth-page playful decorations. Kept generic enough to reuse
+        // anywhere we want gentle, non-distracting motion.
+        'float': 'float 6s ease-in-out infinite',
+        'float-slow': 'float 9s ease-in-out infinite',
+        'float-fast': 'float 4s ease-in-out infinite',
+        'twinkle': 'twinkle 3s ease-in-out infinite',
+        'twinkle-slow': 'twinkle 5s ease-in-out infinite',
+        'drift': 'drift 14s ease-in-out infinite',
+        'pulse-blob': 'pulseBlob 8s ease-in-out infinite',
+        'spin-slow': 'spin 20s linear infinite',
       },
       keyframes: {
         fadeIn: {
@@ -132,6 +142,33 @@ export default {
         pulseSoft: {
           '0%, 100%': { opacity: '1' },
           '50%': { opacity: '0.7' },
+        },
+        // Gentle vertical bob — used for floating mascots, hearts.
+        // 12px range is enough to read as motion without being jumpy.
+        float: {
+          '0%, 100%': { transform: 'translateY(0)' },
+          '50%': { transform: 'translateY(-12px)' },
+        },
+        // Star-like opacity pulse + tiny scale, designed to look like
+        // a sparkle catching light rather than a button blinking.
+        twinkle: {
+          '0%, 100%': { opacity: '0.35', transform: 'scale(0.9)' },
+          '50%': { opacity: '1', transform: 'scale(1.1)' },
+        },
+        // Slow rotation + slight drift — for sparkle / star icons that
+        // shouldn't sit perfectly still but also shouldn't spin like a
+        // loader. Combined transform keeps them lively without strobing.
+        drift: {
+          '0%, 100%': { transform: 'translate(0, 0) rotate(0deg)' },
+          '25%': { transform: 'translate(6px, -8px) rotate(8deg)' },
+          '50%': { transform: 'translate(-4px, -14px) rotate(-6deg)' },
+          '75%': { transform: 'translate(-8px, -4px) rotate(4deg)' },
+        },
+        // Decorative-blob breathing. Subtle scale+opacity so the blurry
+        // color washes feel alive without distracting from the form.
+        pulseBlob: {
+          '0%, 100%': { transform: 'scale(1)', opacity: '0.55' },
+          '50%': { transform: 'scale(1.08)', opacity: '0.7' },
         },
       },
     },

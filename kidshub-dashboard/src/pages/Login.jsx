@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Navigate, useLocation, Link } from 'react-router-dom';
 import { Baby, Mail, Lock, Eye, EyeOff, ArrowRight, Loader2, LayoutDashboard, Users, Calendar, BarChart3 } from 'lucide-react';
 import { useAuth } from '../contexts';
+import { AnimatedAuthBackground, PlayfulHero } from '../components/auth';
 
 export default function Login() {
   const { login, resetPassword, isAuthenticated, loading: authLoading } = useAuth();
@@ -156,25 +157,20 @@ export default function Login() {
         The blobs use overflow-hidden on the parent so they can extend
         past the column edges without bleeding into the dark hero.
       */}
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-8 relative overflow-hidden bg-gradient-to-br from-brand-50 via-white to-accent-50">
-        {/* Decorative blobs — purely visual; pointer-events:none so
-            they never intercept clicks on the form. Mirror the desktop
-            hero's pink/purple blob recipe so the brand language stays
-            consistent across screen sizes. */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -top-24 -right-24 w-96 h-96 rounded-full bg-brand-300/40 blur-3xl"
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -bottom-32 -left-24 w-[28rem] h-[28rem] rounded-full bg-accent-300/35 blur-3xl"
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute top-1/3 -right-16 w-56 h-56 rounded-full bg-brand-200/40 blur-2xl"
-        />
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-8 relative overflow-hidden">
+        {/* Animated themed chrome — pulsing gradient blobs + scattered
+            twinkling stars / floating hearts / drifting sparkles.
+            Single component owns the whole back layer so Login and
+            Register stay perfectly in sync visually. */}
+        <AnimatedAuthBackground />
 
         <div className="w-full max-w-md relative z-10">
+          {/* Mobile-only playful illustration — friendly cloud / sun /
+              balloon / star scene above the form. Hidden on desktop
+              where the dark hero on the left already carries the
+              visual weight. */}
+          <PlayfulHero />
+
           {/* Mobile Logo — bigger and more graphic on small screens
               now that this column is the full viewport. The chip-style
               white tile with brand shadow matches the look of the

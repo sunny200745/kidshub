@@ -9,6 +9,7 @@ import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2, User, Phone, Building2, Shield, Clock, Users, Sparkles } from 'lucide-react';
 import { auth, db } from '../firebase/config';
 import { useAuth } from '../contexts';
+import { AnimatedAuthBackground, PlayfulHero } from '../components/auth';
 import { ROLES } from '../constants/roles';
 import { defaultPlanFields } from '../firebase/api/centers';
 import { STARTER_FREE_DAYS } from '../config/product';
@@ -300,21 +301,17 @@ export default function Register() {
         desktop. Kept identical to Login so the auth flow looks like
         one cohesive surface.
       */}
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-8 relative overflow-hidden bg-gradient-to-br from-brand-50 via-white to-accent-50">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -top-24 -right-24 w-96 h-96 rounded-full bg-brand-300/40 blur-3xl"
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -bottom-32 -left-24 w-[28rem] h-[28rem] rounded-full bg-accent-300/35 blur-3xl"
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute top-1/3 -right-16 w-56 h-56 rounded-full bg-brand-200/40 blur-2xl"
-        />
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-8 relative overflow-hidden">
+        {/* Animated themed chrome — see AnimatedAuthBackground.jsx
+            for the full layer breakdown. Identical to Login.jsx. */}
+        <AnimatedAuthBackground />
 
         <div className="w-full max-w-md relative z-10">
+          {/* Mobile-only playful illustration — kept identical to
+              Login.jsx so the auth flow looks like one cohesive
+              surface as the user moves between sign-in and sign-up. */}
+          <PlayfulHero />
+
           {/* Mobile Logo — bigger and more graphic on small screens
               now that this column is the full viewport. Matches the
               same chip-style mark used on Login.jsx. */}
