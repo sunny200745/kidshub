@@ -137,25 +137,66 @@ export default function Login() {
         </div>
       </div>
 
-      {/* Right Side - Login Form */}
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-8 bg-surface-50">
-        <div className="w-full max-w-md">
-          {/* Mobile Logo */}
-          <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
-            <img
-              src="/kidshub-logo.svg"
-              alt="KidsHub"
-              className="w-12 h-12 rounded-xl shadow-brand"
-              width="48"
-              height="48"
-            />
-            <div>
-              <span className="text-xl font-bold text-surface-900">KidsHub</span>
-              <span className="text-sm text-surface-500 block">Owner Portal</span>
+      {/*
+        Right Side - Login Form.
+
+        We give this column its own themed background (brand-tinted
+        gradient + decorative blurred blobs) for two reasons:
+
+        1. On mobile/tablet (< lg) the desktop dark-hero on the left
+           is hidden, so this column IS the entire screen. A flat
+           bg-surface-50 there read as "default scaffolding" next to
+           the rest of the parent/teacher app. Themed bg fixes that.
+
+        2. On desktop (>= lg) the same chrome adds a subtle pink wash
+           behind the white card, softening the hard cut between the
+           dark left hero and the bright right form without competing
+           with either.
+
+        The blobs use overflow-hidden on the parent so they can extend
+        past the column edges without bleeding into the dark hero.
+      */}
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-8 relative overflow-hidden bg-gradient-to-br from-brand-50 via-white to-accent-50">
+        {/* Decorative blobs — purely visual; pointer-events:none so
+            they never intercept clicks on the form. Mirror the desktop
+            hero's pink/purple blob recipe so the brand language stays
+            consistent across screen sizes. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -top-24 -right-24 w-96 h-96 rounded-full bg-brand-300/40 blur-3xl"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -bottom-32 -left-24 w-[28rem] h-[28rem] rounded-full bg-accent-300/35 blur-3xl"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute top-1/3 -right-16 w-56 h-56 rounded-full bg-brand-200/40 blur-2xl"
+        />
+
+        <div className="w-full max-w-md relative z-10">
+          {/* Mobile Logo — bigger and more graphic on small screens
+              now that this column is the full viewport. The chip-style
+              white tile with brand shadow matches the look of the
+              parent/teacher app's loading splash so the brand mark
+              feels like one consistent element across surfaces. */}
+          <div className="lg:hidden flex flex-col items-center text-center mb-8">
+            <div className="w-20 h-20 rounded-2xl bg-white shadow-brand-lg flex items-center justify-center mb-4">
+              <img
+                src="/kidshub-logo.svg"
+                alt="KidsHub"
+                className="w-14 h-14 rounded-xl"
+                width="56"
+                height="56"
+              />
             </div>
+            <span className="text-2xl font-bold text-surface-900">KidsHub</span>
+            <span className="inline-block mt-2 px-3 py-1 rounded-full bg-brand-50 border border-brand-100 text-xs font-medium text-brand-700">
+              Owner Portal
+            </span>
           </div>
 
-          <div className="bg-white rounded-3xl shadow-soft-xl p-8 sm:p-10 border border-surface-100">
+          <div className="bg-white/95 backdrop-blur-sm rounded-3xl shadow-soft-xl p-8 sm:p-10 border border-brand-100/70">
             {showForgotPassword ? (
               <>
                 <div className="text-center mb-8">

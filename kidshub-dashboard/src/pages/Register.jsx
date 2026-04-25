@@ -290,25 +290,51 @@ export default function Register() {
         </div>
       </div>
 
-      {/* Right Side - Register Form */}
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-8 bg-surface-50">
-        <div className="w-full max-w-md">
-          {/* Mobile Logo */}
-          <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
-            <img
-              src="/kidshub-logo.svg"
-              alt="KidsHub"
-              className="w-12 h-12 rounded-xl shadow-brand"
-              width="48"
-              height="48"
-            />
-            <div>
-              <span className="text-xl font-bold text-surface-900">KidsHub</span>
-              <span className="text-sm text-surface-500 block">Owner Portal</span>
+      {/*
+        Right Side - Register Form. Same themed chrome as Login.jsx
+        (see Login.jsx for the full rationale): on mobile/tablet (< lg)
+        the desktop dark hero on the left is hidden and this column
+        becomes the entire screen, so a flat surface-50 background
+        looked unfinished. The brand-tinted gradient + decorative blobs
+        also soften the cut between dark hero and bright form on
+        desktop. Kept identical to Login so the auth flow looks like
+        one cohesive surface.
+      */}
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-8 relative overflow-hidden bg-gradient-to-br from-brand-50 via-white to-accent-50">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -top-24 -right-24 w-96 h-96 rounded-full bg-brand-300/40 blur-3xl"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -bottom-32 -left-24 w-[28rem] h-[28rem] rounded-full bg-accent-300/35 blur-3xl"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute top-1/3 -right-16 w-56 h-56 rounded-full bg-brand-200/40 blur-2xl"
+        />
+
+        <div className="w-full max-w-md relative z-10">
+          {/* Mobile Logo — bigger and more graphic on small screens
+              now that this column is the full viewport. Matches the
+              same chip-style mark used on Login.jsx. */}
+          <div className="lg:hidden flex flex-col items-center text-center mb-8">
+            <div className="w-20 h-20 rounded-2xl bg-white shadow-brand-lg flex items-center justify-center mb-4">
+              <img
+                src="/kidshub-logo.svg"
+                alt="KidsHub"
+                className="w-14 h-14 rounded-xl"
+                width="56"
+                height="56"
+              />
             </div>
+            <span className="text-2xl font-bold text-surface-900">KidsHub</span>
+            <span className="inline-block mt-2 px-3 py-1 rounded-full bg-brand-50 border border-brand-100 text-xs font-medium text-brand-700">
+              Owner Portal
+            </span>
           </div>
 
-          <div className="bg-white rounded-3xl shadow-soft-xl p-8 sm:p-10 border border-surface-100">
+          <div className="bg-white/95 backdrop-blur-sm rounded-3xl shadow-soft-xl p-8 sm:p-10 border border-brand-100/70">
             {/* Starter-free strip — honest upfront framing of the 60-day
                free window + what happens after (paywall + contact sales),
                so owners aren't surprised by a silent lock later. */}
