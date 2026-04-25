@@ -70,13 +70,18 @@ export default function LoginScreen() {
     }
   };
 
+  // Generic subtitle — this screen is the SHARED entry point for
+  // both parents and teachers/staff, so the copy can't lean on either
+  // role ("see your child's updates" was parent-only and confusing
+  // when a teacher hit /login).
   return (
-    <AuthShell subtitle="Sign in to see your child's updates">
-      {/* Slightly translucent + brand-tinted border so the card reads
-          as part of the gradient layer rather than punching out of it.
-          Larger shadow than before to lift it off the now-busy bg. */}
+    <AuthShell subtitle="Sign in to your account">
+      {/* White card with a soft brand-pink shadow + subtle pink-tinted
+          border. Sits on the AuthShell's plain off-white background;
+          the brand-pink accents are the only color cue that this is
+          a kid-care brand surface. */}
       <View
-        className="bg-white/95 dark:bg-surface-800/95 rounded-3xl p-6 sm:p-8 border border-brand-100/60 dark:border-surface-700"
+        className="bg-white dark:bg-surface-800 rounded-3xl p-6 sm:p-8 border border-brand-100/60 dark:border-surface-700"
         style={{
           shadowColor: '#FF2D8A',
           shadowOffset: { width: 0, height: 12 },

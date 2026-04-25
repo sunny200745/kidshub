@@ -1,18 +1,18 @@
 /**
- * AuthShell — shared themed chrome for every signed-out screen.
+ * AuthShell — shared chrome for every signed-out screen
+ * (/login, /forgot-password, /register).
  *
- * Direction (per latest owner feedback):
- *   - Background: plain off-white (light grey). No brand gradient,
- *     no blurred color blobs.
- *   - Decoration: sticker-style cartoon dinosaurs and flowers
- *     scattered around the edges (handled by `<AuthDecorations />`).
- *     Reads like a pre-school flashcard wall, not a marketing page.
+ * Direction (per latest owner feedback): keep the parent / staff
+ * app's auth surface deliberately quiet — plain off-white background,
+ * no decorations. The dashboard side (kidshub-dashboard) keeps the
+ * sticker dinos + flowers because owners want the marketing-tier
+ * polish there; the parent / staff app is mobile-first utility, so
+ * the form should be the only thing on screen.
  *
  * Why this exists:
- *   The auth screens (/login, /forgot-password, /register) need one
- *   consistent surface so users moving between them feel they're in
- *   the same flow. AuthShell concentrates the shared chrome
- *   (background color, decoration layer, branded logo header,
+ *   The auth screens need one consistent surface so users moving
+ *   between them feel they're in the same flow. AuthShell concentrates
+ *   the shared chrome (background color, branded logo header,
  *   copyright footer, keyboard-aware scroll wrapper) so each screen
  *   only owns its own form card. Single source of truth for visual
  *   identity at the top of the funnel.
@@ -20,23 +20,21 @@
  * Layout:
  *   ┌──────────────────────────────────────────────┐
  *   │  Off-white background (#FAFAFA)              │
- *   │   ┌──── sticker dinos + flowers ────┐       │
- *   │   │     scattered around edges       │       │
- *   │   │                                  │       │
- *   │   │       [LOGO]  KidsHub            │       │
- *   │   │       <subtitle prop>            │       │
- *   │   │                                  │       │
- *   │   │       ┌──────────────────────┐   │       │
- *   │   │       │  children (the card) │   │       │
- *   │   │       └──────────────────────┘   │       │
- *   │   │                                  │       │
- *   │   │       © 2026 KidsHub.            │       │
- *   │   └──────────────────────────────────┘       │
+ *   │                                              │
+ *   │       [LOGO]  KidsHub                        │
+ *   │       <subtitle prop>                        │
+ *   │                                              │
+ *   │       ┌──────────────────────┐               │
+ *   │       │  children (the card) │               │
+ *   │       └──────────────────────┘               │
+ *   │                                              │
+ *   │       © 2026 KidsHub.                        │
  *   └──────────────────────────────────────────────┘
  *
  * No props for the chrome — auth screens shouldn't have to think about
- * it. If we ever need a teacher-themed variant we'd take a `tone` prop
- * here, but every signed-out path today is parent-pink.
+ * it. If we ever need a dark-mode-tuned tone or a teacher-themed
+ * variant we'd take a `tone` prop here, but every signed-out path
+ * today uses identical chrome.
  */
 import { ReactNode } from 'react';
 import {
@@ -47,8 +45,6 @@ import {
   Text,
   View,
 } from 'react-native';
-
-import { AuthDecorations } from './auth-decorations';
 
 const LOGO = require('@/assets/images/icon.png');
 
@@ -64,15 +60,6 @@ export function AuthShell({
       style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={{ flex: 1, backgroundColor: '#FAFAFA' }}>
-        {/* Sticker decoration layer — cartoon dinos + flowers
-            scattered around the edges. Sits above the background
-            color but below the scroll content (the ScrollView is the
-            next sibling), so it never intercepts taps and stays
-            behind the form card. Mirrors the dashboard's
-            `<AnimatedAuthBackground />` so both surfaces share one
-            playful visual language. */}
-        <AuthDecorations />
-
         <ScrollView
           contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
           keyboardShouldPersistTaps="handled">
