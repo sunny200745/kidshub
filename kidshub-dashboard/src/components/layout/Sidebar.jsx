@@ -133,12 +133,19 @@ export function Sidebar({ collapsed, onToggle, isMobile = false, onClose }) {
         isMobile ? 'w-72' : collapsed ? 'w-20' : 'w-64'
       } ${isMobile ? '' : 'fixed top-0 left-0 z-40'}`}
     >
-      {/* Logo */}
+      {/* Logo — real brand mark from /public/kidshub-logo.svg. Vite serves
+          /public at the root, so this works in dev + the prod build. The
+          previous placeholder was a <Baby> lucide icon on a gradient chip;
+          we keep the same square footprint so the layout doesn't shift. */}
       <div className="h-14 sm:h-16 flex items-center justify-between px-4 border-b border-surface-100">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl gradient-brand flex items-center justify-center shadow-brand">
-            <Baby className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-          </div>
+          <img
+            src="/kidshub-logo.svg"
+            alt="KidsHub"
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl shadow-brand"
+            width="40"
+            height="40"
+          />
           {(!collapsed || isMobile) && (
             <span className="font-bold text-lg sm:text-xl text-gradient">KidsHub</span>
           )}

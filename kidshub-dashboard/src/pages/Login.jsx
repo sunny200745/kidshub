@@ -103,9 +103,13 @@ export default function Login() {
         <div className="relative z-10 flex flex-col justify-center px-12 xl:px-20 w-full">
           {/* Logo */}
           <div className="flex items-center gap-4 mb-12">
-            <div className="w-14 h-14 rounded-2xl gradient-brand flex items-center justify-center shadow-brand">
-              <span className="text-white font-bold text-xl">KO</span>
-            </div>
+            <img
+              src="/kidshub-logo.svg"
+              alt="KidsHub"
+              className="w-14 h-14 rounded-2xl shadow-brand"
+              width="56"
+              height="56"
+            />
             <div>
               <h1 className="text-2xl font-bold text-white">KidsHub</h1>
               <p className="text-surface-400 text-sm">Owner Portal</p>
@@ -138,9 +142,13 @@ export default function Login() {
         <div className="w-full max-w-md">
           {/* Mobile Logo */}
           <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
-            <div className="w-12 h-12 rounded-xl gradient-brand flex items-center justify-center shadow-brand">
-              <span className="text-white font-bold">KO</span>
-            </div>
+            <img
+              src="/kidshub-logo.svg"
+              alt="KidsHub"
+              className="w-12 h-12 rounded-xl shadow-brand"
+              width="48"
+              height="48"
+            />
             <div>
               <span className="text-xl font-bold text-surface-900">KidsHub</span>
               <span className="text-sm text-surface-500 block">Owner Portal</span>

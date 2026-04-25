@@ -75,9 +75,13 @@ export default function Paywall() {
       <header className="border-b border-surface-200 bg-white">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4 sm:px-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl gradient-brand shadow-brand">
-              <span className="text-sm font-bold text-white">KH</span>
-            </div>
+            <img
+              src="/kidshub-logo.svg"
+              alt="KidsHub"
+              className="h-10 w-10 rounded-xl shadow-brand"
+              width="40"
+              height="40"
+            />
             <div>
               <p className="text-sm font-semibold text-surface-900">KidsHub</p>
               <p className="text-xs text-surface-500">Owner portal</p>

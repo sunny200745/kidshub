@@ -9,7 +9,8 @@
     "ios": "expo start --ios --port 5180",
     "web": "expo start --web --port 5180",
     "build": "expo export --platform web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "build:icons": "node scripts/build-icons.mjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -49,6 +50,7 @@
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
     "prettier-plugin-tailwindcss": "^0.5.14",
+    "sharp": "^0.34.5",
     "tailwindcss": "^3.4.19",
     "typescript": "~5.9.2"
   },
