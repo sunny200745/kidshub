@@ -45,8 +45,7 @@ import { Pressable, Text, View } from 'react-native';
 
 import { ActivityIcon } from '@/components/icons/activity-icon';
 import { ScreenContainer } from '@/components/layout';
-import { UnreadMessagesBanner } from '@/components/messages';
-import { ChildSwitcher } from '@/components/parent';
+import { ChildSwitcher, ParentUnreadMessagesBanner } from '@/components/parent';
 import {
   ActionButton,
   Avatar,
@@ -464,12 +463,14 @@ export default function ParentHome() {
         </View>
 
         <AnnouncementBanner announcements={announcements} />
-        {/* Unread-messages banner — renders nothing when count = 0, so
-            it disappears the moment the parent opens /messages and the
-            inbox marks inbound messages read. Sits between the hero and
-            the snapshot card so it's high-prominence without burying
-            the child-of-the-day greeting that anchors this screen. */}
-        <UnreadMessagesBanner />
+        {/* Unread-messages banner — child-aware variant: shows the
+            specific child the message is about, switches to that child
+            on tap (so /messages opens the right thread), and lists all
+            siblings with counts when multiple kids have unread. Renders
+            nothing when there's nothing inbound. Sits between the hero
+            and the snapshot card so it's high-prominence without
+            burying the child-of-the-day greeting. */}
+        <ParentUnreadMessagesBanner />
         {child ? (
           <>
             <ChildStatusCard

@@ -287,39 +287,72 @@ export function useMyMessages(): AsyncState<Message[]> {
 }
 
 /**
- * Count of inbound messages addressed to the current user that haven't
- * been marked `read` yet. Powers the Messages tab-bar badge AND the
- * "you have N new messages" banner on the parent / teacher home
- * screens.
+ * Per-child unread breakdown for the current user, plus a "no childId"
+ * bucket and a total. Single derivation off `useMyMessages()` — we only
+ * iterate the message list once and produce everything other unread
+ * UIs need (banner, child-switcher dot, tab badge).
  *
- * Why derive instead of subscribing to a counter doc:
- *   - The data is already streaming in via `useMyMessages()` for both
- *     roles (parent: own threads; teacher: tenant + recipientId scoped).
- *     Reading the count off that same stream costs nothing extra (no
- *     new Firestore subscription) and stays perfectly in sync — when
- *     the user opens /messages and the screen calls `markAsRead`, the
- *     badge drops to 0 in the same Firestore snapshot tick.
+ * Returns:
+ *   - `byChild` : `Record<childId, count>` — only children with > 0 unread
+ *                 appear. Use `byChild[id] ?? 0` for safe lookup.
+ *   - `withoutChild` : count of unread messages with no `childId` set.
+ *                       Rare but possible — center-wide announcements,
+ *                       legacy data, etc.
+ *   - `total` : sum of the above. Same number `useUnreadMessageCount`
+ *               returns, exposed here so callers don't double-iterate.
  *
- *   - It also means roles that haven't loaded yet get `count: 0` — the
- *     badge stays hidden during sign-in / role-resolution rather than
- *     flashing a stale number.
- *
- * Returns `{ count, loading, error }`. Single source of truth — never
- * read `messages.filter(...)` for a badge in the UI; call this hook.
+ * Why we count locally instead of subscribing to a counter document:
+ *   - `useMyMessages()` is already live for both roles; tapping into
+ *     its stream is free (no extra Firestore reads).
+ *   - Marking a thread read inside `/messages` flips `m.read = true`
+ *     in the next snapshot tick, so every UI surfaced from this hook
+ *     drops to 0 atomically — no skew between badge, banner, and
+ *     switcher dot.
  */
-export function useUnreadMessageCount(): AsyncState<number> {
+export function useUnreadByChild(): AsyncState<{
+  byChild: Record<string, number>;
+  withoutChild: number;
+  total: number;
+}> {
   const { profile } = useAuth();
   const uid = profile?.uid;
   const messages = useMyMessages();
 
-  const count = useMemo(() => {
-    if (!uid) return 0;
-    return messages.data.filter(
-      (m) => m.recipientId === uid && !m.read,
-    ).length;
+  const value = useMemo(() => {
+    const empty = { byChild: {} as Record<string, number>, withoutChild: 0, total: 0 };
+    if (!uid) return empty;
+    const byChild: Record<string, number> = {};
+    let withoutChild = 0;
+    let total = 0;
+    for (const m of messages.data) {
+      if (m.recipientId !== uid || m.read) continue;
+      total += 1;
+      if (m.childId) {
+        byChild[m.childId] = (byChild[m.childId] ?? 0) + 1;
+      } else {
+        withoutChild += 1;
+      }
+    }
+    return { byChild, withoutChild, total };
   }, [messages.data, uid]);
 
-  return { data: count, loading: messages.loading, error: messages.error };
+  return { data: value, loading: messages.loading, error: messages.error };
+}
+
+/**
+ * Total count of inbound unread messages for the current user.
+ *
+ * Powers the Messages tab-bar badge — that surface is global (one badge
+ * for both kids), so the total is what we want there. For the parent
+ * home banner / child switcher chip dots, use `useUnreadByChild()`
+ * instead so the UI can attribute the count to the right child.
+ *
+ * Implemented as a thin wrapper over `useUnreadByChild()` so there's
+ * one place that defines "what is unread" and one stream powering it.
+ */
+export function useUnreadMessageCount(): AsyncState<number> {
+  const { data, loading, error } = useUnreadByChild();
+  return { data: data.total, loading, error };
 }
 
 /**

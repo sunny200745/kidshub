@@ -44,6 +44,7 @@ export {
   useStaffForDaycare,
   useMyMessages,
   useUnreadMessageCount,
+  useUnreadByChild,
   useConversations,
 } from './use-live-data';
 
