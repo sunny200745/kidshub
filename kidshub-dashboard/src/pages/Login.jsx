@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Navigate, useLocation, Link } from 'react-router-dom';
 import { Baby, Mail, Lock, Eye, EyeOff, ArrowRight, Loader2, LayoutDashboard, Users, Calendar, BarChart3 } from 'lucide-react';
 import { useAuth } from '../contexts';
-import { AnimatedAuthBackground, PlayfulHero } from '../components/auth';
+import { AnimatedAuthBackground } from '../components/auth';
 
 export default function Login() {
   const { login, resetPassword, isAuthenticated, loading: authLoading } = useAuth();
@@ -141,36 +141,20 @@ export default function Login() {
       {/*
         Right Side - Login Form.
 
-        We give this column its own themed background (brand-tinted
-        gradient + decorative blurred blobs) for two reasons:
-
-        1. On mobile/tablet (< lg) the desktop dark-hero on the left
-           is hidden, so this column IS the entire screen. A flat
-           bg-surface-50 there read as "default scaffolding" next to
-           the rest of the parent/teacher app. Themed bg fixes that.
-
-        2. On desktop (>= lg) the same chrome adds a subtle pink wash
-           behind the white card, softening the hard cut between the
-           dark left hero and the bright right form without competing
-           with either.
-
-        The blobs use overflow-hidden on the parent so they can extend
-        past the column edges without bleeding into the dark hero.
+        Background is a flat off-white (surface-50) decorated with
+        sticker-style cartoon dinosaurs and flowers — owner direction
+        is "nursery flashcard wall", not "branded marketing page".
+        See `AnimatedAuthBackground.jsx` for the full layout. The
+        `overflow-hidden` on this container keeps illustrations from
+        bleeding past the column edge into the dark hero on desktop.
       */}
       <div className="flex-1 flex items-center justify-center p-6 sm:p-8 relative overflow-hidden">
-        {/* Animated themed chrome — pulsing gradient blobs + scattered
-            twinkling stars / floating hearts / drifting sparkles.
-            Single component owns the whole back layer so Login and
-            Register stay perfectly in sync visually. */}
+        {/* Sticker decoration layer — cartoon dinos + flowers
+            scattered around the edges. Single source of background
+            chrome so Login and Register stay perfectly in sync. */}
         <AnimatedAuthBackground />
 
         <div className="w-full max-w-md relative z-10">
-          {/* Mobile-only playful illustration — friendly cloud / sun /
-              balloon / star scene above the form. Hidden on desktop
-              where the dark hero on the left already carries the
-              visual weight. */}
-          <PlayfulHero />
-
           {/* Mobile Logo — bigger and more graphic on small screens
               now that this column is the full viewport. The chip-style
               white tile with brand shadow matches the look of the

@@ -1,35 +1,38 @@
 /**
- * AuthDecorations — animated background decoration layer for the
+ * AuthDecorations — sticker-style nursery decoration layer for the
  * signed-out screens, designed to mirror the dashboard's
  * `<AnimatedAuthBackground />` so the parent / staff app and the
- * owner dashboard share one playful visual language.
+ * owner dashboard share one visual identity.
  *
- * Layers (back to front, all `pointer-events: none`):
- *   1. Twinkling stars (yellow + pink + purple mix)
- *   2. Floating hearts (pink, gentle bob)
- *   3. Drifting sparkles (purple, drifts + rotates)
- *   4. Drifting flowers (pink/purple, drifts + rotates)
- *   5. Floating clouds (very faint, top edge "sky" feel)
+ * Direction (per latest owner feedback): plain off-white surface with
+ * cartoon dinosaurs and flowers scattered around the edges, like a
+ * pre-school flashcard wall. Replaces the previous lucide-icon
+ * "stars / hearts / sparkles" recipe, which read as designy not
+ * kid-themed.
  *
- * Why custom over a one-shot Lottie:
- *   - Reanimated runs on the UI thread on iOS/Android and on the main
- *     thread (worklet bridge) on web — 60fps with no JS work.
- *   - We already depend on `react-native-reanimated` (~4.1.1) and
- *     `lucide-react-native`; no new packages.
- *   - Each decoration is independently positioned + delayed, so the
- *     scene reads as scattered glitter, not a coordinated dance.
+ * Layout:
+ *   - 3 dinosaurs (DinoBlue top-right, DinoPink middle-left,
+ *     Stegosaurus bottom-left)
+ *   - 3 flowers (Daisy top-left + middle-right, Tulip bottom-center,
+ *     Sunflower bottom-right)
+ *   - Each absolutely positioned by percentage so it stays clear of
+ *     the centered form column at all common phone / tablet widths.
  *
- * Why three small wrapper components (Twinkle / Float / Drift) instead
- * of one big config-driven engine: each animation flavor has its own
- * set of shared values; bundling them into one hook would force every
- * decoration to allocate three transforms even if it only uses one.
- * Three tiny components is cheaper at runtime AND clearer to read.
+ * Animation: each sticker bobs vertically via Reanimated v4 with its
+ * own duration + delay so the scene feels alive without synchronised
+ * movement. Subtle (4–8pt range) so it doesn't pull focus from the
+ * form.
  *
- * Pointer events: the root `<View pointerEvents="none">` plus the
- * absolute positioning means this layer never intercepts taps on the
- * form. Setting it on the root is enough — children inherit.
+ * Pointer events: `pointerEvents="none"` on the root + absolute
+ * positioning means this layer never intercepts taps on the form
+ * below. Children inherit.
+ *
+ * Why one wrapper component (`Bob`) instead of a config-driven engine:
+ *   - We only need one animation flavor (vertical bob), so the engine
+ *     would be over-engineering.
+ *   - Keeps each decoration declaration to one line of JSX — easy to
+ *     re-arrange / re-tune by hand.
  */
-import { Cloud, Flower2, Heart, Sparkles, Star } from 'lucide-react-native';
 import { ReactNode, useEffect } from 'react';
 import { View, ViewStyle } from 'react-native';
 import Animated, {
@@ -40,190 +43,98 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-type Pos = { top?: ViewStyle['top']; left?: ViewStyle['left']; right?: ViewStyle['right']; bottom?: ViewStyle['bottom'] };
+import {
+  Daisy,
+  DinoBlue,
+  DinoPink,
+  Stegosaurus,
+  Sunflower,
+  Tulip,
+} from './sticker-illustrations';
 
-// ---------- animation hooks ----------
-// Reanimated v4 requires shared values to be created inside a component;
-// each hook is single-purpose so we don't allocate transforms we won't
-// use. All hooks are auto-reversing (`true` arg to withRepeat) so the
-// animation eases back instead of snapping at the loop boundary.
+type Pos = {
+  top?: ViewStyle['top'];
+  left?: ViewStyle['left'];
+  right?: ViewStyle['right'];
+  bottom?: ViewStyle['bottom'];
+};
 
-function useTwinkle(delayMs: number) {
-  const opacity = useSharedValue(0.45);
-  const scale = useSharedValue(0.85);
-  useEffect(() => {
-    opacity.value = withDelay(
-      delayMs,
-      withRepeat(withTiming(1, { duration: 1500 }), -1, true)
-    );
-    scale.value = withDelay(
-      delayMs,
-      withRepeat(withTiming(1.15, { duration: 1500 }), -1, true)
-    );
-    // intentionally empty deps — animation should start once on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  return useAnimatedStyle(() => ({
-    opacity: opacity.value,
-    transform: [{ scale: scale.value }],
-  }));
-}
-
-function useFloat(delayMs: number, duration = 2400, range = 8) {
-  const ty = useSharedValue(0);
-  useEffect(() => {
-    ty.value = withDelay(
-      delayMs,
-      withRepeat(withTiming(-range, { duration }), -1, true)
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  return useAnimatedStyle(() => ({
-    transform: [{ translateY: ty.value }],
-  }));
-}
-
-function useDrift(delayMs: number) {
-  const ty = useSharedValue(0);
-  const tx = useSharedValue(0);
-  const rot = useSharedValue(0);
-  useEffect(() => {
-    ty.value = withDelay(delayMs, withRepeat(withTiming(-6, { duration: 4500 }), -1, true));
-    tx.value = withDelay(delayMs, withRepeat(withTiming(8, { duration: 6000 }), -1, true));
-    rot.value = withDelay(delayMs, withRepeat(withTiming(10, { duration: 7000 }), -1, true));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  return useAnimatedStyle(() => ({
-    transform: [
-      { translateX: tx.value },
-      { translateY: ty.value },
-      { rotate: `${rot.value}deg` },
-    ],
-  }));
-}
-
-// ---------- decoration wrappers ----------
-// Each takes a position + delay and renders an absolutely-positioned
-// `Animated.View` containing the icon. Splitting per-flavor keeps each
-// decoration self-contained (one hook call per item, in a fixed order).
-
-function Twinkle({ delayMs, pos, children }: { delayMs: number; pos: Pos; children: ReactNode }) {
-  const style = useTwinkle(delayMs);
-  return (
-    <Animated.View style={[{ position: 'absolute' }, pos, style]}>{children}</Animated.View>
-  );
-}
-
-function Float({
+/**
+ * Bob — wrapper that bobs its child vertically forever via Reanimated.
+ * Range + duration are tunable per-instance so the scene doesn't feel
+ * metronomic.
+ */
+function Bob({
   delayMs,
+  duration = 2400,
+  range = 6,
   pos,
-  duration,
-  range,
+  opacity = 1,
   children,
 }: {
   delayMs: number;
-  pos: Pos;
   duration?: number;
   range?: number;
+  pos: Pos;
+  opacity?: number;
   children: ReactNode;
 }) {
-  const style = useFloat(delayMs, duration, range);
+  const ty = useSharedValue(0);
+  useEffect(() => {
+    ty.value = withDelay(delayMs, withRepeat(withTiming(-range, { duration }), -1, true));
+    // intentionally empty deps — animation should start once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const animated = useAnimatedStyle(() => ({
+    transform: [{ translateY: ty.value }],
+  }));
   return (
-    <Animated.View style={[{ position: 'absolute' }, pos, style]}>{children}</Animated.View>
+    <Animated.View style={[{ position: 'absolute', opacity }, pos, animated]}>
+      {children}
+    </Animated.View>
   );
 }
 
-function Drift({ delayMs, pos, children }: { delayMs: number; pos: Pos; children: ReactNode }) {
-  const style = useDrift(delayMs);
-  return (
-    <Animated.View style={[{ position: 'absolute' }, pos, style]}>{children}</Animated.View>
-  );
-}
-
-// ---------- the layer itself ----------
-// Coordinates + delays are hand-tuned so:
-//   - decorations stay clear of the centered form column at common
-//     breakpoints (mobile 360–420, tablet 600–768, web 1024+).
-//   - no two adjacent items animate in lock-step (delays are
-//     non-multiples of the durations).
-// If a decoration ends up under the card on a particular viewport, it
-// stays there harmlessly — they're behind the form in z-order.
-
+/**
+ * AuthDecorations — the layer itself. Renders six sticker illustrations
+ * at hand-tuned positions across the screen.
+ *
+ * Sizes are tuned for typical phone widths (~360–440pt). On larger
+ * tablets they'll look a touch small but still cohesive — we'd need a
+ * size-by-breakpoint pass for true tablet polish, but that's a future
+ * enhancement, not a blocker.
+ */
 export function AuthDecorations() {
   return (
-    <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
-      {/* Sky — fluffy clouds drifting along the top */}
-      <Float delayMs={500} pos={{ top: '5%', left: '6%' }} duration={3200}>
-        <Cloud size={36} color="#FBA8CF" fill="rgba(255,255,255,0.7)" strokeWidth={2} />
-      </Float>
-      <Float delayMs={2200} pos={{ top: '10%', right: '8%' }} duration={2800}>
-        <Cloud size={28} color="#C4B5FD" fill="rgba(255,255,255,0.7)" strokeWidth={2} />
-      </Float>
+    <View
+      pointerEvents="none"
+      style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+      {/* === Top half === */}
+      <Bob delayMs={0} duration={2200} range={5} pos={{ top: '4%', left: '4%' }} opacity={0.8}>
+        <Daisy width={56} />
+      </Bob>
+      <Bob delayMs={800} duration={2800} range={6} pos={{ top: '5%', right: '2%' }} opacity={0.85}>
+        <DinoBlue width={120} />
+      </Bob>
 
-      {/* Twinkling stars */}
-      <Twinkle delayMs={0} pos={{ top: '14%', left: '18%' }}>
-        <Star size={18} color="#F59E0B" fill="#FCD34D" strokeWidth={2} />
-      </Twinkle>
-      <Twinkle delayMs={1200} pos={{ top: '24%', right: '14%' }}>
-        <Star size={14} color="#FF2D8A" fill="#FFC2DF" strokeWidth={2} />
-      </Twinkle>
-      <Twinkle delayMs={600} pos={{ top: '64%', left: '10%' }}>
-        <Star size={12} color="#F59E0B" fill="#FCD34D" strokeWidth={2} />
-      </Twinkle>
-      <Twinkle delayMs={2400} pos={{ bottom: '20%', right: '20%' }}>
-        <Star size={16} color="#FF2D8A" fill="#FFC2DF" strokeWidth={2} />
-      </Twinkle>
-      <Twinkle delayMs={1800} pos={{ top: '8%', right: '36%' }}>
-        <Star size={10} color="#7C3AED" fill="#C4B5FD" strokeWidth={2} />
-      </Twinkle>
-      <Twinkle delayMs={3100} pos={{ top: '50%', right: '6%' }}>
-        <Star size={12} color="#F59E0B" fill="#FCD34D" strokeWidth={2} />
-      </Twinkle>
-      <Twinkle delayMs={900} pos={{ bottom: '38%', left: '22%' }}>
-        <Star size={14} color="#7C3AED" fill="#C4B5FD" strokeWidth={2} />
-      </Twinkle>
+      {/* === Middle === */}
+      <Bob delayMs={400} duration={2000} range={7} pos={{ top: '40%', left: '-4%' }} opacity={0.75}>
+        <DinoPink width={110} />
+      </Bob>
+      <Bob delayMs={1600} duration={3000} range={5} pos={{ top: '38%', right: '4%' }} opacity={0.8}>
+        <Daisy width={48} />
+      </Bob>
 
-      {/* Floating hearts */}
-      <Float delayMs={0} pos={{ top: '40%', left: '6%' }} range={10}>
-        <Heart size={16} color="#FF2D8A" fill="rgba(255,148,200,0.6)" strokeWidth={2} />
-      </Float>
-      <Float delayMs={1500} pos={{ bottom: '26%', right: '10%' }} duration={3000} range={12}>
-        <Heart size={20} color="#E11D74" fill="rgba(255,148,200,0.6)" strokeWidth={2} />
-      </Float>
-      <Float delayMs={800} pos={{ top: '76%', right: '34%' }} duration={1800} range={8}>
-        <Heart size={12} color="#FF2D8A" fill="rgba(255,148,200,0.6)" strokeWidth={2} />
-      </Float>
-      <Float delayMs={2700} pos={{ top: '34%', left: '42%' }} duration={1900} range={9}>
-        <Heart size={14} color="#FF2D8A" fill="rgba(255,148,200,0.6)" strokeWidth={2} />
-      </Float>
-      <Float delayMs={1100} pos={{ bottom: '6%', left: '14%' }} duration={2600} range={11}>
-        <Heart size={18} color="#E11D74" fill="rgba(255,148,200,0.6)" strokeWidth={2} />
-      </Float>
-
-      {/* Drifting sparkles */}
-      <Drift delayMs={400} pos={{ top: '20%', left: '45%' }}>
-        <Sparkles size={20} color="#7C3AED" strokeWidth={2} />
-      </Drift>
-      <Drift delayMs={3000} pos={{ bottom: '12%', left: '40%' }}>
-        <Sparkles size={14} color="#A78BFA" strokeWidth={2} />
-      </Drift>
-      <Drift delayMs={1600} pos={{ top: '58%', right: '38%' }}>
-        <Sparkles size={16} color="#7C3AED" strokeWidth={2} />
-      </Drift>
-      <Drift delayMs={4200} pos={{ bottom: '44%', right: '8%' }}>
-        <Sparkles size={12} color="#A78BFA" strokeWidth={2} />
-      </Drift>
-
-      {/* Flowers — adds the "playground / nature" texture */}
-      <Drift delayMs={700} pos={{ top: '32%', left: '14%' }}>
-        <Flower2 size={20} color="#FF2D8A" fill="rgba(255,194,223,0.7)" strokeWidth={2} />
-      </Drift>
-      <Drift delayMs={2100} pos={{ bottom: '14%', right: '42%' }}>
-        <Flower2 size={16} color="#7C3AED" fill="rgba(196,181,253,0.7)" strokeWidth={2} />
-      </Drift>
-      <Drift delayMs={3600} pos={{ top: '80%', left: '34%' }}>
-        <Flower2 size={18} color="#E11D74" fill="rgba(255,194,223,0.7)" strokeWidth={2} />
-      </Drift>
+      {/* === Bottom half === */}
+      <Bob delayMs={600} duration={2400} range={6} pos={{ bottom: '6%', left: '3%' }} opacity={0.85}>
+        <Stegosaurus width={120} />
+      </Bob>
+      <Bob delayMs={1200} duration={1800} range={8} pos={{ bottom: '14%', left: '42%' }} opacity={0.8}>
+        <Tulip width={44} />
+      </Bob>
+      <Bob delayMs={200} duration={2600} range={6} pos={{ bottom: '6%', right: '3%' }} opacity={0.85}>
+        <Sunflower width={75} />
+      </Bob>
     </View>
   );
 }

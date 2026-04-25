@@ -9,7 +9,7 @@ import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2, User, Phone, Building2, Shield, Clock, Users, Sparkles } from 'lucide-react';
 import { auth, db } from '../firebase/config';
 import { useAuth } from '../contexts';
-import { AnimatedAuthBackground, PlayfulHero } from '../components/auth';
+import { AnimatedAuthBackground } from '../components/auth';
 import { ROLES } from '../constants/roles';
 import { defaultPlanFields } from '../firebase/api/centers';
 import { STARTER_FREE_DAYS } from '../config/product';
@@ -292,26 +292,18 @@ export default function Register() {
       </div>
 
       {/*
-        Right Side - Register Form. Same themed chrome as Login.jsx
-        (see Login.jsx for the full rationale): on mobile/tablet (< lg)
-        the desktop dark hero on the left is hidden and this column
-        becomes the entire screen, so a flat surface-50 background
-        looked unfinished. The brand-tinted gradient + decorative blobs
-        also soften the cut between dark hero and bright form on
-        desktop. Kept identical to Login so the auth flow looks like
+        Right Side - Register Form. Same chrome as Login.jsx (see
+        Login.jsx for the full rationale): off-white background with
+        sticker-style cartoon dinos + flowers scattered around the
+        edges. Kept identical to Login so the auth flow looks like
         one cohesive surface.
       */}
       <div className="flex-1 flex items-center justify-center p-6 sm:p-8 relative overflow-hidden">
-        {/* Animated themed chrome — see AnimatedAuthBackground.jsx
-            for the full layer breakdown. Identical to Login.jsx. */}
+        {/* Sticker decoration layer — see AnimatedAuthBackground.jsx
+            for the layout. Identical to Login.jsx. */}
         <AnimatedAuthBackground />
 
         <div className="w-full max-w-md relative z-10">
-          {/* Mobile-only playful illustration — kept identical to
-              Login.jsx so the auth flow looks like one cohesive
-              surface as the user moves between sign-in and sign-up. */}
-          <PlayfulHero />
-
           {/* Mobile Logo — bigger and more graphic on small screens
               now that this column is the full viewport. Matches the
               same chip-style mark used on Login.jsx. */}
