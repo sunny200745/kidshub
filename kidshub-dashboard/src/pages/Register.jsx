@@ -304,9 +304,10 @@ export default function Register() {
         <AnimatedAuthBackground />
 
         <div className="w-full max-w-md relative z-10">
-          {/* Mobile Logo — bigger and more graphic on small screens
-              now that this column is the full viewport. Matches the
-              same chip-style mark used on Login.jsx. */}
+          {/* Mobile Logo — white text + white logo chip on the dark
+              mobile background. Matches the same chip-style mark used
+              on Login.jsx, kept in sync deliberately so the auth flow
+              looks like one cohesive surface. */}
           <div className="lg:hidden flex flex-col items-center text-center mb-8">
             <div className="w-20 h-20 rounded-2xl bg-white shadow-brand-lg flex items-center justify-center mb-4">
               <img
@@ -317,7 +318,7 @@ export default function Register() {
                 height="56"
               />
             </div>
-            <span className="text-2xl font-bold text-surface-900">KidsHub</span>
+            <span className="text-2xl font-bold text-white">KidsHub</span>
             <span className="inline-block mt-2 px-3 py-1 rounded-full bg-brand-50 border border-brand-100 text-xs font-medium text-brand-700">
               Owner Portal
             </span>

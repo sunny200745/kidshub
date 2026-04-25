@@ -156,10 +156,12 @@ export default function Login() {
 
         <div className="w-full max-w-md relative z-10">
           {/* Mobile Logo — bigger and more graphic on small screens
-              now that this column is the full viewport. The chip-style
-              white tile with brand shadow matches the look of the
-              parent/teacher app's loading splash so the brand mark
-              feels like one consistent element across surfaces. */}
+              now that this column is the full viewport. White text +
+              white logo chip on the dark mobile background so the
+              brand mark reads as the focal point above the form.
+              The "Owner Portal" badge keeps its light brand-pink
+              palette (`bg-brand-50` / `text-brand-700`) — high
+              contrast on dark and matches its desktop-hero twin. */}
           <div className="lg:hidden flex flex-col items-center text-center mb-8">
             <div className="w-20 h-20 rounded-2xl bg-white shadow-brand-lg flex items-center justify-center mb-4">
               <img
@@ -170,7 +172,7 @@ export default function Login() {
                 height="56"
               />
             </div>
-            <span className="text-2xl font-bold text-surface-900">KidsHub</span>
+            <span className="text-2xl font-bold text-white">KidsHub</span>
             <span className="inline-block mt-2 px-3 py-1 rounded-full bg-brand-50 border border-brand-100 text-xs font-medium text-brand-700">
               Owner Portal
             </span>
